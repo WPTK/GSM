@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "axios": "^1.18.0",
     "better-sqlite3": "^13.0.3",
