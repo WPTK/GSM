@@ -71,6 +71,21 @@ export function initializeSchema(db: Database.Database): void {
       is_custom INTEGER DEFAULT 1
     );
 
+    CREATE TABLE IF NOT EXISTS ai_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      api_type TEXT DEFAULT 'openai',
+      base_url TEXT NOT NULL,
+      api_key_encrypted TEXT NOT NULL,
+      model TEXT NOT NULL,
+      is_active INTEGER DEFAULT 0,
+      custom_prompt TEXT,
+      use_custom_prompt INTEGER DEFAULT 0,
+      concurrency INTEGER DEFAULT 1,
+      reasoning_effort TEXT,
+      mimo_plan TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS webdav_configs (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -128,6 +143,8 @@ export function initializeSchema(db: Database.Database): void {
     );
   `);
 
+  addColumnIfMissing(db, 'ai_configs', 'reasoning_effort', 'TEXT');
+  addColumnIfMissing(db, 'ai_configs', 'mimo_plan', 'TEXT');
   addColumnIfMissing(db, 'repositories', 'category_locked', 'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'repositories', 'description_display', 'TEXT');
   addColumnIfMissing(db, 'repositories', 'tags_display', 'TEXT');

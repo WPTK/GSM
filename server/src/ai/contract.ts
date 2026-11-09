@@ -31,6 +31,7 @@ export const AI_ERROR_CODES = [
   'AI_ESTIMATE_NOT_FOUND', // 404 unknown or expired estimateId
   'AI_JOB_NOT_FOUND', // 404 unknown job id
   'AI_JOB_NOT_CANCELLABLE', // 409 job already finished
+
 ] as const;
 export type AiErrorCode = (typeof AI_ERROR_CODES)[number];
 
@@ -74,6 +75,29 @@ export interface AiStatusResponse {
   nextCheckAt?: string;
   /** Latest cache decision for the analysis prefix, if an analysis has been estimated or run. */
   cache?: AiCacheInfo;
+}
+
+// ---------------------------------------------------------------------------
+// GET/PUT /api/ai/settings
+// ---------------------------------------------------------------------------
+
+/** Longest custom analysis prompt the server stores. */
+export const MAX_CUSTOM_ANALYSIS_PROMPT_CHARS = 4000;
+
+/**
+ * Owner-editable extra instructions for repository analysis. The text is appended to
+ * the shared prompt prefix (so it is part of the cached prefix) and may use `{LANGUAGE}`;
+ * the old `{REPO_INFO}`, `{CATEGORIES_INFO}` and `{CATEGORIES_HINT}` placeholders are dropped.
+ * An empty string clears it.
+ */
+export const AiSettingsUpdateSchema = z
+  .object({ customAnalysisPrompt: z.string().max(MAX_CUSTOM_ANALYSIS_PROMPT_CHARS) })
+  .strict();
+export type AiSettingsUpdate = z.infer<typeof AiSettingsUpdateSchema>;
+
+/** Reply of GET /api/ai/settings and PUT /api/ai/settings (the stored values after the call). */
+export interface AiSettingsResponse {
+  customAnalysisPrompt: string;
 }
 
 // ---------------------------------------------------------------------------
