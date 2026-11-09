@@ -49,3 +49,27 @@ Format: item -> files -> reason. Reason for every row unless stated: owner decis
 - Locales -> 420 removed-feature keys pruned in all 10 locales (found by diffing string-literal key references against `hardened`; dynamic template keys were not touched). `includeKeysToggle` text no longer mentions WebDAV, proxy or remote download (key renamed `includes-keys-for-ai-configs`). `header.menu-gists`, `backendPanel.webdav-configurations`, `discovery telegram` removed. 5 new keys added with real translations: `markdown.load-images`, `markdown.images-blocked`, `login.api-secret`, `backendPanel.github-connected`, `backendPanel.github-not-configured`.
 - Tests and fixtures -> tests for removed features deleted or trimmed; `ai-prompts.snapshot.json` regenerated; two new hydration tests in `useAppStore.modularization.test.ts`.
 - Leftover grep (`xTweet|telegram|Gist|syncFork|webdav|mshibanami|updateService|externalDiscovery|githubLists`, case-sensitive, `src`) -> remaining hits are intentional: `REMOVED_PERSISTED_KEYS` and its hydration test (stale-key filter), and GitHub token-permission descriptions mentioning "gists" in `login.json` (a GitHub scope name, not the feature). `scripts/codemods/i18n-migrate.mjs` still maps a `gists` namespace (one-shot migration tool, not run in CI).
+
+## Stream B
+
+The browser stores no GitHub token or API secret and calls only its own origin. It authenticates with the HttpOnly `gsm_session` cookie (login `POST /api/auth/session`, status `GET /api/auth/status`, logout `DELETE /api/auth/session`).
+
+Removed:
+
+- Whole plugin system (client, registry, page host, card actions, settings tab) and the aria2 / RPC download client.
+- Browser-side GitHub tokens and every direct `api.github.com` path; the OAuth, token-paste and token-permission UI; `routeMode` and `backendUrl` (the backend is always `/api`).
+- Store fields `githubToken` (persisted), `backendApiSecret`, `proxyConfig`, `rpcDownloadConfig`, `routeMode`, `pluginCustomIcons` and their setters, shard entries, backup export/import and the `authStorage` localStorage/sessionStorage mirror. Persist version 17 drops them from old snapshots; hydration and logout erase the two legacy storage keys.
+- The Network settings panel and the direct-egress fallbacks in translate and code search.
+
+Added:
+
+- `src/utils/imageProxy.ts`: GitHub-hosted images load from `/api/img`. Other hosts are blocked per README until the reader presses "Load images".
+- Translate goes through `/api/translate/:engine` and code search through `/api/codesearch`; GitHub goes through `/api/proxy/github`.
+- Login by API secret only (`loginWithApiSecret`); the secret is sent once and never kept. `githubToken` in the store is only ever the placeholder `server`, set when `/api/auth/status` reports a session.
+- Tests: no secret persisted, `githubToken` only ever `server`, v17 migration, legacy storage purge.
+
+Known limitations / deferred to phase 2:
+
+- AI provider configs (`aiConfigs`) still hold their API keys in browser storage. That is outside this stream's scope and needs a server-held-key design.
+- Backup export with "include keys" still carries AI and embedding keys.
+- Locale keys left unused by the removals are not pruned here beyond what Stream C did.
