@@ -2,8 +2,7 @@
 import { TranslateFn } from '../../i18n/useT';
 import React, { useState } from 'react';
 import { ArrowRight, ExternalLink, Key, Mail, Monitor, Package } from 'lucide-react';
-import { Github, Twitter } from '../ui/brand-icons';
-import { UpdateChecker } from '../UpdateChecker';
+import { Github } from '../ui/brand-icons';
 import { useAppStore } from '../../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
 import { version } from '../../../package.json';
@@ -47,9 +46,7 @@ export const GeneralPanel: React.FC<GeneralPanelProps> = ({ t }) => {
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-1 text-sm text-muted-foreground dark:text-muted-foreground">{t('generalPanel.current-version-v-version', { version: version })}</p>
-            <p className="text-xs text-muted-foreground dark:text-muted-foreground">{t('generalPanel.check-if-a-new-version-is-available')}</p>
           </div>
-          <UpdateChecker />
         </CardContent>
       </Card>
 
@@ -159,11 +156,6 @@ export const GeneralPanel: React.FC<GeneralPanelProps> = ({ t }) => {
         <CardContent>
           <p className="mb-4 text-sm text-muted-foreground dark:text-muted-foreground">{t('generalPanel.if-you-encounter-any-issues-or-have-suggestions')}</p>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button type="button" onClick={() => { const newWindow = window.open('https://x.com/GoodMan_Lee', '_blank', 'noopener,noreferrer'); if (newWindow) newWindow.opener = null; }} className="gap-2">
-              <Twitter className="h-5 w-5" />
-              <span>Twitter</span>
-              <ExternalLink className="h-4 w-4" />
-            </Button>
             <Button type="button" variant="outline" onClick={() => { const newWindow = window.open(PROJECT_REPO_URL, '_blank', 'noopener,noreferrer'); if (newWindow) newWindow.opener = null; }} className="gap-2">
               <Github className="h-5 w-5" />
               <span>{t('generalPanel.github')}</span>

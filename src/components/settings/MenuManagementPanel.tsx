@@ -5,9 +5,7 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   Layout,
   Search,
-  FileCode2,
   Calendar,
-  GitFork,
   Compass,
   Settings,
   GripVertical,
@@ -31,9 +29,7 @@ const MENU_META: Record<HeaderMenuId, {
   canHide: boolean;
 }> = {
   repositories: { icon: Search, labelZh: '仓库', labelEn: 'Repositories', canHide: false },
-  gists: { icon: FileCode2, labelZh: 'Gist', labelEn: 'Gist', canHide: true },
   releases: { icon: Calendar, labelZh: '发布', labelEn: 'Releases', canHide: true },
-  forks: { icon: GitFork, labelZh: '复刻', labelEn: 'Forks', canHide: true },
   subscription: { icon: Compass, labelZh: '发现', labelEn: 'Discover', canHide: true },
   settings: { icon: Settings, labelZh: '设置', labelEn: 'Settings', canHide: false },
 };

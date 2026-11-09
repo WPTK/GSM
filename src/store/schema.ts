@@ -4,7 +4,6 @@ import type {
   AssetFilter,
   Category,
   DiscoveryChannel,
-  GistSearchFilters,
   HeaderMenuId,
   ProxyConfig,
   RpcDownloadConfig,
@@ -39,13 +38,6 @@ export const initialSearchFilters: SearchFilters = {
   healthHasLicense: undefined,
 };
 
-export const initialGistSearchFilters: GistSearchFilters = {
-  query: '',
-  sortBy: 'updated',
-  sortOrder: 'desc',
-  isAnalyzed: undefined,
-};
-
 export type PersistedAppState = Partial<
   Omit<Pick<
     AppState,
@@ -55,11 +47,6 @@ export type PersistedAppState = Partial<
     | 'backendApiSecret'
     | 'accountWorkspaces'
     | 'repositories'
-    | 'gists'
-    | 'starredGists'
-    | 'gistSearchFilters'
-    | 'gistSearchResults'
-    | 'selectedGistCategory'
     | 'lastSync'
     | 'aiConfigs'
     | 'activeAIConfig'
@@ -69,9 +56,6 @@ export type PersistedAppState = Partial<
     | 'activeEmbeddingConfig'
     | 'vectorSearchConfig'
     | 'vectorSearchStatus'
-    | 'webdavConfigs'
-    | 'activeWebDAVConfig'
-    | 'lastBackup'
     | 'releases'
     | 'releaseSourceSettings'
     | 'customCategories'
@@ -81,7 +65,6 @@ export type PersistedAppState = Partial<
     | 'collapsedSidebarCategoryCount'
     | 'categoryMatchMode'
     | 'assetFilters'
-    | 'trendingSnapshots'
     | 'repositoryCardFields'
     | 'repositoryCardActions'
     | 'pluginCustomIcons'
@@ -96,11 +79,6 @@ export type PersistedAppState = Partial<
     | 'searchFilters'
     | 'isSidebarCollapsed'
     | 'repositoryViewMode'
-    | 'forks'
-    | 'forkViewMode'
-    | 'forkSelectedFilters'
-    | 'forkSearchQuery'
-    | 'forkExpandedRepositories'
     | 'releaseViewMode'
     | 'releaseShowMode'
     | 'releaseLatestMode'
@@ -121,9 +99,6 @@ export type PersistedAppState = Partial<
     | 'discoverySortOrder'
     | 'discoverySelectedTopic'
     | 'weeklyOnlyCollected'
-    | 'xTweetFollows'
-    | 'xTweetAuthRevision'
-    | 'telegramFollows'
     | 'proxyConfig'
     | 'rpcDownloadConfig'
     | 'routeMode'
@@ -133,20 +108,13 @@ export type PersistedAppState = Partial<
     | 'subscriptionChannels'
     | 'headerMenuConfig'
     | 'mcpConfig'
-    | 'syncMode'
-    | 'syncModeConfigured'
-    | 'categoryListIdMap'
-  >, 'gistSearchFilters' | 'searchFilters' | 'releaseExpandedRepositories' | 'forkExpandedRepositories'>> & {
-  gistSearchFilters?: Pick<GistSearchFilters, 'sortBy' | 'sortOrder'>;
+  >, 'searchFilters' | 'releaseExpandedRepositories'>> & {
   searchFilters?: Pick<SearchFilters, 'sortBy' | 'sortOrder'>;
   proxyConfig?: ProxyConfig;
   rpcDownloadConfig?: RpcDownloadConfig;
   releaseSubscriptions?: unknown;
   readReleases?: unknown;
-  readForks?: unknown;
-  analyzingGistIds?: unknown;
   releaseExpandedRepositories?: unknown;
-  forkExpandedRepositories?: unknown;
 };
 
 export const normalizeRepositoryChatSettings = (value: unknown): RepositoryChatSettings => {
@@ -465,14 +433,6 @@ export const defaultPresetFilters: AssetFilter[] = PRESET_FILTERS.map(pf => ({
 
 export const defaultDiscoveryChannels: DiscoveryChannel[] = [
   {
-    id: 'trending',
-    name: '趋势',
-    nameEn: 'Trending',
-    icon: 'trending',
-    description: 'GitHub 趋势仓库，支持今日/本周/本月筛选',
-    enabled: true,
-  },
-  {
     id: 'hot-release',
     name: '热门发布',
     nameEn: 'Hot Release',
@@ -494,22 +454,6 @@ export const defaultDiscoveryChannels: DiscoveryChannel[] = [
     nameEn: 'Topic',
     icon: 'tag',
     description: '按主题分类浏览仓库',
-    enabled: true,
-  },
-  {
-    id: 'x-tweet',
-    name: 'X 推文',
-    nameEn: 'X Tweets',
-    icon: 'tweet',
-    description: '关注 X 博主推文中分享的 GitHub 项目',
-    enabled: true,
-  },
-  {
-    id: 'telegram',
-    name: 'Telegram 频道',
-    nameEn: 'Telegram Channels',
-    icon: 'telegram',
-    description: '关注 Telegram 频道消息中分享的 GitHub 项目',
     enabled: true,
   },
   {

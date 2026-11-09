@@ -1,18 +1,16 @@
 import { useT } from "../../../i18n/useT";
 import { useCallback, useMemo, useState, type MutableRefObject, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { Category, Repository } from '../../../types';
-import { useAppStore, getAllCategories } from '../../../store/useAppStore';
+import type { Repository } from '../../../types';
+import { useAppStore } from '../../../store/useAppStore';
 import { AIService, isAbortError } from '../../../services/aiService';
 import { EmbeddingClient, VectorSearchService } from '../../../services/vectorSearchService';
 import { CrossEncoderReranker } from '../../../services/crossEncoderReranker';
 import { runVectorSearchPipeline } from '../../../services/vectorSearchPipeline';
-import { createGitHubApiService, createGitHubListsApiService } from '../../../services/githubApiFactory';
+import { createGitHubApiService } from '../../../services/githubApiFactory';
 import { forceSyncToBackend } from '../../../services/autoSync';
 import { useDialog } from '../../../hooks/useDialog';
-import type { GitHubList } from '../../../services/githubListsApi';
 import type { VectorQueryResult } from '../../../services/vectorSearchService';
-import { isReservedCategoryName } from '../../../utils/categoryUtils';
 import { performBasicTextSearch } from '../../../utils/repoSearch';
 import { assignIdentityMatches } from '../../../utils/repositoryIdentity';
 
@@ -105,122 +103,6 @@ export const mergeStarredRepositories = (
   });
 };
 
-// SearchBar 774-799：构造"list 名(小写) → 本地分类"映射并为云端 list 规划缺失的自定义分类。
-// makeCategoryId 由 hook 注入（原实现内联 `custom-sync-${Date.now()}-${idx}`），保持可测性。
-export const planListCategories = (
-  lists: GitHubList[],
-  localCategories: Category[],
-  makeCategoryId: (idx: number) => string,
-): { toCreate: Category[]; categoryByLowerName: Map<string, string> } => {
-  // 值使用本地分类的原始名称（保留其大小写），而非 list 名：
-  // 锁定分类的筛选用精确相等比较，若直接存 GitHub 侧的大小写，
-  // 仓库会从分类结果中消失（如 list 名为 "web apps" 而分类为 "Web Apps"）。
-  const categoryByLowerName = new Map(
-    localCategories
-      .filter(c => c.id !== 'all' && !isReservedCategoryName(c.name))
-      .map(c => [c.name.toLowerCase(), c.name])
-  );
-  const toCreate: Category[] = [];
-  lists.forEach((list, idx) => {
-    const lower = list.name.toLowerCase();
-    if (isReservedCategoryName(list.name) || categoryByLowerName.has(lower)) return;
-    toCreate.push({
-      id: makeCategoryId(idx),
-      name: list.name,
-      icon: ' 📋',
-      isCustom: true,
-      keywords: [],
-    });
-    // 纳入本次运行使用的映射，使后续 listMatchesCategory 命中、可设分类并加锁
-    categoryByLowerName.set(lower, list.name);
-  });
-  return { toCreate, categoryByLowerName };
-};
-
-// SearchBar 807-868：preExistingLocked 集 + 打标签/设分类/加锁循环 + last_edited。
-export const applyListsToRepositories = (
-  repositories: Repository[],
-  lists: GitHubList[],
-  categoryByLowerName: Map<string, string>,
-): { repositories: Repository[]; appliedTagsCount: Record<string, number> } => {
-  const listRepoMap = new Map(repositories.map(repo => [repo.full_name.toLowerCase(), repo]));
-  const appliedTagsCount: Record<string, number> = {};
-
-  // DEC-4：只判定锁定状态。
-  // 区分"本次同步开始前已存在"的锁定与"本次运行中新产生"的锁定：
-  // - 预存在的锁定：不覆盖其分类与锁定，但仍追加本次命中的 list 名为
-  //   custom_tags（修复 #273：否则一旦仓库被锁过，之后云端 list 的任何
-  //   变化都被跳过，导致"无法将云端 list 拉取到本地"）。
-  // - 本次运行中被前面的 list 刚锁定：保留已分配的分类/锁定，继续追加后续 list 的标签
-  const preExistingLocked = new Set(
-    repositories
-      .filter(r => r.category_locked)
-      .map(r => r.full_name.toLowerCase())
-  );
-
-  for (const list of lists) {
-    let appliedCount = 0;
-    for (const fullName of list.items) {
-      const key = fullName.toLowerCase();
-      const repo = listRepoMap.get(key);
-      if (!repo) continue;
-
-      const customTags = repo.custom_tags ? [...repo.custom_tags] : [];
-      if (!customTags.includes(list.name)) {
-        customTags.push(list.name);
-      }
-
-      // 预存在锁定：不覆盖其分类与锁定，仅追加 list 名为标签，让云端
-      // list 关系仍能反映到本地（修复 #273）。
-      if (preExistingLocked.has(key)) {
-        // 仅当标签确有变化才写回，避免无谓的 last_edited 抖动
-        if (customTags.length !== (repo.custom_tags?.length ?? 0)) {
-          listRepoMap.set(key, { ...repo, custom_tags: customTags });
-        }
-        appliedCount++;
-        continue;
-      }
-
-      // 本次运行中刚被锁定的仓库：保留已分配的分类与锁定，仅追加标签
-      if (repo.category_locked) {
-        listRepoMap.set(key, { ...repo, custom_tags: customTags });
-        appliedCount++;
-        continue;
-      }
-
-      // 若 list 名对应某个本地分类：设置分类并加锁；否则仅加标签（多分类靠标签匹配）
-      const listMatchesCategory = categoryByLowerName.has(list.name.toLowerCase());
-      const updatedRepo: Repository = listMatchesCategory
-        ? {
-            ...repo,
-            custom_tags: customTags,
-            custom_category: categoryByLowerName.get(list.name.toLowerCase()),
-            category_locked: true,
-            last_edited: new Date().toISOString(),
-          }
-        : {
-            ...repo,
-            custom_tags: customTags,
-          };
-
-      listRepoMap.set(key, updatedRepo);
-      appliedCount++;
-    }
-    if (appliedCount > 0) {
-      appliedTagsCount[list.name] = appliedCount;
-    }
-  }
-
-  return {
-    repositories: repositories.map(repo =>
-      listRepoMap.get(repo.full_name.toLowerCase()) || repo
-    ),
-    appliedTagsCount,
-  };
-};
-
-// ===== Hook =====
-
 export interface SearchActions {
   isSearching: boolean;
   searchPhase: string | null;
@@ -236,7 +118,7 @@ export interface SearchActions {
     applyFilters: (repos: Repository[]) => Repository[],
     options?: { signal?: AbortSignal },
   ) => Promise<void>;
-  syncStars: (mode?: 'auto' | 'stars-only' | 'stars-and-lists') => Promise<void>;
+  syncStars: () => Promise<void>;
 }
 
 export const useSearchActions = (): SearchActions => {
@@ -251,12 +133,6 @@ export const useSearchActions = (): SearchActions => {
     setRepositories,
     setLastSync,
     setSyncingStars,
-    syncMode,
-    user,
-    addCustomCategory,
-    customCategories,
-    hiddenDefaultCategoryIds,
-    defaultCategoryOverrides,
   } = useAppStore(useShallow((state) => ({
     repositories: state.repositories,
     aiConfigs: state.aiConfigs,
@@ -268,12 +144,6 @@ export const useSearchActions = (): SearchActions => {
     setRepositories: state.setRepositories,
     setLastSync: state.setLastSync,
     setSyncingStars: state.setSyncingStars,
-    syncMode: state.syncMode,
-    user: state.user,
-    addCustomCategory: state.addCustomCategory,
-    customCategories: state.customCategories,
-    hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
-    defaultCategoryOverrides: state.defaultCategoryOverrides,
   })));
 
   const { toast } = useDialog();
@@ -460,7 +330,7 @@ export const useSearchActions = (): SearchActions => {
     }
   }, [repositories, aiConfigs, activeAIConfig, language, setSearchResults, setSearchFilters, keywordSearch, t]);
 
-  const syncStars = useCallback(async (mode: 'auto' | 'stars-only' | 'stars-and-lists' = 'auto') => {
+  const syncStars = useCallback(async () => {
     if (!githubToken) {
       toast(t('useSearchActions.github-token-not-found-please-login-again'), 'error');
       return;
@@ -474,68 +344,12 @@ export const useSearchActions = (): SearchActions => {
       const storeRepos = useAppStore.getState().repositories;
       const mergedRepositories = mergeStarredRepositories(newRepositories, storeRepos);
 
-      // 解析本次同步范围：
-      // - 'auto'：跟随持久化配置 syncMode
-      // - 'stars-only'：强制仅星标（忽略 syncMode，供下拉菜单显式选择）
-      // - 'stars-and-lists'：强制星标及 list（供下拉菜单显式选择）
-      const syncLists = mode === 'stars-and-lists' || (mode === 'auto' && syncMode === 'stars-and-lists');
-      let finalRepositories = mergedRepositories;
-
-      if (syncLists) {
-        const appliedTagsCount: Record<string, number> = {};
-        try {
-          const listsApi = createGitHubListsApiService(githubToken);
-          const login = user?.login;
-          if (!login) {
-            throw new Error(t('useSearchActions.failed-to-get-github-username-please-login-again'));
-          }
-          const lists = await listsApi.getUserLists(login);
-
-          // allCategories 与 View 的 useMemo 同源同值（getAllCategories 四参口径）
-          const allCategories = getAllCategories(customCategories, language, hiddenDefaultCategoryIds, defaultCategoryOverrides);
-          // 为云端存在、但本地无同名分类的 list 自动创建自定义分类。
-          // 修复"GitHub list 有很多新分类但本地从没拉到过"——原逻辑只贴 custom_tags
-          // 标签，不建分类，导致左侧分类树永远只有历史分类。
-          // 用每 list 递增的下标做 id 后缀，避免同一毫秒内多个 list 撞 id。
-          const { toCreate, categoryByLowerName } = planListCategories(
-            lists,
-            allCategories,
-            (idx) => `custom-sync-${Date.now()}-${idx}`,
-          );
-          toCreate.forEach((category) => addCustomCategory(category));
-          const createdCategoriesCount = toCreate.length;
-
-          const { repositories: listAppliedRepositories, appliedTagsCount: counts } =
-            applyListsToRepositories(finalRepositories, lists, categoryByLowerName);
-          finalRepositories = listAppliedRepositories;
-          Object.assign(appliedTagsCount, counts);
-
-          if (Object.keys(appliedTagsCount).length > 0) {
-            const appliedTotal = Object.values(appliedTagsCount).reduce((a, b) => a + b, 0);
-            const listSummary = Object.entries(appliedTagsCount)
-              .map(([name, count]) => `${name}(${count})`)
-              .join('、');
-            const createdHint = createdCategoriesCount > 0
-              ? t('useSearchActions.list-sync-new-categories', { count: createdCategoriesCount })
-              : '';
-            toast(t('useSearchActions.synced-v1-lists-applied-to-appliedtotal-unlocked', { v1: lists.length, appliedTotal: appliedTotal, listSummary: listSummary, createdHint: createdHint }), 'info');
-          } else if (createdCategoriesCount > 0) {
-            // 命中数为 0，但本次新建了分类（云端 list 与本地无交集但仍有其名分类）
-            toast(t('useSearchActions.list-sync-complete', { lists: lists.length, newCount: createdCategoriesCount }), 'info');
-          }
-        } catch (listError) {
-          console.error('List sync failed:', listError);
-          toast(t('useSearchActions.list-sync-failed-starred-repositories-were-synce'), 'error');
-          // 不中断：星标同步结果仍然生效
-        }
-      }
-
       // 「新增仓库」计数必须与 mergeStarredRepositories 用同一套匹配口径
       // （id 优先，full_name 兜底）：否则被 full_name 兜底救回的存量仓库
       // 会被误报为新增，弹出「发现 N 个新仓库」的错误提示。
       const newRepoCount = countNewStarredRepositories(newRepositories, storeRepos);
 
-      setRepositories(finalRepositories);
+      setRepositories(mergedRepositories);
       await forceSyncToBackend();
 
       setLastSync(new Date().toISOString());
@@ -556,7 +370,7 @@ export const useSearchActions = (): SearchActions => {
     } finally {
       setSyncingStars(false);
     }
-  }, [githubToken, setSyncingStars, syncMode, user, t, toast, addCustomCategory, customCategories, language, hiddenDefaultCategoryIds, defaultCategoryOverrides, setRepositories, setLastSync]);
+  }, [githubToken, setSyncingStars, t, toast, setRepositories, setLastSync]);
 
   return useMemo(() => ({
     isSearching,

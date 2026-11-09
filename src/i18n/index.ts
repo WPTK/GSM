@@ -17,7 +17,6 @@ export const I18N_NAMESPACES = [
   'app',
   'login',
   'repositories',
-  'gists',
   'releases',
   'discovery',
   'chat',

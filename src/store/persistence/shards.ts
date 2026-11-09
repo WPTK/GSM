@@ -7,15 +7,14 @@
  * 单次 stringify ~130ms + 写入 ~270ms，持续阻塞主线程）。
  *
  * 分片原则：
- * - 体积大、变更低频的重数据（repositories/gists/releases/forks/账号工作区/
- *   trending 快照）各自独立分片，只在内容真正变化（引用判脏）时重写；
+ * - 体积大、变更低频的重数据（repositories/releases/账号工作区）各自独立分片，只在内容真正变化（引用判脏）时重写；
  * - 体积小、变更高频的偏好与视图状态集中到 core 分片，单次重写仅几 KB；
  * - partialize 未来新增的键由 resolveShardForField 兜底归入 core，保证
  *   任何持久化字段都不会因遗漏分片映射而丢失。
  *
  * ── 硬性契约 ────────────────────────────────────────────────────────────
  * 1. 不可变更新：分片按「字段引用」判脏的前提是持久化字段永远不可变更新。
- *    对 repositories/gists/releases/forks/accountWorkspaces/trendingSnapshots
+ *    对 repositories/releases/accountWorkspaces
  *    的任何原地修改（push/sort/索引赋值）都会因引用未变而静默不落盘。
  *    新代码必须使用不可变更新（这是 zustand 生态的既有约定）。
  * 2. 格式版本：递增 PERSISTENCE_SHARD_FORMAT 时必须同步提供
@@ -29,20 +28,14 @@ export const PERSISTENCE_SHARD_FORMAT = 1;
 export type PersistenceShardName =
   | 'core'
   | 'repositories'
-  | 'gists'
   | 'releases'
-  | 'forks'
-  | 'accountWorkspaces'
-  | 'trendingSnapshots';
+  | 'accountWorkspaces';
 
 export const PERSISTENCE_SHARD_NAMES: readonly PersistenceShardName[] = [
   'core',
   'repositories',
-  'gists',
   'releases',
-  'forks',
   'accountWorkspaces',
-  'trendingSnapshots',
 ];
 
 export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly string[]> = {
@@ -52,9 +45,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'githubToken',
     'isAuthenticated',
     'themeTokens',
-    'gistSearchFilters',
-    'selectedGistCategory',
-    'analyzingGistIds',
     'aiConfigs',
     'activeAIConfig',
     'repositoryChatSettings',
@@ -63,13 +53,9 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'vectorSearchConfig',
     'vectorSearchStatus',
     'mcpConfig',
-    'webdavConfigs',
-    'activeWebDAVConfig',
-    'lastBackup',
     'releaseSubscriptions',
     'releaseSourceSettings',
     'readReleases',
-    'readForks',
     'customCategories',
     'hiddenDefaultCategoryIds',
     'categoryOrder',
@@ -92,9 +78,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'isSidebarCollapsed',
     'headerMenuConfig',
     'backendApiSecret',
-    'syncMode',
-    'syncModeConfigured',
-    'categoryListIdMap',
     'searchFilters',
     'repositoryViewMode',
     'releaseViewMode',
@@ -105,10 +88,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'releaseExpandedRepositories',
     'includePreRelease',
     'includeKeysInBackup',
-    'forkViewMode',
-    'forkSelectedFilters',
-    'forkSearchQuery',
-    'forkExpandedRepositories',
     'discoveryChannels',
     'selectedDiscoveryChannel',
     'discoveryPlatform',
@@ -118,22 +97,16 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'discoverySearchMode',
     'discoverySelectedTopic',
     'weeklyOnlyCollected',
-    'xTweetFollows',
-    'xTweetAuthRevision',
-    'telegramFollows',
     'proxyConfig',
     'rpcDownloadConfig',
     'routeMode',
   ],
   // 以下为体积大、变更低频的重数据分片：仅在对应数组引用变化时重写。
   repositories: ['repositories'],
-  gists: ['gists', 'starredGists'],
   releases: ['releases'],
-  forks: ['forks'],
   // 登出时每账号快照一份完整数据，可能成为最大分片；按账号逐项判脏（见
   // accountWorkspacesUnchanged）避免 hydration 规整化产生的新对象引用触发全量重写。
   accountWorkspaces: ['accountWorkspaces'],
-  trendingSnapshots: ['trendingSnapshots'],
 };
 
 const FIELD_TO_SHARD = new Map<string, PersistenceShardName>();
@@ -190,26 +163,18 @@ export const buildShardViews = (
 // （storage.test.ts 有覆盖断言），否则新字段的内容变化会被判脏逻辑漏掉。
 export const WORKSPACE_REFERENCE_FIELDS = [
   'repositories',
-  'gists',
-  'starredGists',
   'releases',
-  'forks',
   'customCategories',
   'categoryOrder',
   'readReleases',
-  'readForks',
   'releaseSubscriptions',
   'hiddenDefaultCategoryIds',
 ] as const;
 
 export const WORKSPACE_VALUE_FIELDS = [
   'lastSync',
-  'selectedGistCategory',
   'releaseSourceSettings',
   'defaultCategoryOverrides',
-  'categoryListIdMap',
-  'syncMode',
-  'syncModeConfigured',
 ] as const;
 
 const smallValueEqual = (a: unknown, b: unknown): boolean => {

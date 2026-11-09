@@ -36,7 +36,6 @@ const _lastHash = {
   repos: '',
   releases: '',
   ai: '',
-  webdav: '',
   embedding: '',
   vectorSearch: '',
   settings: '',
@@ -80,7 +79,6 @@ export function resetSyncHashes(): void {
   _lastHash.repos = '';
   _lastHash.releases = '';
   _lastHash.ai = '';
-  _lastHash.webdav = '';
   _lastHash.embedding = '';
   _lastHash.vectorSearch = '';
   _lastHash.settings = '';
@@ -289,11 +287,10 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
   const startTime = Date.now();
   try {
     const repositoriesBeforeFetch = useAppStore.getState().repositories;
-    const [reposResult, releasesResult, aiResult, webdavResult, embeddingResult, vectorSearchResult, settingsResult] = await Promise.allSettled([
+    const [reposResult, releasesResult, aiResult, embeddingResult, vectorSearchResult, settingsResult] = await Promise.allSettled([
       backend.fetchRepositories(),
       backend.fetchReleases(),
       backend.fetchAIConfigs(),
-      backend.fetchWebDAVConfigs(),
       backend.fetchEmbeddingConfigs(),
       backend.fetchVectorSearchConfig(),
       backend.fetchSettings(),
@@ -329,7 +326,7 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
     }
 
     const changed = {
-      repos: false, releases: false, ai: false, webdav: false,
+      repos: false, releases: false, ai: false,
       embedding: false, vectorSearch: false, settings: false,
     };
 
@@ -356,14 +353,6 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
       if (options.force || hash !== _lastHash.ai) {
         hashes.ai = hash;
         changed.ai = true;
-      }
-    }
-
-    if (webdavResult.status === 'fulfilled') {
-      const hash = quickHash(webdavResult.value);
-      if (options.force || hash !== _lastHash.webdav) {
-        hashes.webdav = hash;
-        changed.webdav = true;
       }
     }
 
@@ -452,25 +441,6 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
       // Using mergedConfigs would cause a mismatch and re-trigger on every poll.
       _lastHash.ai = hashes.ai;
     }
-    if (changed.webdav && webdavResult.status === 'fulfilled') {
-      // Filter out configs with decrypt_failed status — preserve local password values
-      // to prevent backend decryption failures from overwriting valid local data.
-      const backendConfigs = webdavResult.value;
-      const localConfigs = state.webdavConfigs;
-      const mergedConfigs = backendConfigs.map(bc => {
-        if (bc.passwordStatus === 'decrypt_failed' || !bc.password) {
-          const local = localConfigs.find(lc => lc.id === bc.id);
-          if (local && local.password) {
-            logger.warn('sync.decryptFailed', `Backend decrypt_failed for WebDAV config "${bc.name}", preserving local password`);
-            return { ...bc, password: local.password, passwordStatus: 'ok' as const };
-          }
-        }
-        return bc;
-      });
-      state.setWebDAVConfigs(mergedConfigs);
-      // Store raw backend hash for consistent change detection
-      _lastHash.webdav = hashes.webdav;
-    }
     if (changed.embedding && embeddingResult.status === 'fulfilled') {
       const backendConfigs = embeddingResult.value;
       const localConfigs = state.embeddingConfigs;
@@ -516,9 +486,6 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
       const settings = settingsResult.value;
       if (typeof settings.activeAIConfig === 'string' || settings.activeAIConfig === null) {
         state.setActiveAIConfig(settings.activeAIConfig as string | null);
-      }
-      if (typeof settings.activeWebDAVConfig === 'string' || settings.activeWebDAVConfig === null) {
-        state.setActiveWebDAVConfig(settings.activeWebDAVConfig as string | null);
       }
       if (typeof settings.activeEmbeddingConfig === 'string' || settings.activeEmbeddingConfig === null) {
         state.setActiveEmbeddingConfig(settings.activeEmbeddingConfig as string | null);
@@ -644,12 +611,10 @@ async function pushToBackend(): Promise<boolean> {
       backend.syncRepositories(state.repositories),
       backend.syncReleases(state.releases),
       backend.syncAIConfigs(state.aiConfigs),
-      backend.syncWebDAVConfigs(state.webdavConfigs),
       backend.syncEmbeddingConfigs(state.embeddingConfigs),
       backend.syncVectorSearchConfig(state.vectorSearchConfig),
       backend.syncSettings({
         activeAIConfig: state.activeAIConfig,
-        activeWebDAVConfig: state.activeWebDAVConfig,
         activeEmbeddingConfig: state.activeEmbeddingConfig,
         hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
         categoryOrder: state.categoryOrder,
@@ -660,7 +625,7 @@ async function pushToBackend(): Promise<boolean> {
         collapsedSidebarCategoryCount: state.collapsedSidebarCategoryCount,
       }),
     ]);
-    const [reposSync, releasesSync, aiSync, webdavSync, embeddingSync, vectorSearchSync, settingsSync] = results;
+    const [reposSync, releasesSync, aiSync, embeddingSync, vectorSearchSync, settingsSync] = results;
 
     const failures = results.filter(r => r.status === 'rejected');
     if (failures.length > 0) {
@@ -677,13 +642,11 @@ async function pushToBackend(): Promise<boolean> {
     if (reposSync.status === 'fulfilled') _lastHash.repos = quickHash(stripLocalRepositoryFields(state.repositories));
     if (releasesSync.status === 'fulfilled') _lastHash.releases = quickHash(state.releases);
     if (aiSync.status === 'fulfilled') _lastHash.ai = quickHash(state.aiConfigs);
-    if (webdavSync.status === 'fulfilled') _lastHash.webdav = quickHash(state.webdavConfigs);
     if (embeddingSync.status === 'fulfilled') _lastHash.embedding = quickHash(state.embeddingConfigs);
     if (vectorSearchSync.status === 'fulfilled') _lastHash.vectorSearch = vectorSearchFingerprint(state.vectorSearchConfig);
     if (settingsSync.status === 'fulfilled') {
       _lastHash.settings = quickHash({
         activeAIConfig: state.activeAIConfig,
-        activeWebDAVConfig: state.activeWebDAVConfig,
         activeEmbeddingConfig: state.activeEmbeddingConfig,
         hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
         categoryOrder: state.categoryOrder,
@@ -759,11 +722,9 @@ export function startAutoSync(): () => void {
       state.repositories !== prevState.repositories ||
       state.releases !== prevState.releases ||
       state.aiConfigs !== prevState.aiConfigs ||
-      state.webdavConfigs !== prevState.webdavConfigs ||
       state.embeddingConfigs !== prevState.embeddingConfigs ||
       state.vectorSearchConfig !== prevState.vectorSearchConfig ||
       state.activeAIConfig !== prevState.activeAIConfig ||
-      state.activeWebDAVConfig !== prevState.activeWebDAVConfig ||
       state.activeEmbeddingConfig !== prevState.activeEmbeddingConfig ||
       state.hiddenDefaultCategoryIds !== prevState.hiddenDefaultCategoryIds ||
       state.categoryOrder !== prevState.categoryOrder ||

@@ -9,12 +9,6 @@ export const createConfigurationSlice: AppStoreSlice<Pick<import('../types').App
   | 'setActiveAIConfig'
   | 'setAIConfigs'
   | 'setRepositoryChatSettings'
-  | 'addWebDAVConfig'
-  | 'updateWebDAVConfig'
-  | 'deleteWebDAVConfig'
-  | 'setActiveWebDAVConfig'
-  | 'setWebDAVConfigs'
-  | 'setLastBackup'
   | 'addEmbeddingConfig'
   | 'updateEmbeddingConfig'
   | 'deleteEmbeddingConfig'
@@ -43,23 +37,6 @@ export const createConfigurationSlice: AppStoreSlice<Pick<import('../types').App
       setRepositoryChatSettings: (settings) => set((state) => ({
         repositoryChatSettings: { ...state.repositoryChatSettings, ...settings },
       })),
-
-      // WebDAV actions
-      addWebDAVConfig: (config) => set((state) => ({
-        webdavConfigs: [...state.webdavConfigs, config]
-      })),
-      updateWebDAVConfig: (id, updates) => set((state) => ({
-        webdavConfigs: state.webdavConfigs.map(config =>
-          config.id === id ? { ...config, ...updates } : config
-        )
-      })),
-      deleteWebDAVConfig: (id) => set((state) => ({
-        webdavConfigs: state.webdavConfigs.filter(config => config.id !== id),
-        activeWebDAVConfig: state.activeWebDAVConfig === id ? null : state.activeWebDAVConfig
-      })),
-      setActiveWebDAVConfig: (activeWebDAVConfig) => set({ activeWebDAVConfig }),
-      setWebDAVConfigs: (webdavConfigs) => set({ webdavConfigs }),
-      setLastBackup: (lastBackup) => set({ lastBackup }),
 
       // Embedding actions
       addEmbeddingConfig: (config) => set((state) => ({

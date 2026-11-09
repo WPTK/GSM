@@ -55,16 +55,6 @@ const makeRepo = (partial: Partial<Repository> & Pick<Repository, 'id' | 'name' 
   ...partial,
 });
 
-const makeGist = () => ({
-  id: 'gist-1',
-  description: 'A sample gist with a small script',
-  public: true,
-  owner: { login: 'acme' },
-  files: {
-    'hello.js': { filename: 'hello.js', language: 'JavaScript', size: 42, type: 'application/javascript' },
-  },
-}) as never;
-
 const README = '# Sample App\n\nA demo repository used by the i18n fixture guard.\n\n## Install\n\nnpm install sample-app\n';
 
 type CapturedCall = { url: string; body: unknown };
@@ -150,7 +140,6 @@ const buildAIServiceFixtures = async (language: 'zh' | 'en') => {
 
   result.analyzeRepository = await captureRequests(() =>
     makeService().analyzeRepository(repo, README, customCategories, customCategoryHint));
-  result.analyzeGist = await captureRequests(() => makeService().analyzeGist(makeGist(), 'console.log("hello");'));
   result.analyzeReleaseSummary = await captureRequests(() =>
     makeService().analyzeReleaseSummary('## Changes\n\n- Added feature A\n- Fixed bug B', {
       repoName: 'acme/sample-app',
@@ -180,8 +169,6 @@ const buildAIServiceFixtures = async (language: 'zh' | 'en') => {
     }));
   result.searchRepositoriesWithSemanticReranking = await captureRequests(() =>
     makeService().searchRepositoriesWithSemanticReranking([repo, repoB], 'state management'));
-  result.searchGistsWithReranking = await captureRequests(() =>
-    makeService().searchGistsWithReranking([makeGist()], 'state management'));
   result.searchRepositoriesWithSelection = await captureRequests(() =>
     makeService().searchRepositoriesWithSelection([repo, repoB], 'react state management'));
   result.translateTexts = await captureRequests(() =>
