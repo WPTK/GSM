@@ -48,6 +48,24 @@ export function isGitHubImageUrl(url: string | null | undefined): boolean {
 }
 
 /**
+ * `https://github.com/<o>/<r>/blob/<ref>/<path>` (no `?raw=true`) is an HTML page, not an image;
+ * the same file is served at `/raw/`. Anything else is returned unchanged.
+ */
+export function githubBlobToRaw(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return url;
+  if (!GITHUB_BLOB_PATH.test(parsed.pathname) || parsed.pathname.includes('..')) return url;
+  parsed.pathname = parsed.pathname.replace(/^(\/[^/]+\/[^/]+)\/blob\//, '$1/raw/');
+  parsed.searchParams.delete('raw');
+  return parsed.href;
+}
+
+/**
  * The URL to put in an `<img src>`: the same-origin proxy URL for GitHub image
  * locations, `data:image/` URLs unchanged (no network), and `undefined` for
  * anything else, so the caller renders a placeholder instead of leaking the
@@ -56,6 +74,7 @@ export function isGitHubImageUrl(url: string | null | undefined): boolean {
 export function imageProxySrc(url: string | null | undefined): string | undefined {
   if (typeof url !== 'string') return undefined;
   if (/^data:image\//i.test(url)) return url;
-  if (!isGitHubImageUrl(url)) return undefined;
-  return `/api/img?url=${encodeURIComponent(url)}`;
+  const target = githubBlobToRaw(url);
+  if (!isGitHubImageUrl(target)) return undefined;
+  return `/api/img?url=${encodeURIComponent(target)}`;
 }

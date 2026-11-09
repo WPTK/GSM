@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imageProxySrc, isGitHubImageUrl } from './imageProxy';
+import { githubBlobToRaw, imageProxySrc, isGitHubImageUrl } from './imageProxy';
 
 describe('isGitHubImageUrl', () => {
   it.each([
@@ -50,5 +50,19 @@ describe('imageProxySrc', () => {
 
   it('passes inline data images through unchanged', () => {
     expect(imageProxySrc('data:image/png;base64,AAAA')).toBe('data:image/png;base64,AAAA');
+  });
+});
+
+describe('blob links', () => {
+  it('rewrites absolute github.com blob image links to /raw/ before proxying', () => {
+    expect(githubBlobToRaw('https://github.com/o/r/blob/main/docs/a.png')).toBe('https://github.com/o/r/raw/main/docs/a.png');
+    expect(githubBlobToRaw('https://github.com/o/r/blob/main/a.png?raw=true')).toBe('https://github.com/o/r/raw/main/a.png');
+    expect(imageProxySrc('https://github.com/o/r/blob/main/docs/a.png'))
+      .toBe(`/api/img?url=${encodeURIComponent('https://github.com/o/r/raw/main/docs/a.png')}`);
+  });
+
+  it('leaves other URLs alone', () => {
+    expect(githubBlobToRaw('https://example.com/o/r/blob/main/a.png')).toBe('https://example.com/o/r/blob/main/a.png');
+    expect(githubBlobToRaw('https://github.com/o/r/issues/1')).toBe('https://github.com/o/r/issues/1');
   });
 });

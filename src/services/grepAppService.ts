@@ -3,7 +3,7 @@
  *
  * Upstream (unofficial) spec: `GET https://grep.app/api/search`, no auth; the server owns that host.
  * 实测注意：
- * - 机房 IP 会触发 Vercel Challenge（429），浏览器 egress 正常，故默认由浏览器直接 fetch。
+ * - 机房 IP 会触发 Vercel Challenge（429）：请求由服务端中继发出，服务器出口被挑战时前端按 429 处理。
  * - `repo/path` 实际为纯字符串（文档中的 `{raw}` 包裹已过时），此处做双向兼容。
  * - `f.lang` 等过滤有效，但 `facets` 仍返回全局分布，UI 需用 facets 做选项、用 hits 做展示。
  */

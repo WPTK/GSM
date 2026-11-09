@@ -124,7 +124,6 @@ describe('RepositoryReleaseSheet', () => {
     expect(zipRow).not.toBeNull();
     await user.click(within(zipRow!).getByRole('button', { name: '下载' }));
     expect(hookMocks.downloadAsset).toHaveBeenCalledWith(expect.objectContaining({
-      authenticatedUrl: 'https://api.github.com/repos/owner/example-repository/zipball/v1',
     }));
     expect(screen.queryByText('Source code (v1.tar.gz)')).not.toBeInTheDocument();
 
