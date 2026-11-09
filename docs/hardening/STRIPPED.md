@@ -1,6 +1,15 @@
 # Stripped in the hardened fork
 
-Format: item -> files -> reason.
+In short: the browser now talks only to this app's own server. The server holds every key and token, and it reaches
+the outside world only through one allowlist (`OUTBOUND_ALLOWLIST`, checked on every redirect). Features that phoned
+home, scraped third-party sites, or sent data to hosts a user typed in are gone: the update check, X, Telegram, the
+trending and external feeds, Gists, Forks, GitHub Lists, WebDAV, aria2 downloads, the outbound proxy setting and the
+plugin system. Nothing in the original app sent data to its maker except the update check, and that is removed.
+`npm run check:egress` builds both halves and fails if any host outside `docs/hardening/egress-allowlist.txt` appears.
+
+Upstream is credited: this is a fork of AmintaCCCP/GithubStarsManager under its MIT license.
+
+Format below: item -> files -> reason.
 
 ## Stream A
 
@@ -67,8 +76,13 @@ Added:
 - Translate goes through `/api/translate/:engine` and code search through `/api/codesearch`; GitHub goes through `/api/proxy/github`.
 - Login by API secret only (`loginWithApiSecret`); the secret is sent once and never kept. `githubToken` in the store is only ever the placeholder `server`, set when `/api/auth/status` reports a session.
 - Tests: no secret persisted, `githubToken` only ever `server`, v17 migration, legacy storage purge.
+- One sign-out path (`logoutSession()`): every logout button calls `DELETE /api/auth/session` and clears local state. If the
+  cookie is missing or expired, the app signs out and shows "session expired" instead of staying on a broken screen.
+- Microsoft translate batches are split by UTF-8 size to stay under the server's 64 KiB relay limit (a test keeps the two
+  limits equal).
+- `github.com/.../blob/...` image links are rewritten to `/raw/` so they load through `/api/img`.
 
-Known limitations / deferred to phase 2:
+Known limitations, deferred to Phase 3 (AI):
 
 - AI provider configs (`aiConfigs`) still hold their API keys in browser storage. That is outside this stream's scope and needs a server-held-key design.
 - Backup export with "include keys" still carries AI and embedding keys.
