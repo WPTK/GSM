@@ -5,7 +5,7 @@ import { ReadmeModal } from './ReadmeModal';
 import { backend } from '../services/backendAdapter';
 import { GitHubApiService } from '../services/githubApi';
 import { useAppStore } from '../store/useAppStore';
-import type { Repository, RouteMode } from '../types';
+import type { Repository } from '../types';
 
 vi.mock('./BilingualMarkdownRenderer', async () => {
   const React = await import('react');
@@ -30,10 +30,9 @@ vi.mock('../services/githubApi', () => ({
   GitHubApiService: vi.fn(),
 }));
 
-let mockStoreState: { language: 'zh' | 'en'; githubToken: string | null; routeMode: RouteMode; setReadmeModalOpen: () => void } = {
+let mockStoreState: { language: 'zh' | 'en'; githubToken: string | null; setReadmeModalOpen: () => void } = {
   language: 'zh',
   githubToken: null,
-  routeMode: 'auto',
   setReadmeModalOpen: vi.fn(),
 };
 
@@ -51,7 +50,6 @@ const setMockStore = (githubToken: string | null = null) => {
   mockStoreState = {
     language: 'zh',
     githubToken,
-    routeMode: 'auto' as RouteMode,
     setReadmeModalOpen: vi.fn(),
   };
   (useAppStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector?: (state: unknown) => unknown) => selector ? selector(mockStoreState) : mockStoreState);
@@ -164,23 +162,6 @@ describe('ReadmeModal multilingual README switching', () => {
     }
   });
 
-  it('falls back to the direct GitHub API when backend README proxy fails and a token exists', async () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      setMockStore('github-token');
-      (backend.getRepositoryReadme as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('GitHub token not configured'));
-      mockGitHubApi.getRepositoryReadme.mockResolvedValue('Direct README content');
-
-      render(<ReadmeModal isOpen onClose={vi.fn()} repository={mockRepository} />);
-
-      expect(await screen.findByText('Direct README content')).toBeInTheDocument();
-      expect(mockedGitHubApiService).toHaveBeenCalledWith('github-token');
-      expect(mockGitHubApi.getRepositoryReadme).toHaveBeenCalledWith('owner', 'demo', expect.any(AbortSignal));
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
-  });
-
   it('does not use direct fallback when the backend reports README is missing', async () => {
     setMockStore('github-token');
     (backend.getRepositoryReadme as ReturnType<typeof vi.fn>).mockResolvedValue('');
@@ -189,52 +170,6 @@ describe('ReadmeModal multilingual README switching', () => {
 
     expect(await screen.findByText('该仓库没有 README 文件')).toBeInTheDocument();
     expect(mockGitHubApi.getRepositoryReadme).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the direct GitHub API when a selected README path fails through backend', async () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      setMockStore('github-token');
-      (backend.getRepositoryReadmeByPath as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('GitHub token not configured'));
-      mockGitHubApi.getRepositoryReadmeByPath.mockResolvedValue('Direct 中文 README 内容');
-
-      render(<ReadmeModal isOpen onClose={vi.fn()} repository={mockRepository} />);
-
-      await screen.findByText('Default README content');
-      const user = userEvent.setup();
-      const selector = await screen.findByRole('combobox', { name: '切换 README 语言' });
-      await user.click(selector);
-      await user.click(await screen.findByRole('option', { name: '中文 · README_zh.md' }));
-
-      expect(await screen.findByText('Direct 中文 README 内容')).toBeInTheDocument();
-      expect(mockGitHubApi.getRepositoryReadmeByPath).toHaveBeenCalledWith('owner', 'demo', 'README_zh.md', expect.any(AbortSignal));
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
-  });
-
-  it('falls back to direct README variant detection when backend candidate listing fails', async () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      setMockStore('github-token');
-      (backend.listRepositoryReadmeCandidates as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('GitHub token not configured'));
-      mockGitHubApi.listRepositoryReadmeCandidates.mockResolvedValue([
-        { path: 'README.md', type: 'blob' },
-        { path: 'README_zh.md', type: 'blob' },
-      ]);
-
-      render(<ReadmeModal isOpen onClose={vi.fn()} repository={mockRepository} />);
-
-      expect(await screen.findByText('Default README content')).toBeInTheDocument();
-      const user = userEvent.setup();
-      const selector = await screen.findByRole('combobox', { name: '切换 README 语言' });
-      expect(selector).toBeInTheDocument();
-      await user.click(selector);
-      expect(await screen.findByRole('option', { name: '中文 · README_zh.md' })).toBeInTheDocument();
-      expect(mockGitHubApi.listRepositoryReadmeCandidates).toHaveBeenCalledWith('owner', 'demo', undefined, expect.any(AbortSignal));
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
   });
 
   it('defaults the table of contents closed on narrow screens and keeps it available on demand', async () => {

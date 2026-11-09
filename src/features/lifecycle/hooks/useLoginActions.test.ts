@@ -6,14 +6,10 @@ const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   syncFromBackend: vi.fn(),
   backend: {
-    configuredUrl: 'https://backend.example/api',
-    backendUrl: null as string | null,
     init: vi.fn(),
     isAvailable: true,
-    verifyAuth: vi.fn(),
-    restoreAuth: vi.fn(),
-    syncSettings: vi.fn(),
-    rememberActiveUrl: vi.fn(),
+    login: vi.fn(),
+    authStatus: vi.fn(),
   },
 }));
 
@@ -36,108 +32,108 @@ import { useLoginActions } from './useLoginActions';
 
 const user = { id: 1, login: 'octocat' };
 
-describe('useLoginActions', () => {
+describe('useLoginActions.loginWithApiSecret', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.apiTokens.splice(0);
+    mocks.backend.init.mockReset();
     mocks.backend.isAvailable = true;
-    mocks.backend.backendUrl = null;
-    mocks.backend.verifyAuth.mockResolvedValue(true);
-    mocks.backend.restoreAuth.mockResolvedValue({ github_token: 'ghp_restored' });
+    mocks.backend.login.mockResolvedValue(true);
+    mocks.backend.authStatus.mockResolvedValue({ authenticated: true, githubConfigured: true });
     mocks.getCurrentUser.mockResolvedValue(user);
   });
 
-  it('restores a GitHub session from an authenticated backend', async () => {
+  it('logs in with the secret and returns the server-held identity with the placeholder token', async () => {
     const { result } = renderHook(() => useLoginActions());
 
-    let restored;
+    let outcome;
     await act(async () => {
-      restored = await result.current.restoreBackendSession('https://backend.example');
+      outcome = await result.current.loginWithApiSecret('s3cret');
     });
 
-    expect(result.current.configuredBackendUrl).toBe('https://backend.example/api');
-    expect(mocks.backend.init).toHaveBeenCalledWith('https://backend.example');
-    expect(mocks.backend.verifyAuth).toHaveBeenCalledOnce();
-    expect(mocks.backend.restoreAuth).toHaveBeenCalledOnce();
-    expect(mocks.backend.rememberActiveUrl).toHaveBeenCalledOnce();
-    expect(mocks.apiTokens).toEqual(['ghp_restored']);
-    expect(restored).toEqual({ status: 'connected', githubToken: 'ghp_restored', user });
+    expect(mocks.backend.login).toHaveBeenCalledWith('s3cret');
+    expect(mocks.apiTokens).toEqual(['server']);
+    expect(outcome).toEqual({ status: 'connected', githubToken: 'server', user });
   });
 
-  it('does not remember the URL before the token setup step', async () => {
-    mocks.backend.restoreAuth.mockResolvedValueOnce({ github_token: null });
-    const { result } = renderHook(() => useLoginActions());
-
-    await expect(result.current.restoreBackendSession('https://backend.example')).resolves.toEqual({
-      status: 'github-token-required',
-    });
-    expect(mocks.getCurrentUser).not.toHaveBeenCalled();
-    expect(mocks.backend.rememberActiveUrl).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the previous backend when the key is rejected', async () => {
-    mocks.backend.backendUrl = 'https://old.example/api';
-    mocks.backend.verifyAuth.mockResolvedValueOnce(false);
-    const { result } = renderHook(() => useLoginActions());
-
-    await expect(result.current.restoreBackendSession('https://backend.example')).resolves.toEqual({
-      status: 'unauthorized',
-    });
-    expect(mocks.backend.init).toHaveBeenLastCalledWith('https://old.example/api');
-    expect(mocks.backend.rememberActiveUrl).not.toHaveBeenCalled();
-  });
-
-  it('reports an unusable stored token instead of a raw auth error', async () => {
-    mocks.getCurrentUser.mockRejectedValueOnce(new Error('GitHub token expired or invalid'));
-    const { result } = renderHook(() => useLoginActions());
-
-    await expect(result.current.restoreBackendSession('https://backend.example')).resolves.toEqual({
-      status: 'restored-token-invalid',
-    });
-  });
-
-  it('propagates transient GitHub errors instead of flagging the stored token', async () => {
-    mocks.getCurrentUser.mockRejectedValueOnce(new Error('GitHub API error: 503 Service Unavailable'));
-    const { result } = renderHook(() => useLoginActions());
-
-    await expect(result.current.restoreBackendSession('https://backend.example')).rejects.toThrow(
-      'GitHub API error: 503 Service Unavailable'
-    );
-  });
-
-  it('does not treat a backend proxy credential failure as an invalid stored token', async () => {
-    mocks.getCurrentUser.mockRejectedValueOnce(new Error('Backend API key was rejected. Please check your backend settings'));
-    const { result } = renderHook(() => useLoginActions());
-
-    await expect(result.current.restoreBackendSession('https://backend.example')).rejects.toThrow(
-      'Backend API key was rejected'
-    );
-  });
-
-  it('distinguishes unreachable and unauthorized backends', async () => {
-    const { result } = renderHook(() => useLoginActions());
+  it('probes the backend first when it has not been initialised', async () => {
     mocks.backend.isAvailable = false;
-    await expect(result.current.restoreBackendSession('https://offline.example')).resolves.toEqual({
-      status: 'backend-unavailable',
+    mocks.backend.init.mockImplementation(async () => { mocks.backend.isAvailable = true; });
+    const { result } = renderHook(() => useLoginActions());
+
+    await act(async () => {
+      await result.current.loginWithApiSecret('s3cret');
     });
 
-    mocks.backend.isAvailable = true;
-    mocks.backend.verifyAuth.mockResolvedValueOnce(false);
-    await expect(result.current.restoreBackendSession('https://backend.example')).resolves.toEqual({
-      status: 'unauthorized',
+    expect(mocks.backend.init).toHaveBeenCalledOnce();
+    expect(mocks.backend.login).toHaveBeenCalledOnce();
+  });
+
+  it('reports an unreachable backend without attempting login', async () => {
+    mocks.backend.isAvailable = false;
+    const { result } = renderHook(() => useLoginActions());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.loginWithApiSecret('s3cret');
+    });
+
+    expect(outcome).toEqual({ status: 'backend-unavailable' });
+    expect(mocks.backend.login).not.toHaveBeenCalled();
+  });
+
+  it('reports a rejected secret', async () => {
+    mocks.backend.login.mockResolvedValue(false);
+    const { result } = renderHook(() => useLoginActions());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.loginWithApiSecret('wrong');
+    });
+
+    expect(outcome).toEqual({ status: 'unauthorized' });
+    expect(mocks.backend.authStatus).not.toHaveBeenCalled();
+  });
+
+  it('reports a server without a GitHub token', async () => {
+    mocks.backend.authStatus.mockResolvedValue({ authenticated: true, githubConfigured: false });
+    const { result } = renderHook(() => useLoginActions());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.loginWithApiSecret('s3cret');
+    });
+
+    expect(outcome).toEqual({ status: 'github-not-configured' });
+    expect(mocks.getCurrentUser).not.toHaveBeenCalled();
+  });
+
+  it('reports an invalid server-held GitHub token', async () => {
+    mocks.getCurrentUser.mockRejectedValue(new Error('GitHub token expired or invalid'));
+    const { result } = renderHook(() => useLoginActions());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.loginWithApiSecret('s3cret');
+    });
+
+    expect(outcome).toEqual({ status: 'github-token-invalid' });
+  });
+
+  it('propagates transient GitHub errors so the user can retry', async () => {
+    mocks.getCurrentUser.mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() => useLoginActions());
+
+    await act(async () => {
+      await expect(result.current.loginWithApiSecret('s3cret')).rejects.toThrow('network down');
     });
   });
 
-  it('validates and stores a token before syncing backend data', async () => {
+  it('syncs backend data with force', async () => {
     const { result } = renderHook(() => useLoginActions());
-
-    await expect(result.current.setupBackendGitHubToken('ghp_new')).resolves.toEqual(user);
-    expect(mocks.apiTokens).toEqual(['ghp_new']);
-    expect(mocks.backend.syncSettings).toHaveBeenCalledWith({ github_token: 'ghp_new' });
-    expect(mocks.backend.rememberActiveUrl).toHaveBeenCalledOnce();
-    expect(mocks.syncFromBackend).not.toHaveBeenCalled();
-
-    await result.current.syncBackendData();
+    await act(async () => {
+      await result.current.syncBackendData();
+    });
     expect(mocks.syncFromBackend).toHaveBeenCalledWith({ force: true });
   });
 });

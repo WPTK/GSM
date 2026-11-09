@@ -16,9 +16,6 @@ const mocks = vi.hoisted(() => {
     customCategories: [],
     assetFilters: {},
     collapsedSidebarCategoryCount: 20,
-    backendApiSecret: null,
-    githubToken: 'ghp-local-token',
-    setBackendApiSecret: vi.fn(),
     setRepositories: vi.fn(),
     setReleases: vi.fn(),
     setAIConfigs: vi.fn(),
@@ -29,15 +26,16 @@ const mocks = vi.hoisted(() => {
 
   return {
     storeState,
-    useAppStore: vi.fn((selector?: (state: typeof storeState) => unknown) => (selector ? selector(storeState) : storeState)),
+    useAppStore: Object.assign(
+      vi.fn((selector?: (state: typeof storeState) => unknown) => (selector ? selector(storeState) : storeState)),
+      { getState: () => ({ logout: vi.fn() }) },
+    ),
     backend: {
       init: vi.fn(),
       checkHealth: vi.fn(),
-      verifyAuth: vi.fn(),
+      authStatus: vi.fn(),
+      logout: vi.fn(),
       isAvailable: true,
-      configuredUrl: null as string | null,
-      backendUrl: null as string | null,
-      rememberActiveUrl: vi.fn(),
       syncRepositories: vi.fn(),
       syncReleases: vi.fn(),
       syncAIConfigs: vi.fn(),
@@ -50,7 +48,6 @@ const mocks = vi.hoisted(() => {
       fetchSettings: vi.fn(),
     },
     tryRestoreAuthFromBackend: vi.fn(),
-    syncLocalGitHubTokenToBackend: vi.fn(),
     toast: vi.fn(),
     confirm: vi.fn(),
   };
@@ -60,7 +57,6 @@ vi.mock('../../store/useAppStore', () => ({ useAppStore: mocks.useAppStore }));
 vi.mock('../../services/backendAdapter', () => ({ backend: mocks.backend }));
 vi.mock('../../services/autoSync', () => ({
   tryRestoreAuthFromBackend: mocks.tryRestoreAuthFromBackend,
-  syncLocalGitHubTokenToBackend: mocks.syncLocalGitHubTokenToBackend,
 }));
 vi.mock('../../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: mocks.confirm }),
@@ -69,29 +65,28 @@ vi.mock('../../hooks/useDialog', () => ({
 const health = { version: '0.1.0', timestamp: '2026-08-19T00:00:00Z' };
 const t = makeT('en', 'app');
 
-describe('BackendPanel token synchronization', () => {
+describe('BackendPanel same-origin status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.backend.init.mockResolvedValue(undefined);
-    mocks.backend.verifyAuth.mockResolvedValue(true);
-    mocks.syncLocalGitHubTokenToBackend.mockResolvedValue(true);
+    mocks.backend.authStatus.mockResolvedValue({ authenticated: true, githubConfigured: true });
     mocks.tryRestoreAuthFromBackend.mockResolvedValue(false);
   });
 
-  it('syncs the local GitHub token when the backend becomes reachable on panel mount', async () => {
+  it('shows the connection state and has no URL, secret or token inputs', async () => {
     mocks.backend.checkHealth.mockResolvedValue(health);
 
-    render(<BackendPanel t={t} />);
+    const { container } = render(<BackendPanel t={t} />);
 
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(mocks.syncLocalGitHubTokenToBackend).toHaveBeenCalledOnce();
     expect(screen.getByText('Connected')).toBeTruthy();
+    expect(container.querySelector('input')).toBeNull();
   });
 
-  it('syncs the local GitHub token after a successful manual test connection', async () => {
+  it('re-checks the connection on a manual test', async () => {
     mocks.backend.checkHealth.mockResolvedValueOnce(null).mockResolvedValue(health);
 
     render(<BackendPanel t={t} />);
@@ -99,7 +94,7 @@ describe('BackendPanel token synchronization', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(mocks.syncLocalGitHubTokenToBackend).not.toHaveBeenCalled();
+    expect(screen.getByText('Not Connected')).toBeTruthy();
 
     fireEvent.click(screen.getByText('Test Connection'));
 
@@ -107,19 +102,23 @@ describe('BackendPanel token synchronization', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.syncLocalGitHubTokenToBackend).toHaveBeenCalledOnce();
+    expect(screen.getByText('Connected')).toBeTruthy();
   });
 
-  it('does not sync the token when the backend is unreachable', async () => {
-    mocks.backend.checkHealth.mockResolvedValue(null);
+  it('logs out through the backend', async () => {
+    mocks.backend.checkHealth.mockResolvedValue(health);
+    mocks.backend.logout.mockResolvedValue(undefined);
 
     render(<BackendPanel t={t} />);
-
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(mocks.syncLocalGitHubTokenToBackend).not.toHaveBeenCalled();
-    expect(screen.getByText('Not Connected')).toBeTruthy();
+    fireEvent.click(screen.getByText('Logout'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.backend.logout).toHaveBeenCalledOnce();
   });
 });

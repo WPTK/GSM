@@ -11,7 +11,6 @@ import { useAIConfigActions } from '../features/settings/hooks/useAIConfigAction
 import { useBackendSettingsActions } from '../features/settings/hooks/useBackendSettingsActions';
 import { useDiagnosticBackendActions } from '../features/settings/hooks/useDiagnosticBackendActions';
 import { useMcpActions } from '../features/settings/hooks/useMcpActions';
-import { useNetworkActions } from '../features/settings/hooks/useNetworkActions';
 import { useVectorSearchActions } from '../features/settings/hooks/useVectorSearchActions';
 
 type ActualStoreModule = typeof import('./useAppStore');
@@ -303,7 +302,6 @@ describe('PR-07 Store modularization compatibility', () => {
       useBackendSettingsActions,
       useDiagnosticBackendActions,
       useMcpActions,
-      useNetworkActions,
       useVectorSearchActions,
     ]) {
       expect(hook).toBeTypeOf('function');

@@ -153,83 +153,71 @@ describe('backendAdapter settings hydration', () => {
   });
 });
 
-describe('backendAdapter 后端 URL 安全策略', () => {
+describe('backendAdapter same-origin transport and cookie auth', () => {
   const adapter = backend as unknown as BackendAdapterLike;
-  const STORAGE_KEY = 'github-stars-manager-backend-url';
 
   afterEach(() => {
     vi.mocked(window.fetch).mockReset();
     adapter._backendUrl = null;
-    localStorage.removeItem(STORAGE_KEY);
   });
 
-  it('拒绝远程 HTTP 后端：不发起探测请求，也不写入本地存储', async () => {
-    await backend.init('http://backend.example.com');
-
-    expect(window.fetch).not.toHaveBeenCalled();
-    expect(backend.isAvailable).toBe(false);
-    expect(backend.configuredUrl).toBeNull();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-  });
-
-  it('拒绝伪装成 loopback 的远程主机（如 127.example.com）', async () => {
-    await backend.init('http://127.example.com');
-
-    expect(window.fetch).not.toHaveBeenCalled();
-    expect(backend.isAvailable).toBe(false);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-  });
-
-  it('放行 HTTPS 后端；rememberActiveUrl 之前不写入本地存储', async () => {
+  it('probes only its own origin, with same-origin credentials and no redirects', async () => {
     vi.mocked(window.fetch).mockResolvedValue(makeHealthOkResponse());
 
-    await backend.init('https://backend.example.com');
+    await backend.init();
 
+    expect(window.fetch).toHaveBeenCalledTimes(1);
     expect(window.fetch).toHaveBeenCalledWith(
-      'https://backend.example.com/api/health',
-      expect.objectContaining({ redirect: 'error' })
+      `${window.location.origin}/api/health`,
+      expect.objectContaining({ redirect: 'error', credentials: 'same-origin' })
     );
     expect(backend.isAvailable).toBe(true);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-
-    backend.rememberActiveUrl();
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('https://backend.example.com/api');
   });
 
-  it('认证请求同样禁止自动重定向', async () => {
-    adapter._backendUrl = 'https://backend.example.com/api';
-    vi.mocked(window.fetch).mockResolvedValue({ ok: true, status: 200 } as unknown as Response);
-
-    await backend.verifyAuth();
-
-    expect(window.fetch).toHaveBeenCalledWith(
-      'https://backend.example.com/api/settings',
-      expect.objectContaining({ redirect: 'error' })
-    );
-  });
-
-  it('loopback HTTP 后端仍可用于本地开发', async () => {
+  it('never persists a backend URL or secret', async () => {
     vi.mocked(window.fetch).mockResolvedValue(makeHealthOkResponse());
+    await backend.init();
+    for (let i = 0; i < localStorage.length; i++) {
+      expect(localStorage.key(i)).not.toMatch(/backend-url/);
+    }
+  });
 
-    await backend.init('http://localhost:3000');
+  it('login posts the secret once in the body and reports success on 204', async () => {
+    adapter._backendUrl = '/api';
+    vi.mocked(window.fetch).mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
 
-    expect(window.fetch).toHaveBeenCalledWith('http://localhost:3000/api/health', expect.anything());
-    expect(backend.isAvailable).toBe(true);
+    await expect(backend.login('s3cret')).resolves.toBe(true);
 
-    vi.mocked(window.fetch).mockClear();
-    adapter._backendUrl = null;
-    localStorage.removeItem(STORAGE_KEY);
+    const [url, init] = vi.mocked(window.fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/auth/session');
+    expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('same-origin');
+    expect(JSON.parse(String(init.body))).toEqual({ secret: 's3cret' });
+    expect(JSON.stringify(init.headers)).not.toContain('s3cret');
+  });
 
-    await backend.init('http://127.0.0.2:8080');
+  it('login returns false on 401', async () => {
+    adapter._backendUrl = '/api';
+    vi.mocked(window.fetch).mockResolvedValue({ ok: false, status: 401 } as unknown as Response);
+    await expect(backend.login('wrong')).resolves.toBe(false);
+  });
 
-    expect(window.fetch).toHaveBeenCalledWith('http://127.0.0.2:8080/api/health', expect.anything());
-    expect(backend.isAvailable).toBe(true);
+  it('authStatus reads the cookie-based session state', async () => {
+    adapter._backendUrl = '/api';
+    vi.mocked(window.fetch).mockResolvedValue(makeJsonResponse({ authenticated: true, githubConfigured: false }));
+    await expect(backend.authStatus()).resolves.toEqual({ authenticated: true, githubConfigured: false });
+  });
+
+  it('config requests do not ask the server to decrypt secrets', async () => {
+    adapter._backendUrl = '/api';
+    vi.mocked(window.fetch).mockResolvedValue(makeJsonResponse([]));
+    await backend.fetchAIConfigs();
+    expect(String(vi.mocked(window.fetch).mock.calls[0][0])).not.toContain('decrypt');
   });
 });
 
 describe('backendAdapter 探测源协议（file:// 桌面端不探测同源 /api）', () => {
   const adapter = backend as unknown as BackendAdapterLike;
-  const STORAGE_KEY = 'github-stars-manager-backend-url';
   const originalLocation = window.location;
 
   // jsdom 的 Location 实例属性不可重定义，但 `window.location` 本身可替换。
@@ -245,7 +233,6 @@ describe('backendAdapter 探测源协议（file:// 桌面端不探测同源 /api
     Object.defineProperty(window, 'location', { configurable: true, writable: true, value: originalLocation });
     vi.mocked(window.fetch).mockReset();
     adapter._backendUrl = null;
-    localStorage.removeItem(STORAGE_KEY);
   });
 
   it('桌面端 file:// 页面：不发起 file:///api/health 探测', async () => {

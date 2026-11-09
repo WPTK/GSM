@@ -106,6 +106,7 @@ export const LoginScreen: React.FC = () => {
     setThemeMode: state.setThemeMode,
   })));
   const theme = resolveTheme(themeMode, systemTheme);
+  const tApp = useT('app');
   const t = useT('login');
   const parkedWorkspaces = Object.values(accountWorkspaces ?? {});
   const cachedRepoCount = repositories.length > 0
@@ -136,7 +137,7 @@ export const LoginScreen: React.FC = () => {
         throw new Error(t('loginScreen.invalid-api-key-please-check-it-and-try-again'));
       }
       if (result.status === 'github-not-configured') {
-        throw new Error(t('backendPanel.github-not-configured'));
+        throw new Error(tApp('backendPanel.github-not-configured'));
       }
       if (result.status === 'github-token-invalid') {
         throw new Error(t('loginScreen.the-github-token-stored-on-the-backend-is-not-wo'));

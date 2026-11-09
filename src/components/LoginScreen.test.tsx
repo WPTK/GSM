@@ -1,18 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from './ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
   safeReadText: vi.fn(),
-  restoreBackendSession: vi.fn(),
-  setupBackendGitHubToken: vi.fn(),
+  loginWithApiSecret: vi.fn(),
   syncBackendData: vi.fn(),
-  configuredBackendUrl: null as string | null,
   store: {
     setUser: vi.fn(),
     setGitHubToken: vi.fn(),
-    setBackendApiSecret: vi.fn(),
-    backendApiSecret: null as string | null,
     accountWorkspaces: {} as Record<string, unknown>,
   },
 }));
@@ -20,11 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../utils/clipboardUtils', () => ({ safeReadText: mocks.safeReadText }));
 vi.mock('../features/lifecycle/hooks/useLoginActions', () => ({
   useLoginActions: () => ({
-    authenticateWithGitHub: vi.fn(),
-    syncTokenToBackend: vi.fn().mockResolvedValue({ ok: true }),
-    configuredBackendUrl: mocks.configuredBackendUrl,
-    restoreBackendSession: mocks.restoreBackendSession,
-    setupBackendGitHubToken: mocks.setupBackendGitHubToken,
+    loginWithApiSecret: mocks.loginWithApiSecret,
     syncBackendData: mocks.syncBackendData,
   }),
 }));
@@ -33,8 +25,6 @@ vi.mock('../store/useAppStore', () => ({
     selector({
       setUser: mocks.store.setUser,
       setGitHubToken: mocks.store.setGitHubToken,
-      setBackendApiSecret: mocks.store.setBackendApiSecret,
-      backendApiSecret: mocks.store.backendApiSecret,
       repositories: [],
       gists: [],
       releases: [],
@@ -55,185 +45,116 @@ vi.mock('../store/useAppStore', () => ({
 
 import { LoginScreen } from './LoginScreen';
 
-const enterBackendMode = async () => {
-  render(
+const connectedResult = {
+  status: 'connected',
+  githubToken: 'server',
+  user: { id: 1, login: 'octocat' },
+};
+
+const renderLogin = () => {
+  const view = render(
     <TooltipProvider>
       <LoginScreen />
     </TooltipProvider>
   );
-  fireEvent.click(screen.getByRole('button', { name: /已有后端数据/ }));
-  return {
-    urlInput: await screen.findByLabelText('后端 URL'),
-    apiKeyInput: screen.getByLabelText('API Key'),
-  };
+  const secretInput = view.container.querySelector('#backend-api-key') as HTMLInputElement;
+  return { ...view, secretInput };
 };
 
-describe('LoginScreen token guidance', () => {
-  it('explains Star permissions before sign-in', () => {
-    render(<TooltipProvider><LoginScreen /></TooltipProvider>);
-    expect(screen.getByText('GitHub Token 权限')).toBeVisible();
-    expect(screen.getByText('Starring')).toBeVisible();
-    fireEvent.click(screen.getByRole('tab', { name: '经典 Token' }));
-    expect(screen.getByText('public_repo')).toBeVisible();
-  });
-});
+const submit = (secretInput: HTMLInputElement, secret = 'secret') => {
+  fireEvent.change(secretInput, { target: { value: secret } });
+  fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
+};
 
-describe('LoginScreen 后端登录', () => {
+describe('LoginScreen same-origin sign-in', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.safeReadText.mockResolvedValue({ success: false, error: 'empty' });
     mocks.syncBackendData.mockReset().mockResolvedValue(undefined);
-    mocks.store.backendApiSecret = null;
     mocks.store.accountWorkspaces = {};
   });
 
-  it('Ctrl+V 粘贴只写入当前聚焦的输入框', async () => {
-    mocks.safeReadText.mockResolvedValue({ success: true, text: 'https://backend.example.com' });
-    const { urlInput, apiKeyInput } = await enterBackendMode();
-
-    fireEvent.keyDown(urlInput, { key: 'v', ctrlKey: true });
-
-    await waitFor(() => expect(urlInput).toHaveValue('https://backend.example.com'));
-    expect(apiKeyInput).toHaveValue('');
-    expect(mocks.safeReadText).toHaveBeenCalledOnce();
+  it('asks only for the API secret: no backend URL, no GitHub token field', () => {
+    const { container, secretInput } = renderLogin();
+    expect(secretInput).toHaveAttribute('type', 'password');
+    expect(container.querySelectorAll('input')).toHaveLength(1);
+    expect(screen.queryByText('GitHub Token 权限')).not.toBeInTheDocument();
   });
 
-  it('拒绝远程 HTTP 后端地址，且不发起后端请求', async () => {
-    const { urlInput, apiKeyInput } = await enterBackendMode();
+  it('Ctrl+V pastes the secret into the field', async () => {
+    mocks.safeReadText.mockResolvedValue({ success: true, text: 'pasted-secret' });
+    const { secretInput } = renderLogin();
 
-    fireEvent.change(urlInput, { target: { value: 'http://backend.example.com' } });
-    fireEvent.change(apiKeyInput, { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
+    fireEvent.keyDown(secretInput, { key: 'v', ctrlKey: true });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('后端地址无效');
-    expect(mocks.restoreBackendSession).not.toHaveBeenCalled();
+    await waitFor(() => expect(secretInput).toHaveValue('pasted-secret'));
   });
 
-  it('后端保存的 GitHub Token 失效时引导到令牌配置步骤', async () => {
-    mocks.restoreBackendSession.mockResolvedValue({ status: 'restored-token-invalid' });
-    const { urlInput, apiKeyInput } = await enterBackendMode();
+  it('signs in with the secret, syncs backend data first, then commits the placeholder token', async () => {
+    mocks.loginWithApiSecret.mockResolvedValue(connectedResult);
+    const { secretInput } = renderLogin();
 
-    fireEvent.change(urlInput, { target: { value: 'https://backend.example.com' } });
-    fireEvent.change(apiKeyInput, { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
-
-    expect(await screen.findByText('后端保存的 GitHub Token 无法使用，请重新配置')).toBeInTheDocument();
-    expect(screen.getByLabelText('GitHub Personal Access Token')).toHaveAttribute('id', 'backend-github-token');
-  });
-
-  it('连接已有后端成功后先拉后端数据再登录', async () => {
-    mocks.restoreBackendSession.mockResolvedValue({
-      status: 'connected',
-      githubToken: 'ghp_restored',
-      user: { id: 1, login: 'octocat' },
-    });
-    const { urlInput, apiKeyInput } = await enterBackendMode();
-
-    fireEvent.change(urlInput, { target: { value: 'https://backend.example.com' } });
-    fireEvent.change(apiKeyInput, { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
+    submit(secretInput, 's3cret');
 
     await waitFor(() => expect(mocks.store.setUser).toHaveBeenCalledWith({ id: 1, login: 'octocat' }));
+    expect(mocks.loginWithApiSecret).toHaveBeenCalledWith('s3cret');
     expect(mocks.syncBackendData).toHaveBeenCalledOnce();
-    expect(mocks.store.setGitHubToken).toHaveBeenCalledWith('ghp_restored');
+    expect(mocks.store.setGitHubToken).toHaveBeenCalledWith('server');
     expect(mocks.syncBackendData.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.store.setUser.mock.invocationCallOrder[0],
     );
   });
 
-  it('后端数据同步失败时不提交登录状态', async () => {
-    mocks.restoreBackendSession.mockResolvedValue({
-      status: 'connected',
-      githubToken: 'ghp_restored',
-      user: { id: 1, login: 'octocat' },
-    });
-    mocks.syncBackendData.mockRejectedValueOnce(new Error('sync failed'));
-    const { urlInput, apiKeyInput } = await enterBackendMode();
+  it('shows an error for a rejected secret and commits nothing', async () => {
+    mocks.loginWithApiSecret.mockResolvedValue({ status: 'unauthorized' });
+    const { secretInput } = renderLogin();
 
-    fireEvent.change(urlInput, { target: { value: 'https://backend.example.com' } });
-    fireEvent.change(apiKeyInput, { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
+    submit(secretInput, 'wrong');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('sync failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('API');
     expect(mocks.store.setUser).not.toHaveBeenCalled();
     expect(mocks.store.setGitHubToken).not.toHaveBeenCalled();
-    expect(mocks.store.setBackendApiSecret).toHaveBeenLastCalledWith(null);
   });
 
-  it('令牌配置流程同步失败时不提交登录状态', async () => {
-    mocks.restoreBackendSession.mockResolvedValue({ status: 'github-token-required' });
-    mocks.setupBackendGitHubToken.mockResolvedValue({ id: 1, login: 'octocat' });
+  it('shows an error when the server has no GitHub token configured', async () => {
+    mocks.loginWithApiSecret.mockResolvedValue({ status: 'github-not-configured' });
+    const { secretInput } = renderLogin();
+
+    submit(secretInput);
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(mocks.store.setUser).not.toHaveBeenCalled();
+  });
+
+  it('does not commit the login when the backend data sync fails', async () => {
+    mocks.loginWithApiSecret.mockResolvedValue(connectedResult);
     mocks.syncBackendData.mockRejectedValueOnce(new Error('sync failed'));
-    const { urlInput, apiKeyInput } = await enterBackendMode();
+    const { secretInput } = renderLogin();
 
-    fireEvent.change(urlInput, { target: { value: 'https://backend.example.com' } });
-    fireEvent.change(apiKeyInput, { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
-
-    const tokenInput = await screen.findByLabelText('GitHub Personal Access Token');
-    fireEvent.change(tokenInput, { target: { value: 'ghp_new' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存并继续' }));
+    submit(secretInput);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('sync failed');
     expect(mocks.store.setUser).not.toHaveBeenCalled();
     expect(mocks.store.setGitHubToken).not.toHaveBeenCalled();
   });
 
-  it('当本地存在已归档的自定义分类时弹出冲突确认对话框并确认覆盖', async () => {
+  it('asks before overwriting archived local data and syncs on confirm', async () => {
     mocks.store.accountWorkspaces = {
       '1': {
         repositories: [],
         customCategories: [{ id: 'cat-1', name: 'Cat', icon: '', isCustom: true, keywords: [] }],
       },
     };
-    mocks.restoreBackendSession.mockResolvedValue({
-      status: 'connected',
-      githubToken: 'ghp_restored',
-      user: { id: 1, login: 'octocat' },
-    });
-    const { urlInput, apiKeyInput } = await enterBackendMode();
+    mocks.loginWithApiSecret.mockResolvedValue(connectedResult);
+    const { secretInput } = renderLogin();
 
-    fireEvent.change(urlInput, { target: { value: 'https://backend.example.com' } });
-    fireEvent.change(apiKeyInput, { target: { value: 'secret' } });
-    fireEvent.click(screen.getByRole('button', { name: '连接并恢复数据' }));
+    submit(secretInput);
 
     expect(await screen.findByText('本地数据冲突')).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: '使用后端数据' }));
 
     await waitFor(() => expect(mocks.store.setUser).toHaveBeenCalledWith({ id: 1, login: 'octocat' }));
     expect(mocks.syncBackendData).toHaveBeenCalledOnce();
-    expect(mocks.store.setGitHubToken).toHaveBeenCalledWith('ghp_restored');
-  });
-});
-
-describe('LoginScreen 后端 URL 预填', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    mocks.configuredBackendUrl = null;
-  });
-
-  it('桌面端 file:// origin 不预填无效地址', async () => {
-    vi.stubGlobal('location', { protocol: 'file:', origin: 'file://' } as unknown as Location);
-
-    const { urlInput } = await enterBackendMode();
-
-    expect(urlInput).toHaveValue('');
-  });
-
-  it('Web 部署时预填同源地址', async () => {
-    vi.stubGlobal('location', { protocol: 'https:', origin: 'https://app.example.com' } as unknown as Location);
-
-    const { urlInput } = await enterBackendMode();
-
-    expect(urlInput).toHaveValue('https://app.example.com');
-  });
-
-  it('记住的后端地址优先于同源地址', async () => {
-    mocks.configuredBackendUrl = 'https://stored.example/api';
-
-    const { urlInput } = await enterBackendMode();
-
-    expect(urlInput).toHaveValue('https://stored.example');
+    expect(mocks.store.setGitHubToken).toHaveBeenCalledWith('server');
   });
 });

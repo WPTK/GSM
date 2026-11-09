@@ -11,10 +11,6 @@ const mocks = vi.hoisted(() => ({
     getRepositoryReadmeByPath: vi.fn(),
     listRepositoryReadmeCandidates: vi.fn(),
   },
-  getRepositoryReadme: vi.fn(),
-  getRepositoryReadmeByPath: vi.fn(),
-  listRepositoryReadmeCandidates: vi.fn(),
-  shouldBypassBackend: vi.fn(() => false),
 }));
 
 vi.mock('../store/useAppStore', () => ({
@@ -22,18 +18,6 @@ vi.mock('../store/useAppStore', () => ({
 }));
 
 vi.mock('../services/backendAdapter', () => ({ backend: mocks.backend }));
-
-vi.mock('../services/githubApi', () => ({
-  GitHubApiService: class {
-    getRepositoryReadme = mocks.getRepositoryReadme;
-    getRepositoryReadmeByPath = mocks.getRepositoryReadmeByPath;
-    listRepositoryReadmeCandidates = mocks.listRepositoryReadmeCandidates;
-  },
-}));
-
-vi.mock('../services/routeMode', () => ({
-  shouldBypassBackend: mocks.shouldBypassBackend,
-}));
 
 const createStoreState = () => ({
   githubToken: 'github-token' as string | null,
@@ -54,7 +38,6 @@ describe('useReadmeFetch.fetchReadmeContent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storeState = createStoreState();
-    mocks.shouldBypassBackend.mockReturnValue(false);
     mocks.backend.isAvailable = true;
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -63,63 +46,27 @@ describe('useReadmeFetch.fetchReadmeContent', () => {
     warnSpy.mockRestore();
   });
 
-  it('goes through the backend when available and does not touch GitHub', async () => {
+  it('goes through the backend', async () => {
     mocks.backend.getRepositoryReadme.mockResolvedValue('# Backend readme');
     const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
     await act(async () => {
       await expect(result.current.fetchReadmeContent(defaultVariant)).resolves.toBe('# Backend readme');
     });
     expect(mocks.backend.getRepositoryReadme).toHaveBeenCalledWith('owner', 'repo', expect.any(AbortSignal));
-    expect(mocks.getRepositoryReadme).not.toHaveBeenCalled();
   });
 
-  it('bypasses the backend in browser route mode and fetches from GitHub', async () => {
-    mocks.shouldBypassBackend.mockReturnValue(true);
-    mocks.getRepositoryReadme.mockResolvedValue('# Direct readme');
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-    await act(async () => {
-      await expect(result.current.fetchReadmeContent(defaultVariant)).resolves.toBe('# Direct readme');
-    });
-    expect(mocks.backend.getRepositoryReadme).not.toHaveBeenCalled();
-    expect(mocks.getRepositoryReadme).toHaveBeenCalledWith('owner', 'repo', expect.any(AbortSignal));
-  });
-
-  it('falls back to GitHub after a backend failure and warns', async () => {
-    mocks.backend.getRepositoryReadme.mockRejectedValue(new Error('backend boom'));
-    mocks.getRepositoryReadme.mockResolvedValue('# Fallback readme');
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-    await act(async () => {
-      await expect(result.current.fetchReadmeContent(defaultVariant)).resolves.toBe('# Fallback readme');
-    });
-    expect(warnSpy).toHaveBeenCalledWith('Falling back to direct GitHub README fetch after backend failure:', expect.any(Error));
-    expect(mocks.getRepositoryReadme).toHaveBeenCalledTimes(1);
-  });
-
-  it('throws the verbatim message when neither backend nor token is available', async () => {
-    mocks.backend.isAvailable = false;
-    storeState.githubToken = null;
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-    await act(async () => {
-      await expect(result.current.fetchReadmeContent(defaultVariant)).rejects.toThrow('未登录且后端不可用，无法加载 README');
-    });
-    expect(mocks.getRepositoryReadme).not.toHaveBeenCalled();
-  });
-
-  it('rethrows the backend error instead of falling back when tokenless (content path)', async () => {
+  it('rethrows the backend error (there is no direct-GitHub fallback) (content path)', async () => {
     mocks.backend.getRepositoryReadme.mockRejectedValue(new Error('backend down'));
-    storeState.githubToken = null;
     const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
     await act(async () => {
       await expect(result.current.fetchReadmeContent(defaultVariant)).rejects.toThrow('backend down');
     });
     expect(warnSpy).not.toHaveBeenCalled();
-    expect(mocks.getRepositoryReadme).not.toHaveBeenCalled();
   });
 
-  it('uses the path variant against the backend and GitHub respectively', async () => {
+  it('uses the path variant against the backend', async () => {
     const pathVariant: ReadmeVariant = { ...DEFAULT_README_VARIANT, key: 'readme-zh', path: 'README.zh.md', isDefault: false };
     mocks.backend.getRepositoryReadmeByPath.mockResolvedValueOnce('# backend path');
-    mocks.getRepositoryReadmeByPath.mockResolvedValueOnce('# github path');
 
     const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
     await act(async () => {
@@ -127,11 +74,6 @@ describe('useReadmeFetch.fetchReadmeContent', () => {
     });
     expect(mocks.backend.getRepositoryReadmeByPath).toHaveBeenCalledWith('owner', 'repo', 'README.zh.md', expect.any(AbortSignal));
 
-    mocks.backend.getRepositoryReadmeByPath.mockRejectedValueOnce(new Error('boom'));
-    await act(async () => {
-      await expect(result.current.fetchReadmeContent(pathVariant)).resolves.toBe('# github path');
-    });
-    expect(mocks.getRepositoryReadmeByPath).toHaveBeenCalledWith('owner', 'repo', 'README.zh.md', expect.any(AbortSignal));
   });
 
   it('rejects with an AbortError-named error when cancelled after the backend resolves', async () => {
@@ -149,27 +91,6 @@ describe('useReadmeFetch.fetchReadmeContent', () => {
       result.current.cancel();
     });
     resolveBackend('# stale');
-    await act(async () => {
-      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    });
-  });
-
-  it('rejects with AbortError when cancelled after a direct-GitHub response resolves', async () => {
-    mocks.backend.isAvailable = false;
-    let resolveDirect!: (value: string) => void;
-    mocks.getRepositoryReadme.mockImplementation(() => new Promise<string>((resolve) => {
-      resolveDirect = resolve;
-    }));
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-
-    let pending!: Promise<string>;
-    act(() => {
-      pending = result.current.fetchReadmeContent(defaultVariant);
-    });
-    act(() => {
-      result.current.cancel();
-    });
-    resolveDirect('# stale direct');
     await act(async () => {
       await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     });
@@ -202,7 +123,6 @@ describe('useReadmeFetch.fetchReadmeCandidates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storeState = createStoreState();
-    mocks.shouldBypassBackend.mockReturnValue(false);
     mocks.backend.isAvailable = true;
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
@@ -221,58 +141,13 @@ describe('useReadmeFetch.fetchReadmeCandidates', () => {
     expect(mocks.backend.listRepositoryReadmeCandidates).toHaveBeenCalledWith('owner', 'repo', 'main', expect.any(AbortSignal));
   });
 
-  it('falls back to GitHub after a backend failure and warns with the variant-detection message', async () => {
-    mocks.backend.listRepositoryReadmeCandidates.mockRejectedValue(new Error('boom'));
-    mocks.listRepositoryReadmeCandidates.mockResolvedValue([]);
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-    await act(async () => {
-      await expect(result.current.fetchReadmeCandidates('main')).resolves.toEqual([]);
-    });
-    expect(warnSpy).toHaveBeenCalledWith('Falling back to direct GitHub README variant detection after backend failure:', expect.any(Error));
-  });
-
-  it('returns an empty list instead of throwing when tokenless on the GitHub path', async () => {
-    mocks.backend.isAvailable = false;
-    storeState.githubToken = null;
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-    await act(async () => {
-      await expect(result.current.fetchReadmeCandidates('main')).resolves.toEqual([]);
-    });
-    expect(mocks.listRepositoryReadmeCandidates).not.toHaveBeenCalled();
-  });
-
-  it('rethrows the backend error instead of falling back when tokenless (candidates path)', async () => {
+  it('rethrows the backend error (there is no direct-GitHub fallback) (candidates path)', async () => {
     mocks.backend.listRepositoryReadmeCandidates.mockRejectedValue(new Error('backend down'));
-    storeState.githubToken = null;
     const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
     await act(async () => {
       await expect(result.current.fetchReadmeCandidates('main')).rejects.toThrow('backend down');
     });
     expect(warnSpy).not.toHaveBeenCalled();
-    expect(mocks.listRepositoryReadmeCandidates).not.toHaveBeenCalled();
-  });
-
-  it('rejects with AbortError when a direct-GitHub candidates request is superseded after resolving', async () => {
-    mocks.backend.isAvailable = false;
-    const resolvers: Array<(value: unknown[]) => void> = [];
-    mocks.listRepositoryReadmeCandidates.mockImplementation(() =>
-      new Promise<unknown[]>((resolve) => {
-        resolvers.push(resolve);
-      }));
-    const { result } = renderHook(() => useReadmeFetch({ owner: 'owner', name: 'repo' }));
-
-    let first!: Promise<unknown[]>;
-    act(() => {
-      first = result.current.fetchReadmeCandidates('main');
-    });
-    act(() => {
-      void result.current.fetchReadmeCandidates('main');
-    });
-    // 仅 resolve 第一个（已被取代的）请求；第二个保持挂起，不影响断言
-    resolvers[0]([{ name: 'stale.md', path: 'stale.md' }]);
-    await act(async () => {
-      await expect(first).rejects.toMatchObject({ name: 'AbortError' });
-    });
   });
 
   it('cancel aborts the in-flight candidates request', async () => {

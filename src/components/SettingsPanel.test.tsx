@@ -153,7 +153,7 @@ describe('SettingsPanel conditional tabs matrix (7.7)', () => {
     expectSidebarTabs([], ['网络设置', '插件管理', 'MCP服务']);
   });
 
-  it('backend-only：mcp 显示', () => {
+  it('backend-only：mcp 显示，network/plugins 已移除', () => {
     hookState.backendAvailable = true;
     render(<SettingsPanel isOpen />);
     expectSidebarTabs(['MCP服务'], ['网络设置', '插件管理']);

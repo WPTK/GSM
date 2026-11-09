@@ -834,36 +834,22 @@ export class GitHubApiService {
    * 拉取 gist 单个文件的原始内容。
    * 用于 GitHub gist 详情 API 返回 truncated:true（文件 >1MB，content 被省略）时的回退取数。
    * raw_url 指向 gist.githubusercontent.com，不能复用 makeRequest（它会在前面拼 /api/proxy/github）。
-   * 当 backendUrl 已设置时通过服务端代理路由（走用户配置的代理），否则直连。
+   * 始终通过同源 /api/proxy/github-raw 转发。
    */
   async getGistFileRaw(rawUrl: string, signal?: AbortSignal): Promise<string> {
-    if (this.backendUrl) {
-      const proxyUrl = `${this.backendUrl}/proxy/github-raw`;
-      const response = await fetch(proxyUrl, {
-        method: 'POST',
-        signal,
-        headers: this.getBackendHeaders(),
-        body: JSON.stringify({ url: rawUrl }),
-      });
-      if (!response.ok) {
-        // 尝试从 JSON 错误体提取消息
-        let detail = response.statusText;
-        try { const data = await response.json(); detail = (data as { error?: string }).error || detail; } catch { /* ignore */ }
-        throw new Error(`GitHub raw proxy error: ${response.status} ${detail}`);
-      }
-      return response.text();
-    }
-
-    const response = await fetch(rawUrl, {
+    const proxyUrl = `${this.backendUrl}/proxy/github-raw`;
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
       signal,
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      credentials: 'same-origin',
+      headers: this.getBackendHeaders(),
+      body: JSON.stringify({ url: rawUrl }),
     });
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+      // 尝试从 JSON 错误体提取消息
+      let detail = response.statusText;
+      try { const data = await response.json(); detail = (data as { error?: string }).error || detail; } catch { /* ignore */ }
+      throw new Error(`GitHub raw proxy error: ${response.status} ${detail}`);
     }
     return response.text();
   }

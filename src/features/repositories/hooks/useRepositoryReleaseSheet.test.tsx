@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Release, Repository, RouteMode } from '../../../types';
+import type { Release, Repository } from '../../../types';
 import { useRepositoryReleaseSheet } from './useRepositoryReleaseSheet';
 
 const mocks = vi.hoisted(() => ({
@@ -9,32 +9,18 @@ const mocks = vi.hoisted(() => ({
     getRepositoryReleases: vi.fn(),
     downloadGitHubResource: vi.fn(),
   },
-  githubGetRepositoryReleasesPage: vi.fn(),
   toast: vi.fn(),
-  sendToRpcDownload: vi.fn(),
   analyzeReleaseSummary: vi.fn(),
   store: {
     language: 'zh' as const,
-    githubToken: 'token' as string | null,
-    rpcDownloadConfig: { enabled: false, host: '', port: 6800, secret: '' },
-    backendApiSecret: null as string | null,
     aiConfigs: [] as Array<{ id: string; name: string; baseUrl: string; apiKey: string; model: string }>,
     activeAIConfig: null as string | null,
-    routeMode: 'auto' as RouteMode,
   },
 }));
 
 vi.mock('../../../services/backendAdapter', () => ({ backend: mocks.backend }));
-vi.mock('../../../services/githubApi', () => ({
-  GitHubApiService: class {
-    getRepositoryReleasesPage = mocks.githubGetRepositoryReleasesPage;
-  },
-}));
 vi.mock('../../../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: vi.fn() }),
-}));
-vi.mock('../../../services/rpcDownloadService', () => ({
-  sendToRpcDownload: mocks.sendToRpcDownload,
 }));
 vi.mock('../../../services/aiService', () => ({
   AIService: class {
@@ -80,8 +66,6 @@ describe('useRepositoryReleaseSheet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.backend.isAvailable = false;
-    mocks.store.githubToken = 'token';
-    mocks.store.routeMode = 'auto';
   });
 
   it('uses the live backend GitHub proxy when available and maps repository identity locally', async () => {
@@ -94,7 +78,6 @@ describe('useRepositoryReleaseSheet', () => {
     });
 
     expect(mocks.backend.getRepositoryReleases).toHaveBeenCalledWith('owner', 'repo', 1, 100, expect.any(AbortSignal));
-    expect(mocks.githubGetRepositoryReleasesPage).not.toHaveBeenCalled();
     expect(result.current.releases).toEqual([expect.objectContaining({
       id: rawRelease.id,
       repository: { id: repository.id, name: repository.name, full_name: repository.full_name },
@@ -116,60 +99,7 @@ describe('useRepositoryReleaseSheet', () => {
     expect(result.current.releases).toEqual([expect.objectContaining({ id: rawRelease.id })]);
   });
 
-  it('falls back to a fresh token-authenticated GitHub request when the backend proxy fails', async () => {
-    mocks.backend.isAvailable = true;
-    mocks.backend.getRepositoryReleases.mockRejectedValue(new Error('Proxy unavailable'));
-    mocks.githubGetRepositoryReleasesPage.mockResolvedValue({
-      releases: [{ ...rawRelease, repository: { id: 0, name: 'repo', full_name: 'owner/repo' } }],
-      hasMore: false,
-    });
-    const { result } = renderHook(() => useRepositoryReleaseSheet(repository));
-
-    await act(async () => {
-      await result.current.loadReleases();
-    });
-
-    expect(mocks.githubGetRepositoryReleasesPage).toHaveBeenCalledWith('owner', 'repo', 1, 100, expect.any(AbortSignal));
-    expect(result.current.error).toBeNull();
-    expect(result.current.releases[0]?.repository.id).toBe(repository.id);
-  });
-
-  it('downloads a private asset through its authenticated GitHub API endpoint', async () => {
-    const blob = new Blob(['release asset']);
-    const fetchMock = vi.mocked(window.fetch).mockResolvedValue({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(blob),
-    } as unknown as Response);
-    const createObjectUrl = vi.fn(() => 'blob:release-asset');
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
-    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
-    const { result } = renderHook(() => useRepositoryReleaseSheet(repository));
-
-    await act(async () => {
-      await result.current.downloadAsset({
-        id: 'asset-1',
-        name: 'private.zip',
-        url: 'https://github.com/owner/repo/releases/download/v1/private.zip',
-        authenticatedUrl: 'https://api.github.com/repos/owner/repo/releases/assets/1',
-        size: 10,
-        isSourceCode: false,
-        assetId: 1,
-      });
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith('https://api.github.com/repos/owner/repo/releases/assets/1', {
-      headers: {
-        Accept: 'application/octet-stream',
-        Authorization: 'Bearer token',
-      },
-    });
-    expect(createObjectUrl).toHaveBeenCalledWith(blob);
-    expect(clickSpy).toHaveBeenCalledOnce();
-  });
-
-  it('uses the authenticated backend proxy for private downloads in backend-only sessions', async () => {
-    mocks.store.githubToken = null;
+  it('uses the authenticated backend proxy for private downloads', async () => {
     mocks.backend.isAvailable = true;
     const blob = new Blob(['backend release asset']);
     mocks.backend.downloadGitHubResource.mockResolvedValue(blob);
@@ -194,27 +124,7 @@ describe('useRepositoryReleaseSheet', () => {
     expect(clickSpy).toHaveBeenCalledOnce();
   });
 
-  it('skips the backend proxy and fetches releases directly in browser route mode', async () => {
-    mocks.store.routeMode = 'browser';
-    mocks.backend.isAvailable = true;
-    mocks.githubGetRepositoryReleasesPage.mockResolvedValue({
-      releases: [{ ...rawRelease, repository: { id: 0, name: 'repo', full_name: 'owner/repo' } }],
-      hasMore: false,
-    });
-    const { result } = renderHook(() => useRepositoryReleaseSheet(repository));
-
-    await act(async () => {
-      await result.current.loadReleases();
-    });
-
-    expect(mocks.backend.getRepositoryReleases).not.toHaveBeenCalled();
-    expect(mocks.githubGetRepositoryReleasesPage).toHaveBeenCalledWith('owner', 'repo', 1, 100, expect.any(AbortSignal));
-    expect(result.current.error).toBeNull();
-  });
-
-  it('opens a new window instead of the backend proxy for tokenless downloads in browser route mode', async () => {
-    mocks.store.routeMode = 'browser';
-    mocks.store.githubToken = null;
+  it('opens a new window for public assets that have no authenticated path', async () => {
     mocks.backend.isAvailable = true;
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     const { result } = renderHook(() => useRepositoryReleaseSheet(repository));
@@ -224,7 +134,6 @@ describe('useRepositoryReleaseSheet', () => {
         id: 'asset-3',
         name: 'browser-fallback.zip',
         url: 'https://github.com/owner/repo/releases/download/v1/browser-fallback.zip',
-        authenticatedPath: '/repos/owner/repo/releases/assets/3',
         size: 10,
         isSourceCode: false,
         assetId: 3,
@@ -236,8 +145,7 @@ describe('useRepositoryReleaseSheet', () => {
     openSpy.mockRestore();
   });
 
-  it('keeps an in-flight AI summary alive when artifact states update (cancel effect keyed on stable fn)', async () => {
-    mocks.store.rpcDownloadConfig = { enabled: true, host: '', port: 6800, secret: '' };
+  it('keeps an in-flight AI summary alive across unrelated state updates', async () => {
     mocks.store.aiConfigs = [{ id: 'ai-config', name: 'Test AI', baseUrl: 'https://example.com/v1', apiKey: 'k', model: 'm' }];
     mocks.store.activeAIConfig = 'ai-config';
     // abort 感知 mock：真实 fetch 在 signal 中止时会以 AbortError 拒绝
@@ -254,7 +162,6 @@ describe('useRepositoryReleaseSheet', () => {
           }
         };
       }));
-    mocks.sendToRpcDownload.mockResolvedValue({ success: true });
     const { result } = renderHook(() => useRepositoryReleaseSheet(repository));
 
     const sheetRelease: Release = {
@@ -273,15 +180,14 @@ describe('useRepositoryReleaseSheet', () => {
     act(() => {
       pending = result.current.generateSummary(sheetRelease);
     });
-    // RPC 状态更新会换掉 artifactActions 对象引用；总结请求不得被取消 effect 误中止
+    // An unrelated download state update must not abort the summary request.
     await act(async () => {
-      await result.current.sendAssetToRpc({
+      await result.current.downloadAsset({
         id: 'asset-4',
         name: 'a.zip',
         url: 'https://github.com/owner/repo/releases/download/v1/a.zip',
         size: 1,
         isSourceCode: false,
-        updatedAt: '2026-01-03T00:00:00.000Z',
       });
     });
     resolveSummary('# Summary');

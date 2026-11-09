@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => {
       isAvailable: true,
     },
     tryRestoreAuthFromBackend: vi.fn(async () => { calls.push('restore-auth'); return false; }),
-    syncLocalGitHubTokenToBackend: vi.fn(async () => { calls.push('sync-local-token'); }),
     syncFromBackend: vi.fn(async () => { calls.push('sync-from-backend'); }),
     startAutoSync: vi.fn(() => { calls.push('start-auto-sync'); return unsubscribe; }),
     stopAutoSync: vi.fn(() => { calls.push('stop-auto-sync'); }),
@@ -25,7 +24,6 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../../services/backendAdapter', () => ({ backend: mocks.backend }));
 vi.mock('../../../services/autoSync', () => ({
   tryRestoreAuthFromBackend: mocks.tryRestoreAuthFromBackend,
-  syncLocalGitHubTokenToBackend: mocks.syncLocalGitHubTokenToBackend,
   syncFromBackend: mocks.syncFromBackend,
   startAutoSync: mocks.startAutoSync,
   stopAutoSync: mocks.stopAutoSync,
@@ -58,7 +56,6 @@ describe('useBackendLifecycle', () => {
     expect(mocks.calls).toEqual([
       'backend.init',
       'restore-auth',
-      'sync-local-token',
       'sync-from-backend',
       'start-auto-sync',
       'start-mcp',

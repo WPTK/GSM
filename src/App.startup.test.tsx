@@ -124,27 +124,16 @@ describe('App backend initialization', () => {
     mocks.backend.init.mockResolvedValue(undefined);
     mocks.tryRestoreAuthFromBackend.mockResolvedValue(false);
     mocks.startAutoSync.mockReturnValue(vi.fn());
-    mocks.backend.syncSettings.mockImplementation(
-      (_settings: Record<string, unknown>, signal: AbortSignal) =>
-        new Promise((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-        }),
-    );
   });
 
-  it('continues backend loading after a pending local token sync reaches its deadline', async () => {
+  it('loads backend data and starts auto-sync without pushing any token to the server', async () => {
     render(<App />);
 
     await act(async () => {
-      await Promise.resolve();
-    });
-    expect(mocks.syncFromBackend).not.toHaveBeenCalled();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(mocks.backend.syncSettings).toHaveBeenCalledOnce();
+    expect(mocks.backend.syncSettings).not.toHaveBeenCalled();
     expect(mocks.syncFromBackend).toHaveBeenCalledOnce();
     expect(mocks.startAutoSync).toHaveBeenCalledOnce();
   });

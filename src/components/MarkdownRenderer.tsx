@@ -1060,16 +1060,17 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({
     ];
   }, [enableHtml, mathPlugins]);
 
-  // Per-README opt-in for images the same-origin proxy does not serve. Resets
-  // whenever a different README (content or base) is rendered.
+  // Per-README opt-in for images the same-origin proxy does not serve. Both
+  // flags are tied to the README they were set for, so rendering a different
+  // README starts blocked again (child effects run before parent effects, so a
+  // reset-in-effect would wipe the blocked report).
   const t = useT('app');
-  const [allowAllImages, setAllowAllImages] = useState(false);
-  const [hasBlockedImages, setHasBlockedImages] = useState(false);
-  useEffect(() => {
-    setAllowAllImages(false);
-    setHasBlockedImages(false);
-  }, [content, baseUrl]);
-  const reportBlocked = useCallback(() => setHasBlockedImages(true), []);
+  const imageScope = `${baseUrl ?? ''} ${content}`;
+  const [allowAllScope, setAllowAllScope] = useState<string | null>(null);
+  const [blockedScope, setBlockedScope] = useState<string | null>(null);
+  const allowAllImages = allowAllScope === imageScope;
+  const hasBlockedImages = blockedScope === imageScope;
+  const reportBlocked = useCallback(() => setBlockedScope(imageScope), [imageScope]);
   const imagePolicy = useMemo<ImagePolicy>(
     () => ({ allowAll: allowAllImages, reportBlocked }),
     [allowAllImages, reportBlocked],
@@ -1219,7 +1220,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({
       {hasBlockedImages && !allowAllImages && (
         <div className="not-prose mb-3 flex items-center gap-2 text-xs text-muted-foreground">
           <span>{t('markdown.images-blocked')}</span>
-          <Button type="button" size="sm" variant="outline" onClick={() => setAllowAllImages(true)}>
+          <Button type="button" size="sm" variant="outline" onClick={() => setAllowAllScope(imageScope)}>
             {t('markdown.load-images')}
           </Button>
         </div>

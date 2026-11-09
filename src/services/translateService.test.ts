@@ -76,7 +76,7 @@ describe('translateService', () => {
     expect(result.translatedText).toBe('你好，世界');
     const [calledUrl, callInit] = fetchMock.mock.calls[0];
     const init = callInit as RequestInit;
-    expect(String(calledUrl)).toContain('https://edge.microsoft.com/translate/translatetext');
+    expect(String(calledUrl)).toContain('/api/translate/microsoft');
     expect(String(calledUrl)).toContain('from=en');
     expect(String(calledUrl)).toContain('to=zh-Hans');
     expect(String(calledUrl)).toContain('isEnterpriseClient=false');

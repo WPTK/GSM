@@ -225,15 +225,45 @@ describe('MarkdownRenderer', () => {
   });
 
   describe('Images', () => {
-    it('should render images', () => {
+    // GitHub-hosted images are served through the same-origin /api/img proxy;
+    // every other host stays blocked until the reader presses "Load images".
+    const px = (url: string) => `/api/img?url=${encodeURIComponent(url)}`;
+    const clickLoadImages = () => fireEvent.click(screen.getByRole('button'));
+
+    it('should block images from other hosts until "Load images" is pressed', () => {
       const { container } = render(
         <MarkdownRenderer content="![Alt text](https://example.com/image.png)" />
       );
+      expect(container.querySelector('img')).toBeNull();
+
+      clickLoadImages();
+
       const img = container.querySelector('img');
       expect(img).toHaveAttribute('src', 'https://example.com/image.png');
       expect(img).toHaveAttribute('alt', 'Alt text');
     });
 
+    it('should route GitHub-hosted images through /api/img without a button', () => {
+      const { container } = render(
+        <MarkdownRenderer content="![Alt](https://raw.githubusercontent.com/user/repo/HEAD/a.png)" />
+      );
+      expect(container.querySelector('img')).toHaveAttribute(
+        'src',
+        px('https://raw.githubusercontent.com/user/repo/HEAD/a.png'),
+      );
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('should block images again when a different README is rendered', () => {
+      const { container, rerender } = render(
+        <MarkdownRenderer content="![A](https://example.com/a.png)" baseUrl="https://github.com/user/one" />
+      );
+      clickLoadImages();
+      expect(container.querySelector('img')).not.toBeNull();
+
+      rerender(<MarkdownRenderer content="![B](https://example.com/b.png)" baseUrl="https://github.com/user/two" />);
+      expect(container.querySelector('img')).toBeNull();
+    });
     it('should resolve relative image URLs with baseUrl', () => {
       const { container } = render(
         <MarkdownRenderer
@@ -257,7 +287,7 @@ describe('MarkdownRenderer', () => {
       );
       const img = container.querySelector('img');
       expect(img?.getAttribute('src')).toBe(
-        'https://github.com/user/repo/raw/HEAD/docs/images/hero.svg'
+        px('https://github.com/user/repo/raw/HEAD/docs/images/hero.svg')
       );
     });
 
@@ -270,7 +300,7 @@ describe('MarkdownRenderer', () => {
       );
       const img = container.querySelector('img');
       expect(img?.getAttribute('src')).toBe(
-        'https://github.com/user/repo/raw/HEAD/docs/images/hero-dark.svg'
+        px('https://github.com/user/repo/raw/HEAD/docs/images/hero-dark.svg')
       );
     });
 
@@ -284,8 +314,9 @@ describe('MarkdownRenderer', () => {
           baseUrl="https://x.com/someone/status/123"
         />
       );
-      const img = container.querySelector('img');
-      expect(img?.getAttribute('src')).toBe('docs/images/hero.svg');
+      expect(container.querySelector('img')).toBeNull();
+      clickLoadImages();
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('docs/images/hero.svg');
     });
 
     it('should resolve relative <picture> source srcset URLs with baseUrl', () => {
@@ -304,8 +335,8 @@ describe('MarkdownRenderer', () => {
 
       const source = container.querySelector('source');
       const srcSet = source?.getAttribute('srcset') ?? '';
-      expect(srcSet).toContain('https://github.com/user/repo/raw/HEAD/docs/images/readme/hero-dark.svg 1x');
-      expect(srcSet).toContain('https://github.com/user/repo/raw/HEAD/docs/images/readme/hero-dark@2x.svg 2x');
+      expect(srcSet).toContain(`${px('https://github.com/user/repo/raw/HEAD/docs/images/readme/hero-dark.svg')} 1x`);
+      expect(srcSet).toContain(`${px('https://github.com/user/repo/raw/HEAD/docs/images/readme/hero-dark@2x.svg')} 2x`);
       // The dark-mode candidate must not stay relative — Electron serves the UI
       // from file://, so a relative srcset 404s as file:///.../dist/<asset>.
       expect(srcSet).not.toContain('srcset="docs/');
@@ -318,8 +349,8 @@ describe('MarkdownRenderer', () => {
           baseUrl="https://github.com/user/repo"
         />
       );
-      const img = container.querySelector('img');
-      expect(img?.getAttribute('src')).toBe('https://cdn.example.com/images/logo.png');
+      clickLoadImages();
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.com/images/logo.png');
     });
 
     it('should drop unsafe srcset schemes instead of forwarding them to the DOM', () => {
@@ -338,7 +369,7 @@ describe('MarkdownRenderer', () => {
 
       const srcSet = container.querySelector('source')?.getAttribute('srcset') ?? '';
       expect(srcSet).not.toContain('javascript:');
-      expect(srcSet).toContain('https://github.com/user/repo/raw/HEAD/docs/images/hero.svg 1x');
+      expect(srcSet).toContain(`${px('https://github.com/user/repo/raw/HEAD/docs/images/hero.svg')} 1x`);
     });
 
     it('should preserve the theme MIME hint on sanitized picture sources', () => {
@@ -398,11 +429,9 @@ describe('MarkdownRenderer', () => {
       );
 
       const srcSet = container.querySelector('source')?.getAttribute('srcset') ?? '';
-      // The CDN URL keeps its own commas; only the relative candidate is rewritten.
-      expect(srcSet).toBe(
-        'https://cdn.example.com/w_800,q_auto/hero.jpg 1x, '
-        + 'https://github.com/user/repo/raw/HEAD/docs/images/hero@2x.jpg 2x'
-      );
+      // The CDN candidate is blocked (not a GitHub host); only the repo-relative
+      // candidate is rewritten, through the proxy.
+      expect(srcSet).toBe(`${px('https://github.com/user/repo/raw/HEAD/docs/images/hero@2x.jpg')} 2x`);
     });
 
     it('should filter srcset schemes even without a baseUrl', () => {
@@ -419,9 +448,13 @@ describe('MarkdownRenderer', () => {
       );
 
       const srcSet = container.querySelector('source')?.getAttribute('srcset') ?? '';
-      // Protocol-relative candidates become https, unsafe schemes are dropped,
-      // and unresolvable relative candidates stay as authored (like img[src]).
-      expect(srcSet).toBe('https://cdn.example.com/hero.webp 1x, docs/images/hero.png 2x');
+      // Unsafe schemes are dropped and non-GitHub candidates stay blocked until
+      // the reader loads images, so nothing reaches the DOM.
+      expect(srcSet).toBe('');
+      clickLoadImages();
+      expect(container.querySelector('source')?.getAttribute('srcset')).toBe(
+        'https://cdn.example.com/hero.webp 1x, docs/images/hero.png 2x'
+      );
     });
 
     it('should zoom and download the source the browser actually selected', async () => {
@@ -492,7 +525,7 @@ describe('MarkdownRenderer', () => {
       const overlay = document.querySelector('[class*="z-[99999]"]');
       expect(overlay?.querySelector('img')).toHaveAttribute(
         'src',
-        'https://github.com/user/repo/raw/HEAD/docs/images/hero.svg'
+        px('https://github.com/user/repo/raw/HEAD/docs/images/hero.svg')
       );
     });
   });

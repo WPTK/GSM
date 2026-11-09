@@ -8,7 +8,7 @@ describe('GitHubApiService.isRepositoryStarred', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status, statusText: status === 404 ? 'Not Found' : 'No Content' }));
     vi.stubGlobal('fetch', fetchMock);
     expect(await new GitHubApiService('test-token').isRepositoryStarred('owner', 'repo')).toBe(expected);
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/user/starred/owner/repo');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/proxy/github/user/starred/owner/repo');
   });
 
   it('propagates permission failures instead of treating them as unstarred', async () => {
@@ -37,14 +37,5 @@ describe('GitHubApiService.isRepositoryStarred', () => {
     expect(await api.isRepositoryStarred('owner', 'first')).toBe(true);
     await expect(api.isRepositoryStarred('owner', 'second'))
       .rejects.toBeInstanceOf(GitHubTokenPermissionError);
-  });
-
-  it('uses the configured backend proxy', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    vi.stubGlobal('fetch', fetchMock);
-    const api = new GitHubApiService('test-token');
-    api.setBackendUrl('https://backend.example/api');
-    await api.isRepositoryStarred('owner', 'repo');
-    expect(fetchMock.mock.calls[0][0]).toBe('https://backend.example/api/proxy/github/user/starred/owner/repo');
   });
 });

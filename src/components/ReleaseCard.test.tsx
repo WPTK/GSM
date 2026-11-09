@@ -1,11 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReleaseCard from './ReleaseCard';
 import type { Release } from '../types';
 
 const storeState: Record<string, unknown> = {
-  rpcDownloadConfig: { enabled: true, host: '', port: 6800 },
-  backendApiSecret: null,
   aiConfigs: [],
   activeAIConfig: null,
   language: 'zh',
@@ -18,11 +16,6 @@ vi.mock('../store/useAppStore', () => ({
 
 vi.mock('../hooks/useDialog', () => ({
   useDialog: () => ({ toast: vi.fn(), confirm: vi.fn() }),
-}));
-
-vi.mock('../services/rpcDownloadService', () => ({
-  // 永不 resolve，避免异步 setState 触发 act() 警告；点击行为本身是同步的
-  sendToRpcDownload: vi.fn(() => new Promise(() => {})),
 }));
 
 vi.mock('./MarkdownRenderer', () => ({
@@ -128,69 +121,11 @@ describe('ReleaseCard asset updated indicator', () => {
     const onMarkAssetAsRead = vi.fn();
     renderCard({ onMarkAssetAsRead });
 
-    const assetRow = screen.getByRole('button', { name: /app\.dmg/ });
+    const assetRow = screen.getByRole('link', { name: /app\.dmg/ });
     fireEvent.click(assetRow);
 
     expect(onMarkAssetAsRead).toHaveBeenCalledTimes(1);
     expect(onMarkAssetAsRead).toHaveBeenCalledWith(101);
-  });
-
-  it('regression: an RPC asset can be clicked again after a successful send', async () => {
-    const { sendToRpcDownload } = await import('../services/rpcDownloadService');
-    vi.mocked(sendToRpcDownload).mockResolvedValue({ success: true });
-
-    renderCard({});
-    const assetRow = screen.getByRole('button', { name: /app\.dmg/ });
-    fireEvent.click(assetRow);
-
-    await waitFor(() => expect(sendToRpcDownload).toHaveBeenCalledTimes(1));
-    // 成功后按钮必须保持可点（仅下载进行中才禁用）
-    await waitFor(() => expect(assetRow).not.toBeDisabled());
-
-    fireEvent.click(assetRow);
-    await waitFor(() => expect(sendToRpcDownload).toHaveBeenCalledTimes(2));
-  });
-
-  it('regression: a failed RPC retry clears the previous success check', async () => {
-    const { sendToRpcDownload } = await import('../services/rpcDownloadService');
-    const mocked = vi.mocked(sendToRpcDownload);
-    mocked.mockReset();
-    mocked.mockResolvedValueOnce({ success: true });
-    mocked.mockResolvedValueOnce({ success: false, error: 'boom' });
-
-    renderCard({});
-    const assetRow = screen.getByRole('button', { name: /app\.dmg/ });
-    fireEvent.click(assetRow);
-    // 首次成功后显示 ✓（CheckCircle2 带 text-success）
-    await waitFor(() => expect(assetRow.querySelector('.text-success')).not.toBeNull());
-
-    fireEvent.click(assetRow);
-    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(2));
-    // 重试失败后不得残留 ✓
-    await waitFor(() => expect(assetRow.querySelector('.text-success')).toBeNull());
-  });
-
-  it('regression: a new asset version (same URL, new updatedAt) drops the stale success check', async () => {
-    const { sendToRpcDownload } = await import('../services/rpcDownloadService');
-    const mocked = vi.mocked(sendToRpcDownload);
-    mocked.mockReset();
-    mocked.mockResolvedValue({ success: true });
-    const linkV1 = { name: 'app.dmg', url: 'https://example.com/app.dmg', size: 1000, downloadCount: 5, assetId: 101, updatedAt: '2026-01-02T00:00:00.000Z' };
-    const linkV2 = { ...linkV1, updatedAt: '2026-02-01T00:00:00.000Z' };
-
-    const view = renderCard({ downloadLinks: [linkV1] });
-    fireEvent.click(screen.getByRole('button', { name: /app\.dmg/ }));
-    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: /app\.dmg/ }).querySelector('.text-success')).not.toBeNull());
-
-    // 同 URL 新版本：不得沿用旧 key 的 ✓，且仍可发送
-    view.rerender(<ReleaseCard {...buildCardProps({ downloadLinks: [linkV2] })} />);
-    const v2Row = screen.getByRole('button', { name: /app\.dmg/ });
-    expect(v2Row.querySelector('.text-success')).toBeNull();
-
-    fireEvent.click(v2Row);
-    await waitFor(() => expect(mocked).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByRole('button', { name: /app\.dmg/ }).querySelector('.text-success')).not.toBeNull());
   });
 
   it('renders all five English header controls when body and download links exist', () => {
@@ -223,7 +158,7 @@ describe('ReleaseCard asset updated indicator', () => {
     });
     // 头部（effectiveReleaseTime）与资产行各渲染一条中文相对时间
     expect(screen.getAllByText(/个月前|周前|天前|小时前|分钟前|年前/).length).toBe(2);
-    const assetRow = screen.getByRole('button', { name: /app\.dmg/ });
+    const assetRow = screen.getByRole('link', { name: /app\.dmg/ });
     expect(within(assetRow).getByText(/前$/)).toBeInTheDocument();
   });
 
@@ -234,7 +169,7 @@ describe('ReleaseCard asset updated indicator', () => {
       ],
     });
     // 头部仍有中文相对时间，只能断言资产行内没有
-    const assetRow = screen.getByRole('button', { name: /app\.dmg/ });
+    const assetRow = screen.getByRole('link', { name: /app\.dmg/ });
     expect(within(assetRow).queryByText(/前$/)).not.toBeInTheDocument();
   });
 
@@ -244,7 +179,7 @@ describe('ReleaseCard asset updated indicator', () => {
         { name: 'app.dmg', url: 'https://example.com/app.dmg', size: 1000, downloadCount: 5, assetId: 101, updatedAt: 'not-a-date' },
       ],
     });
-    const assetRow = screen.getByRole('button', { name: /app\.dmg/ });
+    const assetRow = screen.getByRole('link', { name: /app\.dmg/ });
     expect(within(assetRow).queryByText(/前$/)).not.toBeInTheDocument();
   });
 

@@ -1,12 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Release } from '../types';
-import { computeRpcDownloadKey, useReleaseArtifactActions } from './useReleaseArtifactActions';
+import { computeDownloadKey, useReleaseArtifactActions } from './useReleaseArtifactActions';
 
 const mocks = vi.hoisted(() => ({
   useAppStore: vi.fn(),
   toast: vi.fn(),
-  sendToRpcDownload: vi.fn(),
   analyzeReleaseSummary: vi.fn(),
 }));
 
@@ -18,10 +17,6 @@ vi.mock('../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: vi.fn() }),
 }));
 
-vi.mock('../services/rpcDownloadService', () => ({
-  sendToRpcDownload: mocks.sendToRpcDownload,
-}));
-
 vi.mock('../services/aiService', () => ({
   AIService: class {
     analyzeReleaseSummary = mocks.analyzeReleaseSummary;
@@ -30,7 +25,6 @@ vi.mock('../services/aiService', () => ({
 
 const createStoreState = () => ({
   language: 'zh' as const,
-  backendApiSecret: 'secret-1' as string | null,
   aiConfigs: [{
     id: 'ai-config',
     name: 'Test AI',
@@ -59,110 +53,12 @@ const release: Release = {
   repository: { id: 9, full_name: 'owner/repo', name: 'repo' },
 };
 
-describe('computeRpcDownloadKey', () => {
+describe('computeDownloadKey', () => {
   it('versions the key with updatedAt', () => {
-    expect(computeRpcDownloadKey({ url: 'https://x/a.zip', updatedAt: '2026-01-01T00:00:00.000Z' }))
+    expect(computeDownloadKey({ url: 'https://x/a.zip', updatedAt: '2026-01-01T00:00:00.000Z' }))
       .toBe('https://x/a.zip@2026-01-01T00:00:00.000Z');
-    expect(computeRpcDownloadKey({ url: 'https://x/a.zip' })).toBe('https://x/a.zip@');
-    expect(computeRpcDownloadKey({ url: 'https://x/a.zip', updatedAt: undefined })).toBe('https://x/a.zip@');
-  });
-});
-
-describe('useReleaseArtifactActions.sendRpcDownload', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storeState = createStoreState();
-  });
-
-  it('passes url, name and the backend secret through and records the sent state', async () => {
-    mocks.sendToRpcDownload.mockResolvedValue({ success: true });
-    const { result } = renderHook(() => useReleaseArtifactActions());
-    await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/a.zip', name: 'a.zip', updatedAt: '2026-01-01T00:00:00.000Z' });
-    });
-    expect(mocks.sendToRpcDownload).toHaveBeenCalledWith('https://x/a.zip', 'a.zip', 'secret-1');
-    expect(result.current.rpcDownloadStates['https://x/a.zip@2026-01-01T00:00:00.000Z']).toBe('sent');
-    expect(mocks.toast).toHaveBeenCalledWith('已发送到远程下载器', 'success');
-  });
-
-  it('omits the secret when the store has none', async () => {
-    storeState.backendApiSecret = null;
-    mocks.sendToRpcDownload.mockResolvedValue({ success: true });
-    const { result } = renderHook(() => useReleaseArtifactActions());
-    await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/a.zip', name: 'a.zip' });
-    });
-    expect(mocks.sendToRpcDownload).toHaveBeenCalledWith('https://x/a.zip', 'a.zip', undefined);
-  });
-
-  it('shows the dedicated toast when the RPC service is not running and resets the state', async () => {
-    mocks.sendToRpcDownload.mockResolvedValue({ success: false, error: 'RPC service not running' });
-    const { result } = renderHook(() => useReleaseArtifactActions());
-    await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/a.zip', name: 'a.zip' });
-    });
-    expect(mocks.toast).toHaveBeenCalledWith('远程下载服务未运行，请检查配置', 'error');
-    expect(result.current.rpcDownloadStates['https://x/a.zip@']).toBe('idle');
-  });
-
-  it('falls back to the raw error or a generic message on other failures', async () => {
-    mocks.sendToRpcDownload.mockResolvedValue({ success: false, error: 'quota exceeded' });
-    const { result } = renderHook(() => useReleaseArtifactActions());
-    await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/a.zip', name: 'a.zip' });
-    });
-    expect(mocks.toast).toHaveBeenCalledWith('quota exceeded', 'error');
-
-    mocks.sendToRpcDownload.mockResolvedValue({ success: false });
-    await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/b.zip', name: 'b.zip' });
-    });
-    expect(mocks.toast).toHaveBeenLastCalledWith('发送失败', 'error');
-  });
-
-  it('toasts the not-running message on a thrown error', async () => {
-    mocks.sendToRpcDownload.mockRejectedValue(new Error('socket hang up'));
-    const { result } = renderHook(() => useReleaseArtifactActions());
-    await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/a.zip', name: 'a.zip' });
-    });
-    expect(mocks.toast).toHaveBeenCalledWith('远程下载服务未运行，请检查配置', 'error');
-    expect(result.current.rpcDownloadStates['https://x/a.zip@']).toBe('idle');
-  });
-
-  it('short-circuits while sending and clears the sent state on retry', async () => {
-    let resolveSend!: (value: { success: boolean }) => void;
-    mocks.sendToRpcDownload.mockImplementation(() => new Promise<{ success: boolean }>((resolve) => {
-      resolveSend = resolve;
-    }));
-
-    const { result } = renderHook(() => useReleaseArtifactActions());
-    const link = { url: 'https://x/a.zip', name: 'a.zip' };
-    let first!: Promise<void>;
-    act(() => {
-      first = result.current.sendRpcDownload(link);
-    });
-    expect(result.current.rpcDownloadStates['https://x/a.zip@']).toBe('sending');
-
-    // 发送中重复点击被短路：第二次调用不会发起新请求
-    await act(async () => {
-      await result.current.sendRpcDownload(link);
-    });
-    expect(mocks.sendToRpcDownload).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveSend({ success: true });
-      await first;
-    });
-    expect(result.current.rpcDownloadStates['https://x/a.zip@']).toBe('sent');
-
-    // 重试：清除旧的成功态再发送
-    mocks.sendToRpcDownload.mockResolvedValue({ success: true });
-    await act(async () => {
-      await result.current.sendRpcDownload(link);
-    });
-    expect(mocks.sendToRpcDownload).toHaveBeenCalledTimes(2);
-    expect(result.current.rpcDownloadStates['https://x/a.zip@']).toBe('sent');
+    expect(computeDownloadKey({ url: 'https://x/a.zip' })).toBe('https://x/a.zip@');
+    expect(computeDownloadKey({ url: 'https://x/a.zip', updatedAt: undefined })).toBe('https://x/a.zip@');
   });
 });
 
@@ -338,12 +234,10 @@ describe('useReleaseArtifactActions.generateSummary', () => {
     expect(mocks.toast).not.toHaveBeenCalled();
   });
 
-  it('reset clears summaries and rpc download states', async () => {
-    mocks.sendToRpcDownload.mockResolvedValue({ success: true });
+  it('reset clears summaries', async () => {
     mocks.analyzeReleaseSummary.mockResolvedValue('# Summary');
     const { result } = renderHook(() => useReleaseArtifactActions());
     await act(async () => {
-      await result.current.sendRpcDownload({ url: 'https://x/a.zip', name: 'a.zip' });
       await result.current.generateSummary(release);
     });
     expect(result.current.summaries[100]).toEqual({ status: 'done', content: '# Summary' });
@@ -351,6 +245,5 @@ describe('useReleaseArtifactActions.generateSummary', () => {
       result.current.reset();
     });
     expect(result.current.summaries).toEqual({});
-    expect(result.current.rpcDownloadStates).toEqual({});
   });
 });

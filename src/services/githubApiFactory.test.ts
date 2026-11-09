@@ -1,71 +1,36 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RouteMode } from '../types';
+import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  tokens: [] as string[],
   setBackendUrl: vi.fn(),
-  setBackendAuthToken: vi.fn(),
-  backendUrlGet: vi.fn<() => string | null>(() => null),
-  isAvailableGet: vi.fn<() => boolean>(() => false),
-  routeMode: 'auto' as RouteMode,
 }));
 
 vi.mock('./githubApi', () => ({
   GitHubApiService: class {
+    constructor(token: string) { mocks.tokens.push(token); }
+  },
+}));
+
+vi.mock('./githubListsApi', () => ({
+  GitHubListsApiService: class {
+    constructor(token: string) { mocks.tokens.push(token); }
     setBackendUrl = mocks.setBackendUrl;
-    setBackendAuthToken = mocks.setBackendAuthToken;
   },
 }));
 
-vi.mock('./backendAdapter', () => ({
-  backend: {
-    get backendUrl() { return mocks.backendUrlGet(); },
-    get isAvailable() { return mocks.isAvailableGet(); },
-  },
-}));
+import { SERVER_HELD_TOKEN, createGitHubApiService, createGitHubListsApiService } from './githubApiFactory';
 
-vi.mock('../store/useAppStore', () => ({
-  useAppStore: {
-    getState: () => ({ routeMode: mocks.routeMode, backendApiSecret: 'secret-value' }),
-  },
-}));
-
-import { createGitHubApiService } from './githubApiFactory';
-
-describe('githubApiFactory routeMode', () => {
-  beforeEach(() => {
-    mocks.setBackendUrl.mockClear();
-    mocks.setBackendAuthToken.mockClear();
-    mocks.routeMode = 'auto';
-    mocks.backendUrlGet.mockReturnValue(null);
-    mocks.isAvailableGet.mockReturnValue(false);
+describe('githubApiFactory', () => {
+  it('the browser-side GitHub token is only ever the server-held placeholder', () => {
+    mocks.tokens.length = 0;
+    createGitHubApiService();
+    createGitHubListsApiService();
+    expect(SERVER_HELD_TOKEN).toBe('server');
+    expect(mocks.tokens).toEqual(['server', 'server']);
   });
 
-  it('does not set backend URL when backend is absent (auto)', () => {
-    mocks.backendUrlGet.mockReturnValue(null);
-    createGitHubApiService('token');
-    expect(mocks.setBackendUrl).not.toHaveBeenCalled();
-  });
-
-  it('sets backend URL when backend exists in auto mode', () => {
-    mocks.backendUrlGet.mockReturnValue('http://backend/api');
-    createGitHubApiService('token');
-    expect(mocks.setBackendUrl).toHaveBeenCalledWith('http://backend/api');
-    expect(mocks.setBackendAuthToken).toHaveBeenCalledWith('secret-value');
-  });
-
-  it('skips backend URL when routeMode is browser', () => {
-    mocks.routeMode = 'browser';
-    mocks.backendUrlGet.mockReturnValue('http://backend/api');
-    createGitHubApiService('token');
-    expect(mocks.setBackendUrl).not.toHaveBeenCalled();
-    expect(mocks.setBackendAuthToken).not.toHaveBeenCalled();
-  });
-
-  it('direct option skips backend attach even when backend exists', () => {
-    mocks.routeMode = 'auto';
-    mocks.backendUrlGet.mockReturnValue('http://backend/api');
-    createGitHubApiService('token', { direct: true });
-    expect(mocks.setBackendUrl).not.toHaveBeenCalled();
-    expect(mocks.setBackendAuthToken).not.toHaveBeenCalled();
+  it('keeps the lists service on the same origin', () => {
+    createGitHubListsApiService();
+    expect(mocks.setBackendUrl).toHaveBeenCalledWith('/api');
   });
 });

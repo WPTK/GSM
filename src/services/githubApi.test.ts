@@ -425,12 +425,12 @@ describe('GitHubApiService 401 来源区分', () => {
     await expect(service.getCurrentUser()).rejects.toThrow(GITHUB_TOKEN_INVALID_ERROR);
   });
 
-  it('直连 GitHub 401 映射为 GITHUB_TOKEN_INVALID_ERROR', async () => {
+  it('同源代理 401 映射为 GITHUB_TOKEN_INVALID_ERROR，且不访问 api.github.com', async () => {
     const service = new GitHubApiService('token');
     vi.mocked(window.fetch).mockResolvedValue(makeJsonResponse(401, { message: 'Bad credentials' }));
 
     await expect(service.getCurrentUser()).rejects.toThrow(GITHUB_TOKEN_INVALID_ERROR);
-    expect(window.fetch).toHaveBeenCalledWith('https://api.github.com/user', expect.anything());
+    expect(window.fetch).toHaveBeenCalledWith('/api/proxy/github/user', expect.anything());
   });
 });
 
