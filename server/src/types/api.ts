@@ -57,21 +57,6 @@ export interface CategoryRow {
   is_custom: number;
 }
 
-export interface AIConfigRow {
-  id: string;
-  name: string;
-  api_type: string;
-  base_url: string;
-  api_key_encrypted: string;
-  model: string;
-  is_active: number;
-  custom_prompt: string | null;
-  use_custom_prompt: number;
-  concurrency: number;
-  reasoning_effort: string | null;
-  mimo_plan: string | null;
-}
-
 export interface WebDAVConfigRow {
   id: string;
   name: string;
@@ -118,23 +103,6 @@ export interface SyncReleasesRequest {
   releases: Record<string, unknown>[];
 }
 
-export interface SyncAIConfigsRequest {
-  configs: Array<{
-    id: string;
-    name: string;
-    apiType?: string;
-    baseUrl: string;
-    apiKey: string;
-    model: string;
-    isActive: boolean;
-    customPrompt?: string;
-    useCustomPrompt?: boolean;
-    concurrency?: number;
-    reasoningEffort?: string;
-    mimoPlan?: string;
-  }>;
-}
-
 export interface SyncWebDAVConfigsRequest {
   configs: Array<{
     id: string;
@@ -148,7 +116,6 @@ export interface SyncWebDAVConfigsRequest {
 }
 
 export interface SyncSettingsRequest {
-  activeAIConfig?: string | null;
   activeWebDAVConfig?: string | null;
   hiddenDefaultCategoryIds?: string[];
   categoryOrder?: string[];

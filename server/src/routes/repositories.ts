@@ -30,6 +30,9 @@ function toLicenseSpdxId(license: unknown): string | null {
   return null;
 }
 
+/** True when the incoming row carries an analysis newer than the stored one. */
+const AI_NEWER = `(excluded.analyzed_at IS NOT NULL AND excluded.analyzed_at != '' AND (repositories.analyzed_at IS NULL OR repositories.analyzed_at = '' OR excluded.analyzed_at > repositories.analyzed_at))`;
+
 export const DESCRIPTION_DISPLAY_VALUES: readonly string[] = ['follow', 'ai', 'original'];
 export const TAGS_DISPLAY_VALUES: readonly string[] = ['follow', 'ai', 'topics'];
 
@@ -183,11 +186,13 @@ router.put('/api/repositories', (req, res) => {
         owner_login = excluded.owner_login,
         owner_avatar_url = excluded.owner_avatar_url,
         topics = excluded.topics,
-        ai_summary = CASE WHEN excluded.ai_summary IS NOT NULL AND excluded.ai_summary != '' THEN excluded.ai_summary ELSE repositories.ai_summary END,
-        ai_tags = CASE WHEN excluded.ai_tags IS NOT NULL AND excluded.ai_tags != '[]' THEN excluded.ai_tags ELSE repositories.ai_tags END,
-        ai_platforms = CASE WHEN excluded.ai_platforms IS NOT NULL AND excluded.ai_platforms != '[]' THEN excluded.ai_platforms ELSE repositories.ai_platforms END,
-        analyzed_at = CASE WHEN excluded.analyzed_at IS NOT NULL AND excluded.analyzed_at != '' THEN excluded.analyzed_at ELSE repositories.analyzed_at END,
-        analysis_failed = excluded.analysis_failed,
+        -- AI fields: a sync only overwrites them when its analyzed_at is newer than the stored one,
+        -- so a stale browser snapshot cannot wipe results the server wrote (Phase 3).
+        ai_summary = CASE WHEN ${AI_NEWER} THEN excluded.ai_summary ELSE repositories.ai_summary END,
+        ai_tags = CASE WHEN ${AI_NEWER} THEN excluded.ai_tags ELSE repositories.ai_tags END,
+        ai_platforms = CASE WHEN ${AI_NEWER} THEN excluded.ai_platforms ELSE repositories.ai_platforms END,
+        analyzed_at = CASE WHEN ${AI_NEWER} THEN excluded.analyzed_at ELSE repositories.analyzed_at END,
+        analysis_failed = CASE WHEN repositories.analyzed_at IS NOT NULL AND repositories.analyzed_at != '' AND NOT ${AI_NEWER} THEN repositories.analysis_failed ELSE excluded.analysis_failed END,
         -- 同步只接收整仓快照：字段缺省即表示客户端已无自定义内容，须照实覆盖，
         -- 否则「跟随列表设置/显示AI」保存后的清空无法同步到后端（#565）。
         custom_description = excluded.custom_description,

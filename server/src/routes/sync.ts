@@ -1,8 +1,6 @@
 import { EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
-import { decrypt } from '../services/crypto.js';
-import { config } from '../config.js';
 import { toDisplayPref, DESCRIPTION_DISPLAY_VALUES, TAGS_DISPLAY_VALUES } from './repositories.js';
 
 const router = Router();
@@ -21,12 +19,6 @@ function canonicalizeLicenseString(value: string): string | null {
   return trimmed;
 }
 
-function maskApiKey(key: string | null | undefined): string {
-  if (!key || typeof key !== 'string') return '';
-  if (key.length <= 4) return '****';
-  return '***' + key.slice(-4);
-}
-
 // POST /api/sync/export
 router.post('/api/sync/export', (_req, res) => {
   try {
@@ -36,21 +28,6 @@ router.post('/api/sync/export', (_req, res) => {
     const releases = db.prepare('SELECT * FROM releases').all() as Record<string, unknown>[];
     const categories = db.prepare('SELECT * FROM categories').all() as Record<string, unknown>[];
     const assetFilters = db.prepare('SELECT * FROM asset_filters').all() as Record<string, unknown>[];
-
-    // AI configs — mask api_key
-    const aiConfigRows = db.prepare('SELECT * FROM ai_configs').all() as Record<string, unknown>[];
-    const aiConfigs = aiConfigRows.map((row) => {
-      const masked = { ...row };
-      if (masked.api_key_encrypted && typeof masked.api_key_encrypted === 'string') {
-        try {
-          masked.api_key_masked = maskApiKey(decrypt(masked.api_key_encrypted, config.encryptionKey));
-        } catch {
-          masked.api_key_masked = '****';
-        }
-      }
-      delete masked.api_key_encrypted;
-      return masked;
-    });
 
     // Settings — secrets that no longer live in the database are not exported
     const settingsRows = db.prepare('SELECT * FROM settings').all() as Record<string, unknown>[];
@@ -69,7 +46,6 @@ router.post('/api/sync/export', (_req, res) => {
       releases,
       categories,
       asset_filters: assetFilters,
-      ai_configs: aiConfigs,
       settings,
     });
   } catch (err) {
@@ -305,27 +281,6 @@ router.post('/api/sync/import', (req, res) => {
           );
         }
         counts.asset_filters = filters.length;
-      }
-
-      // AI Configs — skip masked secrets
-      const aiConfigs = data.ai_configs as Record<string, unknown>[] | undefined;
-      if (Array.isArray(aiConfigs) && aiConfigs.length > 0) {
-        for (const c of aiConfigs) {
-          const existing = db.prepare('SELECT api_key_encrypted FROM ai_configs WHERE id = ?').get(c.id) as Record<string, unknown> | undefined;
-          const existingKey = (existing?.api_key_encrypted as string) ?? null;
-          // Skip masked keys, keep existing encrypted value
-          db.prepare(`
-            INSERT OR REPLACE INTO ai_configs (id, name, api_type, base_url, api_key_encrypted, model, is_active, custom_prompt, use_custom_prompt, concurrency, reasoning_effort, mimo_plan)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            c.id, c.name ?? '', c.api_type ?? c.apiType ?? 'openai', c.base_url ?? c.baseUrl ?? null,
-            existingKey, c.model ?? '',
-            (c.is_active ?? c.isActive) ? 1 : 0, c.custom_prompt ?? c.customPrompt ?? null,
-            (c.use_custom_prompt ?? c.useCustomPrompt) ? 1 : 0, c.concurrency ?? 1, c.reasoning_effort ?? c.reasoningEffort ?? null,
-            c.mimo_plan ?? c.mimoPlan ?? null
-          );
-        }
-        counts.ai_configs = aiConfigs.length;
       }
 
       // Settings — the GitHub token, proxy and aria2 settings are not accepted any more
