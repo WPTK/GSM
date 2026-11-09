@@ -58,7 +58,7 @@ export function buildAnalysisPrefix(language: AiLanguage, categories: PromptCate
   const custom = cleanCustomPrompt(customPrompt, language);
   if (!custom) return base;
   const heading = language === 'zh' ? '用户的额外分析要求（仍须遵守上述输出模式）：' : 'Additional analysis instructions from the owner (the output schema above still applies):';
-  return `\n\n\n`;
+  return `${base}\n\n${heading}\n${custom}`;
 }
 
 function buildBasePrefix(language: AiLanguage, categories: PromptCategory[]): string {
