@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -24,7 +23,7 @@ async function canOpenSqlite(): Promise<boolean> {
 const dbAvailable = await canOpenSqlite();
 const describeIfDb = dbAvailable ? describe : describe.skip;
 
-describeIfDb('helmet CSP for browser-direct route mode', () => {
+describeIfDb('helmet CSP (same-origin browser)', () => {
   let request: typeof import('supertest').default;
   let closeDb: () => void;
   let createApp: () => import('express').Express;
@@ -68,17 +67,14 @@ describeIfDb('helmet CSP for browser-direct route mode', () => {
     expect(scriptSrc).not.toContain('unsafe-inline');
   });
 
-  it('allows the served SPA inline bootstrap scripts by hash without unsafe-inline', async () => {
+  const directiveOf = (csp: string, name: string): string =>
+    csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `) || d === name) ?? '';
+
+  it('serves the SPA shell with a strict script-src (no hashes, no inline, no data:)', async () => {
     const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-spa-'));
-    const inlineScript = 'window.__vite_is_modern_browser=true';
     fs.writeFileSync(
       path.join(staticDir, 'index.html'),
-      [
-        '<!doctype html><html><head>',
-        `<script type="module">${inlineScript}</script>`,
-        '<script type="module">import\'data:text/javascript,if(!import.meta.resolve)throw Error("x")\'</script>',
-        '</head><body><div id="root"></div></body></html>',
-      ].join('')
+      '<!doctype html><html><head><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>'
     );
 
     process.env.STATIC_DIR = staticDir;
@@ -88,70 +84,54 @@ describeIfDb('helmet CSP for browser-direct route mode', () => {
       const deepLinkResponse = await request(app).get('/onboarding').expect(200);
       const csp = shellResponse.headers['content-security-policy'] ?? '';
       expect(deepLinkResponse.headers['content-security-policy']).toBe(csp);
-      expect(deepLinkResponse.text).toBe(shellResponse.text);
-      expect(shellResponse.text).toContain(inlineScript);
-      expect(shellResponse.text).toContain('data:text/javascript');
-
-      const scriptSrc = csp.split(';').find((directive) => directive.trim().startsWith('script-src')) ?? '';
-      const hash = crypto.createHash('sha256').update(inlineScript, 'utf8').digest('base64');
-      expect(scriptSrc).toContain("'self'");
-      expect(scriptSrc).toContain(`'sha256-${hash}'`);
-      expect(scriptSrc).toContain('data:');
-      expect(scriptSrc).not.toContain('unsafe-inline');
+      expect(directiveOf(csp, 'script-src')).toBe("script-src 'self'");
     } finally {
       delete process.env.STATIC_DIR;
       fs.rmSync(staticDir, { recursive: true, force: true });
     }
   });
 
-  it('hashes inline scripts regardless of tag casing', async () => {
-    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-spa-case-'));
-    const inlineScript = 'window.__vite_is_modern_browser=true';
-    fs.writeFileSync(
-      path.join(staticDir, 'index.html'),
-      `<!doctype html><HTML><BODY><SCRIPT type="module">${inlineScript}</SCRIPT></BODY></HTML>`
-    );
-
-    process.env.STATIC_DIR = staticDir;
-    try {
-      const csp = await cspOf(createApp());
-      const hash = crypto.createHash('sha256').update(inlineScript, 'utf8').digest('base64');
-      expect(csp).toContain(`'sha256-${hash}'`);
-    } finally {
-      delete process.env.STATIC_DIR;
-      fs.rmSync(staticDir, { recursive: true, force: true });
-    }
-  });
-
-  it('hashes CRLF inline scripts the way the browser normalizes them', async () => {
-    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-spa-crlf-'));
-    const inlineScript = 'window.__vite_is_modern_browser=true;\nwindow.__vite_crlf_probe=1;';
-    fs.writeFileSync(
-      path.join(staticDir, 'index.html'),
-      `<!doctype html><html><head><script type="module">${inlineScript.replace(/\n/g, '\r\n')}</script></head></html>`
-    );
-
-    process.env.STATIC_DIR = staticDir;
-    try {
-      const csp = await cspOf(createApp());
-      const hash = crypto.createHash('sha256').update(inlineScript, 'utf8').digest('base64');
-      expect(csp).toContain(`'sha256-${hash}'`);
-    } finally {
-      delete process.env.STATIC_DIR;
-      fs.rmSync(staticDir, { recursive: true, force: true });
-    }
-  });
-
-  it('allows browser-direct GitHub API and AI provider origins in connect-src', async () => {
+  it('limits connect-src to the app origin', async () => {
     const csp = await cspOf(createApp());
-    const connectSrc = csp.split(';').find((directive) => directive.trim().startsWith('connect-src')) ?? '';
-    expect(connectSrc).toContain("'self'");
-    expect(connectSrc).toContain('https://api.github.com');
-    expect(connectSrc).toContain('https://raw.githubusercontent.com');
-    expect(connectSrc).toContain('https://gist.githubusercontent.com');
-    expect(connectSrc).toContain('https://mshibanami.github.io');
-    expect(connectSrc).toContain('https://api.openai.com');
-    expect(connectSrc).toContain('https://generativelanguage.googleapis.com');
+    expect(directiveOf(csp, 'connect-src')).toBe("connect-src 'self'");
+  });
+
+  it('ignores CSP_CONNECT_SRC: no extra connect origins can be configured', async () => {
+    process.env.CSP_CONNECT_SRC = 'https://ai.example.com';
+    try {
+      const csp = await cspOf(createApp());
+      expect(directiveOf(csp, 'connect-src')).toBe("connect-src 'self'");
+      expect(csp).not.toContain('ai.example.com');
+    } finally {
+      delete process.env.CSP_CONNECT_SRC;
+    }
+  });
+
+  it('limits fonts to self and data:', async () => {
+    const csp = await cspOf(createApp());
+    expect(directiveOf(csp, 'font-src')).toBe("font-src 'self' data:");
+  });
+
+  it('keeps unsafe-inline for style-src only (runtime <style> elements), never for scripts', async () => {
+    const csp = await cspOf(createApp());
+    expect(directiveOf(csp, 'style-src')).toBe("style-src 'self' 'unsafe-inline'");
+    const withoutStyle = csp
+      .split(';')
+      .map((d) => d.trim())
+      .filter((d) => !d.startsWith('style-src'))
+      .join(';');
+    expect(withoutStyle).not.toContain('unsafe-inline');
+    expect(withoutStyle).not.toContain('unsafe-eval');
+  });
+
+  it('sends Referrer-Policy: no-referrer', async () => {
+    const response = await request(createApp()).get('/api/health');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+  });
+
+  it('does not send CORS headers (same-origin only)', async () => {
+    const response = await request(createApp()).get('/api/health').set('Origin', 'https://evil.example');
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('allows remote avatar and README images via img-src', async () => {
@@ -159,19 +139,8 @@ describeIfDb('helmet CSP for browser-direct route mode', () => {
     const imgSrc = csp.split(';').find((directive) => directive.trim().startsWith('img-src')) ?? '';
     expect(imgSrc).toContain("'self'");
     expect(imgSrc).toContain('data:');
+    expect(imgSrc).toContain('blob:');
     expect(imgSrc).toContain('https:');
-  });
-
-  it('appends CSP_CONNECT_SRC extra origins', async () => {
-    process.env.CSP_CONNECT_SRC = 'https://ai.example.com, https://worker.example.org';
-    try {
-      const csp = await cspOf(createApp());
-      const connectSrc = csp.split(';').find((directive) => directive.trim().startsWith('connect-src')) ?? '';
-      expect(connectSrc).toContain('https://ai.example.com');
-      expect(connectSrc).toContain('https://worker.example.org');
-    } finally {
-      delete process.env.CSP_CONNECT_SRC;
-    }
   });
 
   it('upgrades insecure requests by default', async () => {

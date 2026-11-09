@@ -1,107 +1,27 @@
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import { parse } from 'parse5';
 import { config } from './config.js';
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger, morganLoggerStream } from './services/logger.js';
-import { mountStaticFrontend, resolveSpaIndexFile } from './services/staticFrontend.js';
+import { mountStaticFrontend } from './services/staticFrontend.js';
 import { getDb, closeDb } from './db/connection.js';
 import { runMigrations } from './db/migrations.js';
 import healthRouter from './routes/health.js';
+import sessionRouter from './routes/session.js';
 import repositoriesRouter from './routes/repositories.js';
 import releasesRouter from './routes/releases.js';
 import categoriesRouter from './routes/categories.js';
 import configsRouter from './routes/configs.js';
 import syncRouter from './routes/sync.js';
-import authRestoreRouter from './routes/authRestore.js';
 import proxyRouter from './routes/proxy.js';
-import xtweetRouter from './routes/xtweet.js';
-import telegramRouter from './routes/telegram.js';
+import imgRouter from './routes/img.js';
+import egressRouter from './routes/egress.js';
 import logsRouter from './routes/logs.js';
 import mcpAdminRouter from './routes/mcp.js';
 import { mountMcpRoutes } from './mcp/http.js';
-
-// Origins the SPA is allowed to call directly from the browser. 'self' covers
-// the backend proxy; the rest support the "browser direct" route mode
-// (GitHub REST/gist APIs and the default AI provider endpoints). Deployments
-// with custom AI/worker endpoints can extend this via CSP_CONNECT_SRC
-// (comma-separated origins).
-const BROWSER_CONNECT_ORIGINS = [
-  'https://api.github.com',
-  'https://raw.githubusercontent.com',
-  'https://gist.githubusercontent.com',
-  // Trending discovery fetches GitHubTrendingRSS directly from the browser.
-  'https://mshibanami.github.io',
-  'https://api.openai.com',
-  'https://generativelanguage.googleapis.com',
-];
-
-function buildConnectSrc(): string[] {
-  const extra = (process.env.CSP_CONNECT_SRC ?? '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  return ["'self'", ...BROWSER_CONNECT_ORIGINS, ...extra];
-}
-
-/**
- * @vitejs/plugin-legacy injects inline bootstrap scripts and a `data:` module
- * into the SPA shell. Hash the served copy so `script-src` stays free of
- * 'unsafe-inline' and follows every rebuild, where hardcoded hashes would drift.
- * The shell is parsed as HTML rather than pattern-matched so the hashes cover
- * exactly what the browser will execute.
- */
-type HtmlNode = {
-  tagName?: string;
-  value?: string;
-  childNodes?: HtmlNode[];
-  attrs?: Array<{ name: string; value: string }>;
-};
-
-function collectInlineScripts(node: HtmlNode, scripts: string[]): void {
-  if (node.tagName === 'script' && !node.attrs?.some((attr) => attr.name === 'src')) {
-    const body = (node.childNodes ?? []).map((child) => child.value ?? '').join('');
-    if (body.trim().length > 0) {
-      scripts.push(body);
-    }
-  }
-  for (const child of node.childNodes ?? []) {
-    collectInlineScripts(child, scripts);
-  }
-}
-
-function buildScriptSrc(): string[] {
-  const indexFile = resolveSpaIndexFile();
-  if (!indexFile) {
-    return ["'self'"];
-  }
-
-  let html: string;
-  try {
-    html = fs.readFileSync(indexFile, 'utf8');
-  } catch (error) {
-    logger.warn('csp', `Could not read ${indexFile}; serving a strict script-src`, error);
-    return ["'self'"];
-  }
-
-  const scripts: string[] = [];
-  collectInlineScripts(parse(html) as HtmlNode, scripts);
-
-  const hashes = scripts.map(
-    (body) => `'sha256-${crypto.createHash('sha256').update(body, 'utf8').digest('base64')}'`
-  );
-  const directives = ["'self'", ...new Set(hashes)];
-  if (html.toLowerCase().includes('data:text/javascript')) {
-    directives.push('data:');
-  }
-  return directives;
-}
 
 /**
  * Helmet's default `upgrade-insecure-requests` rewrites the SPA's own http://
@@ -123,46 +43,26 @@ export function createApp(): express.Express {
   const app = express();
   const upgradeInsecureRequests = shouldUpgradeInsecureRequests();
 
-  // Helmet's default CSP blocks every browser-direct call (api.github.com,
-  // avatar images, AI providers), which breaks the supported "browser direct"
-  // route mode. Open connect-src/img-src just enough for those origins.
+  // The browser talks only to this origin: connect-src is 'self'. Images may come
+  // from any https host because the UI shows non-GitHub README images only after
+  // the user clicks "Load images"; GitHub-hosted images go through /api/img.
+  // style-src keeps 'unsafe-inline' (and nothing else) because the app injects
+  // <style> elements at runtime (theme presets, bilingual README view, mermaid
+  // SVG output). Scripts stay strictly 'self'.
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
-          'connect-src': buildConnectSrc(),
-          'img-src': ["'self'", 'data:', 'https:'],
-          'script-src': buildScriptSrc(),
+          'connect-src': ["'self'"],
+          'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'font-src': ["'self'", 'data:'],
           ...(upgradeInsecureRequests ? {} : { 'upgrade-insecure-requests': null }),
         },
       },
+      referrerPolicy: { policy: 'no-referrer' },
     }),
-  );
-  app.use(
-    cors({
-      exposedHeaders: [
-        'X-Log-Count',
-        'Mcp-Session-Id',
-        'mcp-session-id',
-        'Retry-After',
-        'retry-after-ms',
-        'X-RateLimit-Remaining',
-        'X-RateLimit-Reset',
-        'x-ratelimit-remaining',
-        'RateLimit-Limit',
-        'RateLimit-Remaining',
-        'RateLimit-Reset',
-        'RateLimit-Policy',
-      ],
-      allowedHeaders: [
-        'Content-Type',
-        'Authorization',
-        'X-MCP-Token',
-        'Mcp-Session-Id',
-        'mcp-session-id',
-        'Last-Event-ID',
-      ],
-    })
   );
   app.use(morgan('combined', { stream: morganLoggerStream }));
 
@@ -194,13 +94,24 @@ export function createApp(): express.Express {
     skip: () => process.env.NODE_ENV === 'test',
   });
   app.use(limiter);
-  app.use(express.json({ limit: '50mb' }));
 
-  // Auth middleware for all /api/* except /api/health
+  // Auth runs before any body is parsed, so unauthenticated callers cannot make
+  // the server buffer large payloads. Public paths: /api/health, /api/auth/*.
   app.use('/api', authMiddleware);
+
+  // The translate relay reads its own small raw body (see routes/egress.ts).
+  const jsonParser = express.json({ limit: '50mb' });
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/translate/')) {
+      next();
+      return;
+    }
+    jsonParser(req, res, next);
+  });
 
   // Routes
   app.use(healthRouter);
+  app.use(sessionRouter);
 
   // Wave 2: Data CRUD routes
   app.use(repositoriesRouter);
@@ -208,12 +119,11 @@ export function createApp(): express.Express {
   app.use(categoriesRouter);
   app.use(configsRouter);
   app.use(syncRouter);
-  app.use(authRestoreRouter);
 
   // Wave 3: Proxy routes
   app.use(proxyRouter);
-  app.use(xtweetRouter);
-  app.use(telegramRouter);
+  app.use(imgRouter);
+  app.use(egressRouter);
 
   // Wave 4: Logs route
   app.use(logsRouter);

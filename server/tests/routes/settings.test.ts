@@ -51,21 +51,44 @@ const createTestApp = () => {
 };
 
 describe('PUT /api/settings', () => {
-  it('preserves the backend GitHub token across subsequent partial settings updates', async () => {
+  it('stores ordinary settings', async () => {
     const values = createSettingsDb();
     const app = createTestApp();
 
-    await request(app)
-      .put('/api/settings')
-      .send({ github_token: 'ghp-local-token' })
-      .expect(200);
+    await request(app).put('/api/settings').send({ activeAIConfig: 'default' }).expect(200);
 
-    await request(app)
-      .put('/api/settings')
-      .send({ activeAIConfig: 'default' })
-      .expect(200);
-
-    expect(values.get('github_token')).toBe('encrypted:ghp-local-token');
     expect(values.get('activeAIConfig')).toBe('default');
+  });
+
+  it('rejects github_token: the token is server configuration (GITHUB_TOKEN)', async () => {
+    const values = createSettingsDb();
+    const app = createTestApp();
+
+    const res = await request(app)
+      .put('/api/settings')
+      .send({ github_token: 'ghp-local-token', activeAIConfig: 'default' })
+      .expect(400);
+
+    expect(res.body.code).toBe('GITHUB_TOKEN_NOT_SETTABLE');
+    expect(JSON.stringify(res.body)).not.toContain('ghp-local-token');
+    // Nothing from the rejected request was stored.
+    expect(values.size).toBe(0);
+  });
+});
+
+describe('GET /api/settings', () => {
+  it('never reports a stored github_token, even a masked one', async () => {
+    getDbMock.mockReturnValue({
+      prepare: () => ({
+        all: () => [
+          { key: 'github_token', value: 'encrypted-legacy-token' },
+          { key: 'activeAIConfig', value: 'default' },
+        ],
+      }),
+    });
+
+    const res = await request(createTestApp()).get('/api/settings').expect(200);
+
+    expect(res.body).toEqual({ activeAIConfig: 'default' });
   });
 });

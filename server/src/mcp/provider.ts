@@ -2,6 +2,7 @@ import { getDb } from '../db/connection.js';
 import { decrypt } from '../services/crypto.js';
 import { config } from '../config.js';
 import { logger } from '../services/logger.js';
+import { proxyRequest, safeUrlForLog } from '../services/proxyService.js';
 import {
   type McpRepository,
   type McpSearchFilters,
@@ -266,18 +267,34 @@ export function getVectorAvailability(): VectorAvailability {
 
 const FETCH_TIMEOUT_MS = 15_000;
 
-async function fetchWithTimeout(
+interface PostResult {
+  ok: boolean;
+  status: number;
+  text: string;
+}
+
+/** POST a JSON body through the egress-checked proxyRequest (never a raw fetch). */
+async function postJson(
   url: string,
-  init: RequestInit,
+  headers: Record<string, string>,
+  body: unknown,
   timeoutMs = FETCH_TIMEOUT_MS
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+): Promise<PostResult> {
+  const res = await proxyRequest({
+    url,
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    timeout: timeoutMs,
+    responseType: 'text',
+    // Embedding/worker URLs come from the owner's own saved configuration.
+    allowPrivate: true,
+  });
+  return {
+    ok: res.status >= 200 && res.status < 300,
+    status: res.status,
+    text: typeof res.data === 'string' ? res.data : JSON.stringify(res.data ?? ''),
+  };
 }
 
 /**
@@ -340,16 +357,16 @@ async function embedQuery(
     body = { model, input: texts };
   }
 
-  const res = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const res = await postJson(url, headers, body);
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Embedding API error ${res.status} (${apiType} ${url}): ${text.slice(0, 200)}`);
+    throw new Error(`Embedding API error ${res.status} (${apiType} ${safeUrlForLog(url)}): ${res.text.slice(0, 200)}`);
   }
-  const data = (await res.json()) as Record<string, unknown>;
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(res.text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Embedding API returned a non-JSON body (${apiType})`);
+  }
 
   if (apiType === 'ollama') {
     const embeddings = data.embeddings as number[][] | undefined;
@@ -438,16 +455,16 @@ export async function vectorSearch(
   }
 
   const workerUrl = String(vs.worker_url).replace(/\/$/, '');
-  let res: Response;
+  let res: PostResult;
   try {
-    res = await fetchWithTimeout(`${workerUrl}/query`, {
-      method: 'POST',
-      headers: {
+    res = await postJson(
+      `${workerUrl}/query`,
+      {
         'Content-Type': 'application/json',
         ...(workerToken ? { Authorization: `Bearer ${workerToken}` } : {}),
       },
-      body: JSON.stringify({ vector, topK: workerTopK, threshold }),
-    });
+      { vector, topK: workerTopK, threshold }
+    );
   } catch {
     // 连接失败 / 15s 超时 abort 都走这里；findSimilarRepositories 依赖本函数
     // 永不 throw，异常必须折叠进声明的 { available: false } 结果
@@ -457,14 +474,13 @@ export async function vectorSearch(
     };
   }
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    return { available: false, reason: `worker_query_failed: ${res.status} ${text.slice(0, 120)}` };
+    return { available: false, reason: `worker_query_failed: ${res.status} ${res.text.slice(0, 120)}` };
   }
   let data: {
     matches?: Array<{ id: string; score: number; metadata?: Record<string, unknown> }>;
   };
   try {
-    data = (await res.json()) as typeof data;
+    data = JSON.parse(res.text) as typeof data;
   } catch {
     return {
       available: false,
