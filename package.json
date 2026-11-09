@@ -9,7 +9,7 @@
     "build": "vite build && npm run check:bundle-size",
     "check:bundle-size": "node scripts/check-bundle-size.cjs",
     "bundle:report": "node scripts/bundle-report.cjs",
-    "check:egress": "vite build && npm run build:server && node scripts/check-egress.mjs",
+    "check:egress": "node -e \"for (const d of ['dist','server/dist']) require('fs').rmSync(d,{recursive:true,force:true})\" && vite build && npm run build:server && node scripts/check-egress.mjs",
     "check:boundaries": "node scripts/check-boundaries.cjs",
     "check:i18n": "node scripts/check-i18n.cjs",
     "check:plugin-registry": "node scripts/check-plugin-registry.cjs",

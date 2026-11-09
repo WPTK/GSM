@@ -92,9 +92,6 @@ jobs:
     name: Egress allowlist
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # Not blocking until the browser-side streams remove their remaining
-    # hosts (x.com, t.me, WebDAV, mshibanami, vectorize). Drop this line then.
-    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
