@@ -21,7 +21,12 @@ import imgRouter from './routes/img.js';
 import egressRouter from './routes/egress.js';
 import logsRouter from './routes/logs.js';
 import mcpAdminRouter from './routes/mcp.js';
+import aiRouter from './routes/ai.js';
 import { mountMcpRoutes } from './mcp/http.js';
+import { validateModelsOrExit } from './ai/startup.js';
+import { startBatchPoller } from './ai/batchPoller.js';
+import { resumeCreditProbeSchedule } from './ai/creditState.js';
+import { resumeJobsOnBoot } from './ai/jobs.js';
 
 /**
  * Helmet's default `upgrade-insecure-requests` rewrites the SPA's own http://
@@ -133,6 +138,7 @@ export function createApp(): express.Express {
 
   // Wave 3: Proxy routes
   app.use(proxyRouter);
+  app.use(aiRouter);
   app.use(imgRouter);
   app.use(egressRouter);
 
@@ -156,16 +162,22 @@ export function createApp(): express.Express {
   return app;
 }
 
-function startServer(): void {
+async function startServer(): Promise<void> {
   // Initialize database
   const db = getDb();
   runMigrations(db);
   logger.info('server.init', 'Database initialized');
 
+  // Fail closed: no key or an unknown model ID means the server does not listen.
+  await validateModelsOrExit();
+
   const app = createApp();
 
   const server = app.listen(config.port, () => {
     logger.info('server.start', `Server running on port ${config.port}`);
+    startBatchPoller();
+    resumeCreditProbeSchedule();
+    resumeJobsOnBoot();
     if (!config.apiSecret) {
       logger.warn('server.auth', 'Running without API_SECRET — auth is disabled');
     }
@@ -189,5 +201,5 @@ function startServer(): void {
 const isMainModule =
   process.argv[1] && new URL(import.meta.url).pathname === new URL(`file://${process.argv[1]}`).pathname;
 if (isMainModule) {
-  startServer();
+  void startServer();
 }
