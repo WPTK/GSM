@@ -42,7 +42,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
   // 体积小、变更高频的偏好/视图/配置状态；单次 stringify+写入仅几 KB。
   core: [
     'user',
-    'githubToken',
     'isAuthenticated',
     'themeTokens',
     'aiConfigs',
@@ -65,7 +64,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'assetFilters',
     'repositoryCardFields',
     'repositoryCardActions',
-    'pluginCustomIcons',
     'lastSync',
     'themeMode',
     'themePresetLight',
@@ -77,7 +75,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'autoTranslateRepoDescription',
     'isSidebarCollapsed',
     'headerMenuConfig',
-    'backendApiSecret',
     'searchFilters',
     'repositoryViewMode',
     'releaseViewMode',
@@ -97,9 +94,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'discoverySearchMode',
     'discoverySelectedTopic',
     'weeklyOnlyCollected',
-    'proxyConfig',
-    'rpcDownloadConfig',
-    'routeMode',
   ],
   // 以下为体积大、变更低频的重数据分片：仅在对应数组引用变化时重写。
   repositories: ['repositories'],

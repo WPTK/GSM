@@ -135,8 +135,7 @@ const baseStoreState = () => ({
   setReleaseShowMode: vi.fn(),
   releaseLatestMode: 'all' as const,
   setReleaseLatestMode: vi.fn(),
-  rpcDownloadConfig: { enabled: false, host: '', secret: '' },
-  backendApiSecret: '',
+  
   aiConfigs: [] as Array<{ id: string }>,
   activeAIConfig: null as string | null,
 });

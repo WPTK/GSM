@@ -5,8 +5,6 @@ import type {
   Category,
   DiscoveryChannel,
   HeaderMenuId,
-  ProxyConfig,
-  RpcDownloadConfig,
   McpServiceConfig,
   SearchFilters,
   VectorSearchConfig,
@@ -42,9 +40,7 @@ export type PersistedAppState = Partial<
   Omit<Pick<
     AppState,
     | 'user'
-    | 'githubToken'
     | 'isAuthenticated'
-    | 'backendApiSecret'
     | 'accountWorkspaces'
     | 'repositories'
     | 'lastSync'
@@ -67,7 +63,6 @@ export type PersistedAppState = Partial<
     | 'assetFilters'
     | 'repositoryCardFields'
     | 'repositoryCardActions'
-    | 'pluginCustomIcons'
     | 'themeMode'
     | 'themePresetLight'
     | 'themePresetDark'
@@ -99,9 +94,6 @@ export type PersistedAppState = Partial<
     | 'discoverySortOrder'
     | 'discoverySelectedTopic'
     | 'weeklyOnlyCollected'
-    | 'proxyConfig'
-    | 'rpcDownloadConfig'
-    | 'routeMode'
     | 'subscriptionRepos'
     | 'subscriptionLastRefresh'
     | 'subscriptionIsLoading'
@@ -110,8 +102,6 @@ export type PersistedAppState = Partial<
     | 'mcpConfig'
   >, 'searchFilters' | 'releaseExpandedRepositories'>> & {
   searchFilters?: Pick<SearchFilters, 'sortBy' | 'sortOrder'>;
-  proxyConfig?: ProxyConfig;
-  rpcDownloadConfig?: RpcDownloadConfig;
   releaseSubscriptions?: unknown;
   readReleases?: unknown;
   releaseExpandedRepositories?: unknown;

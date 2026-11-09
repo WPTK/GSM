@@ -6,7 +6,6 @@ import { DEFAULT_THEME_PRESET_ID } from '../constants/themePresets';
 import { DEFAULT_THEME_TOKENS } from '../utils/themeTokens';
 import { DEFAULT_REPOSITORY_CARD_FIELDS } from '../types/repositoryCardFields';
 import { DEFAULT_REPOSITORY_CARD_ACTIONS } from '../types/repositoryCardActions';
-import { readSessionBackendSecret } from './persistence/authStorage';
 import { detectInitialLanguage } from '../i18n/languages';
 import {
   defaultDiscoveryChannels,
@@ -67,17 +66,12 @@ export const createInitialState = (): AppState => ({
       translationEngine: 'microsoft',
       autoTranslateRepoDescription: false,
       analysisProgress: { current: 0, total: 0 },
-      backendApiSecret: readSessionBackendSecret(),
-      proxyConfig: { enabled: false, type: 'http', host: '', port: 7890 },
-      rpcDownloadConfig: { enabled: false, host: '', port: 6800 },
-      routeMode: 'auto',
       isSidebarCollapsed: false,
       readmeModalOpen: false,
       repositoryViewMode: 'grid',
       // 卡片可见字段默认全开（开发守则 §14）
       repositoryCardFields: { ...DEFAULT_REPOSITORY_CARD_FIELDS },
       repositoryCardActions: DEFAULT_REPOSITORY_CARD_ACTIONS.map((item) => ({ ...item })),
-      pluginCustomIcons: {},
       releaseViewMode: 'timeline',
       releaseShowMode: 'all',
       releaseLatestMode: 'all',

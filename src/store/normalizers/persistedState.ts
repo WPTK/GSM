@@ -15,7 +15,8 @@ import { normalizeRepositoryCardFields } from '../../utils/repositoryCardFields'
 import { normalizeRepositoryCardActions } from '../../utils/repositoryCardActions';
 import type { AppStoreState } from '../types';
 import { normalizeAccountWorkspaces } from '../helpers/accountWorkspace';
-import { readAuthMirror } from '../persistence/authStorage';
+import { purgeLegacyAuthStorage } from '../persistence/legacyAuthStorage';
+import { SERVER_HELD_TOKEN } from '../../services/githubApiFactory';
 import {
   defaultDiscoveryChannels,
   defaultPresetFilters,
@@ -29,17 +30,6 @@ import {
   REQUIRED_HEADER_MENU_IDS,
 } from '../schema';
 
-export const normalizePluginCustomIcons = (value: unknown): Record<string, string> => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const result: Record<string, string> = {};
-  for (const [k, v] of Object.entries(value)) {
-    if (typeof k === 'string' && k.trim() && typeof v === 'string' && v.trim()) {
-      result[k.trim()] = v.trim();
-    }
-  }
-  return result;
-};
-
 /** Keys of features removed in the hardened fork; stale persisted values are dropped on hydration. */
 const REMOVED_PERSISTED_KEYS = [
   'gists', 'starredGists', 'gistSearchFilters', 'gistSearchResults', 'selectedGistCategory', 'analyzingGistIds',
@@ -49,6 +39,8 @@ const REMOVED_PERSISTED_KEYS = [
   'telegramFollows', 'telegramSyncStatus',
   'trendingSnapshots', 'trendingTimeRange', 'updateNotification',
   'syncMode', 'syncModeConfigured', 'listsPush', 'categoryListIdMap',
+  // Credentials and egress prefs: the browser holds no secret (auth is the HttpOnly session cookie).
+  'githubToken', 'backendApiSecret', 'proxyConfig', 'rpcDownloadConfig', 'routeMode', 'pluginCustomIcons',
 ] as const;
 
 const omitRemovedSubscriptionKeys = (value: Record<string, unknown> | undefined): Record<string, unknown> => {
@@ -96,19 +88,13 @@ export const normalizePersistedState = (
   if (!normalizedDiscoveryChannels.some(channel => channel.enabled)) {
     normalizedDiscoveryChannels[0] = { ...normalizedDiscoveryChannels[0], enabled: true };
   }
-  const authMirror = readAuthMirror();
+  // Older builds mirrored the token and API secret in localStorage; erase them.
+  purgeLegacyAuthStorage();
 
-  // Effective auth: persisted values win; the synchronous localStorage mirror
-  // back-fills when the IndexedDB snapshot lost them (asynchronous unload write).
-  const resolvedUser = safePersisted.user ?? authMirror?.user ?? null;
-  const resolvedGithubToken =
-    typeof safePersisted.githubToken === 'string'
-      ? safePersisted.githubToken
-      : (authMirror?.githubToken ?? null);
-  const resolvedBackendApiSecret =
-    typeof safePersisted.backendApiSecret === 'string'
-      ? (safePersisted.backendApiSecret || null)
-      : (authMirror?.backendApiSecret ?? currentState.backendApiSecret ?? null);
+
+  const resolvedUser = safePersisted.user ?? null;
+  // The browser never holds a token; a signed-in user is represented by the placeholder.
+  const resolvedGithubToken = resolvedUser ? SERVER_HELD_TOKEN : null;
 
   const repositories = Array.isArray(safePersisted.repositories) ? safePersisted.repositories : [];
   const releases = Array.isArray(safePersisted.releases) ? safePersisted.releases : [];
@@ -158,12 +144,8 @@ export const normalizePersistedState = (
   return {
     ...currentState,
     ...persistedRest,
-    // Auth fallback: if the IndexedDB snapshot is missing the login credentials
-    // (e.g. async unload write never completed), restore from the synchronous
-    // localStorage mirror. Persisted values always win over the mirror.
     user: resolvedUser,
     githubToken: resolvedGithubToken,
-    backendApiSecret: resolvedBackendApiSecret,
     accountWorkspaces: normalizeAccountWorkspaces(
       (safePersisted as Record<string, unknown>).accountWorkspaces,
     ),
@@ -221,7 +203,6 @@ export const normalizePersistedState = (
     // 卡片可见字段（开发守则 §14）：逐项校验，非法值按默认（显示）处理
     repositoryCardFields: normalizeRepositoryCardFields((safePersisted as Record<string, unknown>).repositoryCardFields),
     repositoryCardActions: normalizeRepositoryCardActions((safePersisted as Record<string, unknown>).repositoryCardActions),
-    pluginCustomIcons: normalizePluginCustomIcons((safePersisted as Record<string, unknown>).pluginCustomIcons),
     language: isAppLanguage(safePersisted.language) ? safePersisted.language : currentState.language,
     translationEngine: safePersisted.translationEngine === 'google' || safePersisted.translationEngine === 'ai'
       ? safePersisted.translationEngine
@@ -298,41 +279,6 @@ export const normalizePersistedState = (
       }).concat(
         defaultSubscriptionChannels.filter(dch => !persisted.some((ch: unknown) => (ch as Record<string, unknown>).id === dch.id))
       );
-    })(),
-    proxyConfig: (() => {
-      const p = (safePersisted as Record<string, unknown>).proxyConfig;
-      if (p && typeof p === 'object') {
-        const obj = p as Record<string, unknown>;
-        const validType = obj.type === 'http' || obj.type === 'socks5' ? obj.type : 'http';
-        const validHost = typeof obj.host === 'string' ? obj.host : '';
-        const validPort = typeof obj.port === 'number' && Number.isFinite(obj.port) ? obj.port : 7890;
-        return {
-          enabled: typeof obj.enabled === 'boolean' ? obj.enabled : false,
-          type: validType as import('../../types').ProxyType,
-          host: validHost,
-          port: validPort,
-          username: typeof obj.username === 'string' ? obj.username : undefined,
-          password: typeof obj.password === 'string' ? obj.password : undefined,
-        };
-      }
-      return { enabled: false, type: 'http' as const, host: '', port: 7890 };
-    })(),
-    rpcDownloadConfig: (() => {
-      const r = (safePersisted as Record<string, unknown>).rpcDownloadConfig;
-      if (r && typeof r === 'object') {
-        const obj = r as Record<string, unknown>;
-        return {
-          enabled: typeof obj.enabled === 'boolean' ? obj.enabled : false,
-          host: typeof obj.host === 'string' ? obj.host : '',
-          port: typeof obj.port === 'number' && Number.isFinite(obj.port) ? obj.port : 6800,
-          secret: typeof obj.secret === 'string' ? obj.secret : undefined,
-        };
-      }
-      return { enabled: false, host: '', port: 6800 };
-    })(),
-    routeMode: (() => {
-      const m = (safePersisted as Record<string, unknown>).routeMode;
-      return m === 'backend' || m === 'browser' ? m : 'auto';
     })(),
     headerMenuConfig: (() => {
       const persisted = (safePersisted as Record<string, unknown>).headerMenuConfig;

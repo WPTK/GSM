@@ -111,7 +111,6 @@ vi.mock('../store/useAppStore', () => ({
       language: 'zh',
       githubToken: null,
       setReadmeModalOpen: vi.fn(),
-      pluginCustomIcons: {},
     };
     return selector ? selector(state) : state;
   }),

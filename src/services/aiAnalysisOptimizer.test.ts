@@ -6,7 +6,7 @@ import { AIRequestError } from './aiService';
 import type { Repository } from '../types';
 
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: { getState: () => ({ routeMode: 'auto' }) },
+  useAppStore: { getState: () => ({}) },
 }));
 
 function makeRepo(id: number): Repository {

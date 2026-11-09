@@ -260,9 +260,6 @@ export interface AIConfig {
 
 export type ProxyType = 'http' | 'socks5';
 
-/** GitHub/Release 数据面请求出口偏好；仅影响本设备，不参与后端/autoSync 同步。 */
-export type RouteMode = 'auto' | 'backend' | 'browser';
-
 export interface ProxyConfig {
   enabled: boolean;
   type: ProxyType;
@@ -270,13 +267,6 @@ export interface ProxyConfig {
   port: number;
   username?: string;
   password?: string;
-}
-
-export interface RpcDownloadConfig {
-  enabled: boolean;
-  host: string;
-  port: number;
-  secret?: string;
 }
 
 export interface SearchFilters {
@@ -391,7 +381,6 @@ export interface AppState {
   /** Quick-action order and toolbar visibility; hidden actions remain in the menu. */
   repositoryCardActions: RepositoryCardActionPreference[];
   /** Custom icons for plugins: mapping pluginId to built-in icon key. */
-  pluginCustomIcons: Record<string, string>;
 
   // Theme tokens（开发守则 §14）：声明式外观偏好，落到 <html> 的 CSS 变量上
   themeTokens: ThemeTokens;
@@ -456,17 +445,9 @@ export interface AppState {
   // Analysis Progress
   analysisProgress: AnalysisProgress
 
-  // Backend
-  backendApiSecret: string | null;
-
   // MCP (local Electron prefs; backend uses SQLite settings when available)
   mcpConfig: McpServiceConfig;
 
-  // Network Proxy
-  proxyConfig: ProxyConfig;
-  rpcDownloadConfig: RpcDownloadConfig;
-  /** 本地路由偏好；不参与后端/autoSync 同步 */
-  routeMode: RouteMode;
 
   // Release Timeline View
   releaseViewMode: 'timeline' | 'repository';

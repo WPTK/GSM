@@ -15,17 +15,15 @@ import {
   PersistedAppState,
 } from '../schema';
 import { normalizePersistedState } from '../normalizers/persistedState';
-import { writeAuthMirror } from './authStorage';
 import { debouncedPersistStorage } from './storage';
 
 export const appPersistenceOptions: PersistOptions<AppStoreState, PersistedAppState> = {
   name: 'github-stars-manager',
-  version: 16,
+  version: 17,
   storage: debouncedPersistStorage as PersistStorage<PersistedAppState>,
 partialize: (state) => ({
   // 持久化用户信息和认证状态
   user: state.user,
-  githubToken: state.githubToken,
   isAuthenticated: state.isAuthenticated,
   accountWorkspaces: state.accountWorkspaces,
 
@@ -73,7 +71,6 @@ partialize: (state) => ({
   // 卡片可见字段（开发守则 §14）
   repositoryCardFields: state.repositoryCardFields,
   repositoryCardActions: state.repositoryCardActions,
-  pluginCustomIcons: state.pluginCustomIcons,
 
 
   // 持久化UI设置
@@ -87,10 +84,6 @@ partialize: (state) => ({
   autoTranslateRepoDescription: state.autoTranslateRepoDescription,
   isSidebarCollapsed: state.isSidebarCollapsed,
   headerMenuConfig: state.headerMenuConfig,
-
-  // 持久化后端 API Secret（跨会话/跨标签保留，配合修复 #259）。同时保留
-  // localStorage 镜像（AUTH_MIRROR_KEY）作为异步 IndexedDB 写入失败时的兜底。
-  backendApiSecret: state.backendApiSecret,
 
   // 持久化搜索排序设置
   searchFilters: {
@@ -131,23 +124,6 @@ discoverySortOrder: state.discoverySortOrder,
 discoverySearchMode: state.discoverySearchMode,
 discoverySelectedTopic: state.discoverySelectedTopic,
   weeklyOnlyCollected: state.weeklyOnlyCollected,
-// 持久化完整代理配置，包含认证密码，确保重启后无需重新输入。
-proxyConfig: {
-  enabled: state.proxyConfig.enabled,
-  type: state.proxyConfig.type,
-  host: state.proxyConfig.host,
-  port: state.proxyConfig.port,
-  username: state.proxyConfig.username,
-  password: state.proxyConfig.password,
-},
-// 持久化 RPC 下载配置（含密钥，确保重启后不丢失）
-rpcDownloadConfig: {
-  enabled: state.rpcDownloadConfig.enabled,
-  host: state.rpcDownloadConfig.host,
-  port: state.rpcDownloadConfig.port,
-  secret: state.rpcDownloadConfig.secret,
-},
-routeMode: state.routeMode,
 }),
 migrate: (persistedState) => {
   // 版本升级适配处理
@@ -284,32 +260,10 @@ state.discoverySortOrder = 'Descending';
     (state as Record<string, unknown>).weeklyOnlyCollected = false;
   }
 
-  // v5→v6: 初始化 proxyConfig
-  if (state && !(state as Record<string, unknown>).proxyConfig) {
-(state as Record<string, unknown>).proxyConfig = { enabled: false, type: 'http', host: '', port: 7890 };
-  }
-
-  // 初始化 rpcDownloadConfig
-  if (state && !(state as Record<string, unknown>).rpcDownloadConfig) {
-(state as Record<string, unknown>).rpcDownloadConfig = { enabled: false, host: '', port: 6800 };
-  }
-
-  // v12→v13: 初始化 routeMode（纯本地偏好，缺失或非法时回退 auto，不参与后端/autoSync 同步）
-  if (state) {
-    const stateRecord = state as Record<string, unknown>;
-    if (stateRecord.routeMode !== 'backend' && stateRecord.routeMode !== 'browser') {
-      stateRecord.routeMode = 'auto';
-    }
-  }
 
   // v8→v9: 初始化 headerMenuConfig
   if (state && !Array.isArray((state as Record<string, unknown>).headerMenuConfig)) {
 (state as Record<string, unknown>).headerMenuConfig = defaultHeaderMenuConfig;
-  }
-
-  // v9→v10: 初始化 backendApiSecret（旧版仅存 sessionStorage；migrate 前置为 null）
-  if (state && typeof (state as Record<string, unknown>).backendApiSecret !== 'string') {
-(state as Record<string, unknown>).backendApiSecret = null;
   }
 
   // v11→v12: 仓库问答设置只存非敏感字段；旧快照使用安全默认值。
@@ -348,6 +302,14 @@ stateRecord.mcpConfig = normalizeMcpConfig(stateRecord.mcpConfig);
     }
   }
 
+  // v16→v17: the browser holds no secret; drop credentials and egress prefs from old snapshots
+  if (state) {
+    const stateRecord = state as Record<string, unknown>;
+    for (const key of ['githubToken', 'backendApiSecret', 'proxyConfig', 'rpcDownloadConfig', 'routeMode', 'pluginCustomIcons']) {
+      delete stateRecord[key];
+    }
+  }
+
   return state as PersistedAppState;
 },
 merge: (persistedState, currentState) => {
@@ -364,19 +326,7 @@ language: normalized.language,
 customCategoriesCount: normalized.customCategories?.length || 0,
   });
 
-  // Keep the synchronous localStorage mirror aligned with the hydrated
-  // auth state (covers restores that came from IndexedDB or the mirror).
-  const merged = {
-...currentState,
-...normalized,
-  };
-  writeAuthMirror({
-user: merged.user ?? null,
-githubToken: typeof merged.githubToken === 'string' ? merged.githubToken : null,
-backendApiSecret: typeof merged.backendApiSecret === 'string' ? merged.backendApiSecret : null,
-  });
-
-  return merged;
+  return { ...currentState, ...normalized };
 },
 onRehydrateStorage: (state) => {
   const hydrationStart = Date.now();

@@ -892,65 +892,67 @@ describe('useAppStore repository performance guards', () => {
   });
 });
 
-describe('useAppStore auth localStorage mirror (Issue #259)', () => {
-  const AUTH_MIRROR_KEY = 'github-stars-manager-auth';
+describe('useAppStore holds no browser-side credential', () => {
+  const LEGACY_AUTH_KEY = 'github-stars-manager-auth';
+  const LEGACY_SECRET_KEY = 'github-stars-manager-backend-secret';
   const user = { id: 1, login: 'test-user', name: 'Test', avatar_url: 'https://x/a.png', email: null };
 
   beforeEach(() => {
-    window.localStorage?.removeItem?.(AUTH_MIRROR_KEY);
+    window.localStorage.removeItem(LEGACY_AUTH_KEY);
+    window.sessionStorage.removeItem(LEGACY_SECRET_KEY);
   });
 
-  it('persists auth to the synchronous localStorage mirror on login', () => {
-    useAppStore.getState().setGitHubToken('ghp_xxx');
+  it('never writes the token or user to localStorage or sessionStorage on login', () => {
+    useAppStore.getState().setGitHubToken('server');
     useAppStore.getState().setUser(user);
-
-    const raw = window.localStorage.getItem(AUTH_MIRROR_KEY);
-    const mirror = JSON.parse(raw || '{}');
-    expect(mirror.githubToken).toBe('ghp_xxx');
-    expect(mirror.user.login).toBe('test-user');
+    expect(window.localStorage.getItem(LEGACY_AUTH_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(LEGACY_SECRET_KEY)).toBeNull();
   });
 
-  it('persists backendApiSecret to the mirror and clears on logout', () => {
-    useAppStore.getState().setBackendApiSecret('secret-1');
-    const parsed = JSON.parse(window.localStorage.getItem(AUTH_MIRROR_KEY) || '{}');
-    expect(parsed.backendApiSecret).toBe('secret-1');
-
-    useAppStore.getState().logout();
-    expect(window.localStorage.getItem(AUTH_MIRROR_KEY)).toBeNull();
-    // The in-memory secret and the sessionStorage cache must also be torn down;
-    // otherwise the backend keeps authenticating a logged-out user (and on v10
-    // the secret is re-persisted to IndexedDB on the next partialize).
-    expect(useAppStore.getState().backendApiSecret).toBeNull();
-    expect(window.sessionStorage.getItem('github-stars-manager-backend-secret')).toBeNull();
+  it('does not persist githubToken or any API secret', () => {
+    useAppStore.getState().setGitHubToken('server');
+    const persisted = persistenceOptions().partialize({ ...useAppStore.getState() }) as Record<string, unknown>;
+    for (const key of ['githubToken', 'backendApiSecret', 'proxyConfig', 'rpcDownloadConfig', 'routeMode', 'pluginCustomIcons']) {
+      expect(persisted).not.toHaveProperty(key);
+    }
+    expect(JSON.stringify(persisted)).not.toContain('server"');
   });
 
-  it('restores auth from the mirror when the persisted snapshot lacks credentials', () => {
-    // Simulate the reported bug: async IndexedDB write never landed, so the
-    // persisted snapshot has empty auth while the mirror holds the real values.
-    window.localStorage.setItem(
-      AUTH_MIRROR_KEY,
-      JSON.stringify({ user, githubToken: 'ghp_restored', backendApiSecret: null })
-    );
-
-    const normalized = normalizePersistedState({}, useAppStore.getState());
-    expect(normalized.user).toEqual(user);
-    expect(normalized.githubToken).toBe('ghp_restored');
-    expect(normalized.isAuthenticated).toBe(true);
+  it('erases credentials left in browser storage by older builds on hydration', () => {
+    window.localStorage.setItem(LEGACY_AUTH_KEY, JSON.stringify({ user, githubToken: 'ghp_old', backendApiSecret: 'old-secret' }));
+    window.sessionStorage.setItem(LEGACY_SECRET_KEY, 'old-secret');
+    normalizePersistedState({}, useAppStore.getState());
+    expect(window.localStorage.getItem(LEGACY_AUTH_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(LEGACY_SECRET_KEY)).toBeNull();
   });
 
-  it('prefers persisted credentials over the mirror when both exist', () => {
-    window.localStorage.setItem(
-      AUTH_MIRROR_KEY,
-      JSON.stringify({ user, githubToken: 'ghp_mirror', backendApiSecret: null })
-    );
-    const otherUser = { id: 2, login: 'other', name: 'Other', avatar_url: 'https://x/b.png', email: null };
-
+  it('githubToken is only ever the server placeholder, whatever an old snapshot holds', () => {
     const normalized = normalizePersistedState(
-      { user: otherUser, githubToken: 'ghp_persisted' },
-      useAppStore.getState()
+      { user, githubToken: 'ghp_persisted', backendApiSecret: 'old-secret' } as never,
+      useAppStore.getState(),
     );
-    expect(normalized.user).toEqual(otherUser);
-    expect(normalized.githubToken).toBe('ghp_persisted');
+    expect(normalized.githubToken).toBe('server');
+    expect(normalized).not.toHaveProperty('backendApiSecret');
+    const signedOut = normalizePersistedState({ githubToken: 'ghp_persisted' } as never, useAppStore.getState());
+    expect(signedOut.githubToken).toBeNull();
+  });
+
+  it('migration drops credentials and egress prefs from old snapshots', async () => {
+    const migrated = await persistenceOptions().migrate!(
+      { user, githubToken: 'ghp_old', backendApiSecret: 'old-secret', proxyConfig: { password: 'p' }, routeMode: 'browser' } as never,
+      16,
+    ) as Record<string, unknown>;
+    for (const key of ['githubToken', 'backendApiSecret', 'proxyConfig', 'routeMode']) {
+      expect(migrated).not.toHaveProperty(key);
+    }
+  });
+
+  it('logout clears the in-memory token and any legacy storage', () => {
+    window.localStorage.setItem(LEGACY_AUTH_KEY, '{}');
+    useAppStore.getState().setGitHubToken('server');
+    useAppStore.getState().logout();
+    expect(useAppStore.getState().githubToken).toBeNull();
+    expect(window.localStorage.getItem(LEGACY_AUTH_KEY)).toBeNull();
   });
 });
 
@@ -1142,13 +1144,6 @@ const partializeState = (overrides: Partial<ReturnType<typeof useAppStore.getSta
   persistenceOptions().partialize({ ...useAppStore.getState(), ...overrides })
 );
 
-const backendSecretMirror = (secret: string | null): void => {
-  window.localStorage.setItem(
-    'github-stars-manager-auth',
-    JSON.stringify({ user: null, githubToken: null, backendApiSecret: secret }),
-  );
-};
-
 describe('useAppStore persisted-state historical fixtures', () => {
   beforeEach(() => {
     window.localStorage.removeItem('github-stars-manager-auth');
@@ -1277,128 +1272,11 @@ describe('useAppStore persisted-state historical fixtures', () => {
   });
 });
 
-describe('useAppStore backend API secret three-store contract', () => {
-  const sessionState = (backendApiSecret: string | null) => ({
-    ...useAppStore.getInitialState(),
-    backendApiSecret,
-  });
-
-  beforeEach(() => {
-    window.localStorage.removeItem('github-stars-manager-auth');
-    window.sessionStorage.removeItem('github-stars-manager-backend-secret');
-  });
-
-  it('uses the IndexedDB snapshot first and realigns the auth mirror after hydration', () => {
-    backendSecretMirror('mirror-secret');
-    window.sessionStorage.setItem('github-stars-manager-backend-secret', 'session-secret');
-    const merged = persistenceOptions().merge(
-      buildPersistedSnapshot({ backendApiSecret: 'idb-secret' }),
-      sessionState('session-secret'),
-    );
-
-    expect(merged.backendApiSecret).toBe('idb-secret');
-    expect(JSON.parse(window.localStorage.getItem('github-stars-manager-auth') || '{}')).toMatchObject({
-      backendApiSecret: 'idb-secret',
-    });
-  });
-
-  it('uses the localStorage auth mirror when IndexedDB lacks the secret', () => {
-    backendSecretMirror('mirror-secret');
-    const normalized = normalizePersistedState(buildPersistedSnapshot(), sessionState('session-secret'));
-
-    expect(normalized.backendApiSecret).toBe('mirror-secret');
-  });
-
-  it('falls back to the session secret when IndexedDB and the mirror are empty', () => {
-    const normalized = normalizePersistedState(buildPersistedSnapshot(), sessionState('session-secret'));
-
-    expect(normalized.backendApiSecret).toBe('session-secret');
-  });
-
-  it('keeps IndexedDB ahead of conflicting mirror and session values', () => {
-    backendSecretMirror('mirror-secret');
-    const normalized = normalizePersistedState(
-      buildPersistedSnapshot({ backendApiSecret: 'idb-secret' }),
-      sessionState('session-secret'),
-    );
-
-    expect(normalized.backendApiSecret).toBe('idb-secret');
-  });
-
-  it('treats an explicitly empty persisted secret as a clear and aligns a stale mirror to null', () => {
-    backendSecretMirror('mirror-secret');
-    const merged = persistenceOptions().merge(
-      buildPersistedSnapshot({ backendApiSecret: '' }),
-      sessionState('session-secret'),
-    );
-
-    expect(merged.backendApiSecret).toBeNull();
-    expect(JSON.parse(window.localStorage.getItem('github-stars-manager-auth') || '{}')).toMatchObject({
-      backendApiSecret: null,
-    });
-  });
-});
-
 describe('useAppStore persistence contracts', () => {
-  it('does not serialize discovery runtime repositories while retaining proxy credentials and the RPC secret', () => {
+  it('does not serialize discovery runtime repositories', () => {
     const persisted = partializeState({
       discoveryRepos: buildTransientDiscoverySnapshot().discoveryRepos as ReturnType<typeof useAppStore.getState>['discoveryRepos'],
-      proxyConfig: { enabled: true, type: 'http', host: 'proxy.example.com', port: 7890, username: 'user', password: 'proxy-password' },
-      rpcDownloadConfig: { enabled: true, host: 'rpc.example.com', port: 6800, secret: 'rpc-secret' },
-      routeMode: 'browser',
     });
-
     expect(persisted).not.toHaveProperty('discoveryRepos');
-    expect(persisted.proxyConfig).toEqual({
-      enabled: true,
-      type: 'http',
-      host: 'proxy.example.com',
-      port: 7890,
-      username: 'user',
-      password: 'proxy-password',
-    });
-    expect(persisted.rpcDownloadConfig).toEqual({
-      enabled: true,
-      host: 'rpc.example.com',
-      port: 6800,
-      secret: 'rpc-secret',
-    });
-    expect(persisted.routeMode).toBe('browser');
-  });
-
-  it('falls back to auto for missing or invalid routeMode during hydration', () => {
-    const normalized = normalizePersistedState(
-      buildPersistedSnapshot({ routeMode: 'not-a-mode' as unknown as never }),
-      useAppStore.getInitialState(),
-    );
-    expect(normalized.routeMode).toBe('auto');
-
-    const legacy = normalizePersistedState(
-      buildPersistedSnapshot() as unknown as Record<string, unknown>,
-      useAppStore.getInitialState(),
-    );
-    expect(legacy.routeMode).toBe('auto');
-  });
-
-  it('restores the full proxy credential set after hydration', () => {
-    const normalized = normalizePersistedState(buildPersistedSnapshot({
-      proxyConfig: {
-        enabled: true,
-        type: 'socks5',
-        host: 'proxy.example.com',
-        port: 1080,
-        username: 'user',
-        password: 'proxy-password',
-      },
-    }), useAppStore.getInitialState());
-
-    expect(normalized.proxyConfig).toEqual({
-      enabled: true,
-      type: 'socks5',
-      host: 'proxy.example.com',
-      port: 1080,
-      username: 'user',
-      password: 'proxy-password',
-    });
   });
 });

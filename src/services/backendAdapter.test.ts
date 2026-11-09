@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { backend } from './backendAdapter';
 
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: { getState: () => ({ backendApiSecret: '' }) },
+  useAppStore: { getState: () => ({}) },
 }));
 
 function make429Response(headers: Record<string, string>): Response {

@@ -42,7 +42,6 @@ const partialize = (overrides: Partial<ReturnType<AppStore['getState']>> = {}): 
 
 const currentPersistedKeys = [
   'user',
-  'githubToken',
   'isAuthenticated',
   'accountWorkspaces',
   'repositories',
@@ -69,7 +68,6 @@ const currentPersistedKeys = [
   'assetFilters',
   'repositoryCardFields',
   'repositoryCardActions',
-  'pluginCustomIcons',
   'themeMode',
   'themePresetLight',
   'themePresetDark',
@@ -80,7 +78,6 @@ const currentPersistedKeys = [
   'autoTranslateRepoDescription',
   'isSidebarCollapsed',
   'headerMenuConfig',
-  'backendApiSecret',
   'searchFilters',
   'repositoryViewMode',
   'releaseViewMode',
@@ -100,9 +97,6 @@ const currentPersistedKeys = [
   'discoverySearchMode',
   'discoverySelectedTopic',
   'weeklyOnlyCollected',
-  'proxyConfig',
-  'rpcDownloadConfig',
-  'routeMode',
 ] as const;
 
 const historicalSnapshots = (): PersistedSnapshot[] => [
@@ -149,15 +143,11 @@ const historicalSnapshots = (): PersistedSnapshot[] => [
 describe('PR-07 Store modularization compatibility', () => {
   it('keeps exactly one persistence shell and the current persisted key set', () => {
     const options = persistenceOptions();
-    const persisted = partialize({
-      proxyConfig: { enabled: true, type: 'http', host: 'proxy.example.com', port: 7890, password: 'proxy-password' },
-      rpcDownloadConfig: { enabled: true, host: 'rpc.example.com', port: 6800, secret: 'rpc-secret' },
-    });
+    const persisted = partialize({});
 
-    expect(options.version).toBe(16);
+
+    expect(options.version).toBe(17);
     expect(Object.keys(persisted)).toEqual(currentPersistedKeys);
-    expect(persisted.proxyConfig).toMatchObject({ password: 'proxy-password' });
-    expect(persisted.rpcDownloadConfig).toMatchObject({ secret: 'rpc-secret' });
 
     for (const transientKey of [
       'discoveryRepos',

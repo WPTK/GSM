@@ -21,13 +21,9 @@ export const createPreferenceSlice: AppStoreSlice<Pick<import('../types').AppAct
   | 'setHeaderMenuConfig'
   | 'setHasHydrated'
   | 'setAnalysisProgress'
-  | 'setProxyConfig'
-  | 'setRouteMode'
-  | 'setRpcDownloadConfig'
   | 'setRepositoryViewMode'
   | 'setRepositoryCardField'
   | 'setRepositoryCardActions'
-  | 'setPluginCustomIcon'
   | 'setReleaseViewMode'
   | 'setReleaseShowMode'
   | 'setReleaseLatestMode'
@@ -68,13 +64,6 @@ export const createPreferenceSlice: AppStoreSlice<Pick<import('../types').AppAct
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 
       setAnalysisProgress: (newProgress) => set({ analysisProgress: newProgress }),
-      setProxyConfig: (updates) => set((state) => ({
-        proxyConfig: { ...state.proxyConfig, ...updates }
-      })),
-      setRouteMode: (routeMode) => set({ routeMode }),
-      setRpcDownloadConfig: (updates) => set((state) => ({
-        rpcDownloadConfig: { ...state.rpcDownloadConfig, ...updates }
-      })),
 
       // Repository list view actions
       // 卡片字段开关：合并当前值后 normalize，缺失字段自动按默认处理
@@ -82,15 +71,6 @@ export const createPreferenceSlice: AppStoreSlice<Pick<import('../types').AppAct
         repositoryCardFields: normalizeRepositoryCardFields({ ...state.repositoryCardFields, [id]: visible }),
       })),
       setRepositoryCardActions: (actions) => set({ repositoryCardActions: normalizeRepositoryCardActions(actions) }),
-      setPluginCustomIcon: (pluginId, icon) => set((state) => {
-        const next = { ...state.pluginCustomIcons };
-        if (!icon) {
-          delete next[pluginId];
-        } else {
-          next[pluginId] = icon;
-        }
-        return { pluginCustomIcons: next };
-      }),
       setRepositoryViewMode: (repositoryViewMode) => set({ repositoryViewMode }),
 
       // Release Timeline View actions

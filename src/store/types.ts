@@ -11,8 +11,6 @@ import type {
   VectorSearchStatus,
   McpServiceConfig,
   VectorIndexingState,
-  ProxyConfig,
-  RpcDownloadConfig,
   SearchFilters,
   GitHubUser,
   Category,
@@ -151,14 +149,10 @@ export interface AppActions {
   setAnalysisProgress: (newProgress: AnalysisProgress) => void;
 
   // Backend actions
-  setBackendApiSecret: (secret: string | null) => void;
 
   // Proxy actions
-  setProxyConfig: (updates: Partial<ProxyConfig>) => void;
-  setRouteMode: (mode: import('../types').RouteMode) => void;
 
   // RPC Download actions
-  setRpcDownloadConfig: (updates: Partial<RpcDownloadConfig>) => void;
 
   // Repository list view actions
   setRepositoryViewMode: (mode: 'grid' | 'list') => void;
@@ -213,7 +207,6 @@ export interface AppActions {
   /** 切换某个字段的显示；未提供的字段沿用当前值。 */
   setRepositoryCardField: (id: RepositoryCardFieldId, visible: boolean) => void;
   setRepositoryCardActions: (actions: RepositoryCardActionPreference[]) => void;
-  setPluginCustomIcon: (pluginId: string, icon: string | null) => void;
 }
 
 export type AppStoreState = AppState & AppActions;
