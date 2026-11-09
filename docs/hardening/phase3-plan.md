@@ -5,9 +5,12 @@ Baseline: branch `hardened` at c435e17e.
 
 ## Decisions (coordinator defaults; the owner may override)
 
-1. Drop the `ai_configs` table (saved provider keys go away). Rollback: data.db backup taken before deploy.
-2. Remove the "include keys" backup toggle now, so no backup ever carries a key.
-3. Drop the per-config custom analysis prompt.
+1. Never delete user data on upgrade. Migration v5 does NOT drop `ai_configs` or the `activeAIConfig` row: the
+   server stops reading and serving them, the rows stay on disk untouched. (Owner decision 2026-11-09.)
+2. Keep the "include keys" backup toggle as it is. (Owner decision.)
+3. Keep the custom analysis prompt. Move it to a server setting (`ai.customAnalysisPrompt`), migrated from the active
+   config's custom prompt if one exists, editable in the new Claude settings panel, and used in the analysis prompt
+   prefix. (Owner decision.)
 4. Search, rerank, translate and release summaries use `CLAUDE_MODEL_BULK`; chat and tools use `CLAUDE_MODEL_CHAT`.
 5. If the cache prefix is below the model's minimum, skip caching and report it; do not pad the prompt.
 6. Fail-closed for `API_SECRET`, `ENCRYPTION_KEY`, `GITHUB_TOKEN` stays in Phase 4. This phase fails closed on `ANTHROPIC_API_KEY` and the two model IDs only.
@@ -88,7 +91,7 @@ Routes (`server/src/routes/ai.ts`, cookie auth, zod `.strict()`; contract in `se
 - `POST /api/ai/analysis/jobs` `{estimateId, confirmed?}`; `needsConfirm` without `confirmed` -> 409 (server-side guard).
 - `GET /api/ai/analysis/jobs/:id`, `POST /api/ai/analysis/jobs/:id/cancel`.
 
-Also: migration v5 (`ai_jobs`, `ai_job_items`, `DROP TABLE ai_configs`, delete `activeAIConfig` setting); remove
+Also: migration v5 (`ai_jobs`, `ai_job_items`, `ai.customAnalysisPrompt` setting; `ai_configs` rows left untouched); remove
 `/api/proxy/ai`, `/api/configs/ai*`, `ai_configs` in sync export/import and types. `repositories.ts` upsert: AI
 fields overwrite only when `excluded.analyzed_at > repositories.analyzed_at`, so autoSync can't wipe server results.
 
@@ -96,13 +99,13 @@ fields overwrite only when `excluded.analyzed_at > repositories.analyzed_at`, so
 
 - `AIService`: keep the public methods, constructor becomes `new AIService(language)`, transport is
   `/api/ai/messages` (reuse `consumeSseStream`, fetch + ReadableStream). Delete apiType branches, provider
-  extractors, `testConnection`, `supportsChatToolCalls`, the custom-prompt path, `analyzeRepository`.
+  extractors, `testConnection`, `supportsChatToolCalls`, `analyzeRepository` (the custom prompt moves to the server).
 - Analysis: delete `aiAnalysisOptimizer.ts`, `aiAnalysisHelper.ts`; new `claudeJobs.ts` (estimate -> confirm dialog
   when `needsConfirm` -> job -> poll -> `updateRepository`). Callers: `useRepositoryAnalysisJob`, discovery, card.
 - Gate call sites on `useClaudeStatus().connected` instead of `activeAIConfig`.
 - Delete `AIConfigPanel(.test)`, `aiCapabilities.ts`, `useAIConfigActions.ts`, `AIConfig` type/fields/setters,
   `backendAdapter` `proxyAI*`/`syncAIConfigs`/`fetchAIConfigs`, AI parts of `autoSync`, `aiConfigs` in
-  DataManagementPanel, the include-keys toggle.
+  DataManagementPanel. Keep the include-keys toggle.
 - Persist v18: add `aiConfigs`, `activeAIConfig` to `REMOVED_PERSISTED_KEYS`; drop from the shard set.
 - `settings/ClaudePanel.tsx` on tab `'ai'`: "Claude connected, key ending in xxxx", both models, cache-skipped note.
   App-level `CreditLowBanner` from `/api/ai/status`.
@@ -117,7 +120,7 @@ Server (fake SDK client): key from env and `_FILE`; missing key exits; missing m
 most 4 key characters; purpose picks the model; `model`/`baseUrl` -> 400; maxTokens cap; SSE frame order and abort;
 zod failure -> one retry -> fail; 20 direct vs 21 batch; restart resumes (`retrieve`, not `create`); cache skipped
 below minimum; 409 without confirm; credit-low pause, daily recheck (fake timers), resume; retry-after; v5 migration;
-export has no AI keys; `guardedFetch` rejects off-list hosts; `noDirectEgress` green. Prompt snapshot moves to
+export has no AI keys; v5 leaves `ai_configs` rows intact; custom prompt reaches the prefix; `guardedFetch` rejects off-list hosts; `noDirectEgress` green. Prompt snapshot moves to
 `server/tests/ai/prompts.snapshot.json`.
 Client (mocked fetch): transport and SSE parsing, ClaudePanel, banner, v18 hydration, backup has no `aiConfigs`,
 ported fixtures.
@@ -128,4 +131,4 @@ S first, then C on top of S (until C lands the old client gets 404s). C may be a
 then UI, locales and deletions. One `reviewer` pass per layer; `reviewer-deep` once on the final head (keys and auth).
 Gates before the report: `npm run lint`, `npm run typecheck`, `npm run test:run`, `npm run check:i18n`,
 `npm run check:egress`, server tests. `rg -i "aiConfig|proxy/ai|apiKey" src server/src` shows only intentional hits.
-Rollback: revert C, then S; restore data.db from the pre-deploy backup (v5 can't be undone in place).
+Rollback: revert C, then S; v5 only adds tables, so an older build still runs on the same data.db.
