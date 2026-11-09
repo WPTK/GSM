@@ -58,7 +58,7 @@ router.post('/api/sync/export', (_req, res) => {
     const settings: Record<string, unknown> = {};
     for (const row of settingsRows) {
       const key = row.key as string;
-      let value = row.value as string | null;
+      const value = row.value as string | null;
       if (EXCLUDED_SETTING_KEYS.has(key)) continue;
       settings[key] = value;
     }

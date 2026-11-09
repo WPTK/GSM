@@ -1,5 +1,4 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress, LookupOptions } from 'node:dns';
 import { Agent as HttpAgent, type AgentOptions as HttpAgentOptions } from 'node:http';

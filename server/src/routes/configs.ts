@@ -9,10 +9,6 @@ const router = Router();
 
 type SecretStatus = 'ok' | 'empty' | 'decrypt_failed';
 
-// 控制字符或 Latin-1 以外的码位会被 undici 拒绝，直接拒绝存储
-function sanitizeUserAgent(value: unknown): string | null {
-  return typeof value === 'string' && !/[^\u0020-\u007e\u00a0-\u00ff]/.test(value) ? value : null;
-}
 
 function getMaskedSecretResult(params: {
   encryptedValue: unknown;
@@ -308,7 +304,7 @@ router.get('/api/settings', (_req, res) => {
 
     for (const row of rows) {
       const key = row.key as string;
-      let value = row.value as string | null;
+      const value = row.value as string | null;
 
       // The GitHub token is server-side configuration (GITHUB_TOKEN); never reported here.
       if (key === 'github_token') continue;
@@ -341,7 +337,7 @@ router.put('/api/settings', (req, res) => {
 
     const upsert = db.transaction(() => {
       for (const [key, rawValue] of Object.entries(updates)) {
-        let value = rawValue as string | null;
+        const value = rawValue as string | null;
 
         // better-sqlite3 interprets objects/arrays as named parameter maps,
         // causing RangeError. Serialize non-primitive values to JSON strings.
