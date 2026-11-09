@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "외부 탐색 피드",
-    "manageRss": "RSS 발견 채널",
-    "name": "채널 이름",
-    "url": "HTTPS 피드 URL",
-    "add": "피드 추가",
-    "checking": "피드 확인 중…",
-    "copy": "복사",
-    "copied": "복사됨",
-    "rssFormat": "공개 RSS 또는 Atom 피드 URL을 붙여넣으세요. 앱이 언급된 GitHub 저장소 링크를 추출합니다(갱신당 처음 30개).",
-    "rss-invalid": "피드에서 GitHub 저장소 링크를 찾지 못했습니다.",
-    "remove": "{{name}} 제거",
-    "format": "공개 HTTPS 링크를 붙여넣으세요. JSON 응답의 repositories 필드에 GitHub 저장소를 나열합니다(공개 저장소 최대 30개).",
-    "cors-note": "사이트가 브라우저의 CORS 요청을 허용해야 합니다. GitHub 토큰은 피드로 전송되지 않습니다.",
-    "invalid": "이름과 유효한 HTTPS URL을 입력하세요.",
-    "duplicate": "이미 추가된 피드이거나 10개 제한에 도달했습니다.",
-    "invalid-format": "JSON에 유효한 저장소 목록이 없습니다.",
-    "cors": "피드를 읽을 수 없습니다. URL과 CORS 설정을 확인하세요.",
-    "unreadable": "피드를 읽을 수 없습니다. URL, 사이트 상태, JSON 형식을 확인하세요."
+    "copied": "복사됨"
   },
   "discoverySidebar": {
     "just-now": "방금 전",
@@ -42,18 +25,12 @@
     "items-2": "개인)",
     "syncing-weekly-submissions-v1-scanned": "주간 제출 동기화 중... {{v1}}개 항목 검사됨",
     "fetching-repo-details-v1-v2": "전체 창고 세부정보... {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "팔로우하는 블로거의 타임라인을 검색하는 중... {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "다음 채널에서 메시지를 가져오는 중... {{v1}}/{{v2}}",
     "just-now": "단지",
     "diffmin-m-ago": "{{diffMin}}분 전",
     "diffhours-h-ago": "{{diffHours}}시간 전",
     "updated": "업데이트 날짜",
     "refresh": "새로 고치다",
     "each-refresh-shows-different-content": "새로고침할 때마다 다른 콘텐츠를 볼 수 있습니다",
-    "time-range": "시간 범위",
-    "today": "오늘",
-    "this-week": "이번 주",
-    "this-month": "이번 달",
     "topic-filter": "주제 필터",
     "topic": "주제",
     "ai": "일체 포함",
@@ -66,10 +43,6 @@
     "game": "게임",
     "only-show-submissions-included-in-the-weekly-iss": "주간지에 게재된 투고물만 표시",
     "in-weekly": "주간 포함",
-    "manage-the-follow-list": "팔로우할 블로거 목록 관리",
-    "follow-list": "관심 목록",
-    "manage-the-channel-list": "팔로잉 채널 목록 관리",
-    "channel-list": "채널 목록",
     "stop-analysis": "분석 중지",
     "stop": "멈추다",
     "analyze-with-ai": "AI 분석",
@@ -90,11 +63,7 @@
     "waiting-for-github-api-response": "GitHub API 응답",
     "repo-search": "창고 검색",
     "enter-keywords-to-search-github-repositories": "GitHub 저장소를 검색하려면 키워드를 입력하세요.",
-    "x-tweets": "X 트윗",
-    "fetches-github-projects-from-followed-accounts-l": "x.com에 직접 연결하여 팔로우하는 블로거의 최신 트윗에서 GitHub 프로젝트를 확인하세요. 데스크톱 버전 또는 서버 모드가 필요합니다.",
     "start-sync": "동기화 시작",
-    "telegram-channels": "텔레그램 채널",
-    "fetches-github-projects-from-followed-channels-m": "t.me 공개 미리보기에 직접 연결하여 팔로우 채널 메시지에서 GitHub 프로젝트를 캡처하세요. 데스크톱 버전 또는 서버 모드가 필요합니다.",
     "ruanyifeng-weekly": "루안 이펑 주간",
     "sync-open-source-submissions-from-the-weekly-ear": "Technology Enthusiasts Weekly의 오픈 소스 프로젝트 제출을 동기화하고 더 많은 것을 로드할 때 자동으로 이전 제출을 얻습니다.",
     "no-data-yet": "아직 데이터가 없습니다",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "GitHub 토큰을 찾을 수 없습니다. 다시 로그인하세요.",
     "failed-to-load-more-please-retry": "더 이상 로드하지 못했습니다. 다시 시도해 주세요.",
-    "failed-to-fetch-x-tweets": "X개의 트윗을 획득하지 못했습니다.",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "X 트윗을 가져오지 못했습니다. 네트워크 연결을 확인하거나 설정에서 X 인증 쿠키를 확인하세요.",
-    "failed-to-fetch-telegram-messages": "텔레그램 메시지 검색에 실패했습니다.",
-    "failed-to-fetch-telegram-messages-please-check-y": "텔레그램 메시지를 받지 못했습니다. 네트워크 연결을 확인하거나 채널을 팔로우하세요.",
     "failed-to-fetch-data-please-check-your-network-c": "데이터를 가져오지 못했습니다. 네트워크 연결이나 GitHub 토큰을 확인하세요.",
     "please-configure-ai-service-in-settings-first": "먼저 설정에서 AI 서비스를 구성해주세요.",
     "ai-service-configuration-is-incomplete-please-ch": "AI 서비스 구성이 불완전합니다. API 엔드포인트, 키, 모델명을 확인하세요.",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. AI 구성 및 네트워크 연결을 확인하세요.",
     "ai-analysis-failed-please-check-your-ai-configur": "AI 분석에 실패했습니다. AI 구성을 확인해주세요."
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "연결 성공: {{repoCount}} GitHub 저장소 링크를 포함하여 {{messageCount}} 채널 메시지가 구문 분석되었습니다.",
-    "failed-error": "연결 실패: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "텍스트 로딩에 실패했습니다. 네트워크를 확인한 후 다시 시도해 주세요."
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "연결 성공: {{repoCount}} GitHub 저장소 링크를 포함하여 {{tweetCount}}개의 트윗이 구문 분석되었습니다.",
-    "failed-error": "연결 실패: {{error}}"
   },
   "discoveryChannel": {
     "trending": "경향",
@@ -177,15 +134,5 @@
   },
   "discoveryPlatform": {
     "All": "모든 플랫폼"
-  },
-  "trendingHistoryPanel": {
-    "title": "순위 변화",
-    "hint": "이전에 기록한 날과 비교",
-    "new-entry": "신규 진입",
-    "rising": "상승",
-    "falling": "하락",
-    "streak-days": "{{v1}}일 연속",
-    "stars-gained": "처음 기록한 뒤 +{{v1}} stars",
-    "first-seen": "1위는 {{v1}}에 처음 기록"
   }
 }

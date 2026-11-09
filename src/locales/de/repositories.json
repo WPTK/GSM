@@ -261,16 +261,12 @@
     "searching-vector-index": "Vektorbibliothek durchsuchen…",
     "ai-semantic-reranking": "Semantische Neuordnung der KI…",
     "github-token-not-found-please-login-again": "GitHub-Token nicht gefunden, bitte melden Sie sich erneut an.",
-    "failed-to-get-github-username-please-login-again": "Der GitHub-Benutzername konnte nicht abgerufen werden. Bitte melden Sie sich erneut an.",
-    "synced-v1-lists-applied-to-appliedtotal-unlocked": "{{v1}} Listen wurden synchronisiert und auf {{appliedTotal}} entsperrte Lagerhäuser angewendet: {{listSummary}}{{createdHint}}",
-    "list-sync-failed-starred-repositories-were-synce": "Die Listensynchronisierung ist fehlgeschlagen. Das Star Warehouse wurde synchronisiert. Bitte versuchen Sie es später noch einmal oder überprüfen Sie die GitHub-Token-Berechtigungen (erfordert Benutzerbereich).",
     "sync-completed-found-newrepocount-new-repositori": "Synchronisierung abgeschlossen! {{newRepoCount}} neue Repositorys gefunden.",
     "sync-completed-all-repositories-are-up-to-date": "Synchronisierung abgeschlossen! Alle Repositories sind auf dem neuesten Stand.",
     "github-token-has-expired-or-is-invalid-please-lo": "GitHub-Token ist abgelaufen oder ungültig, bitte melden Sie sich erneut an.",
     "sync-failed-please-check-your-network-connection": "Die Synchronisierung ist fehlgeschlagen. Bitte überprüfen Sie Ihre Netzwerkverbindung oder versuchen Sie es später erneut.",
     "list-sync-new-categories_one": " ({{count}} neue Kategorie erstellt)",
-    "list-sync-new-categories_other": " ({{count}} neue Kategorien erstellt)",
-    "list-sync-complete": "{{lists}} Listen synchronisiert ({{newCount}} neue Kategorien erstellt)."
+    "list-sync-new-categories_other": " ({{count}} neue Kategorien erstellt)"
   },
   "repositoryHealthPanel": {
     "activity": "Aktivität",

@@ -261,16 +261,12 @@
     "searching-vector-index": "Buscar biblioteca de vectores…",
     "ai-semantic-reranking": "Reordenamiento semántico de IA...",
     "github-token-not-found-please-login-again": "No se encontró el token de GitHub. Inicie sesión nuevamente.",
-    "failed-to-get-github-username-please-login-again": "No se puede obtener el nombre de usuario de GitHub, inicie sesión nuevamente.",
-    "synced-v1-lists-applied-to-appliedtotal-unlocked": "{{v1}} listas se han sincronizado y aplicado a {{appliedTotal}} almacenes desbloqueados: {{listSummary}}{{createdHint}}",
-    "list-sync-failed-starred-repositories-were-synce": "La sincronización de la lista falló, el almacén estrella se ha sincronizado. Inténtelo de nuevo más tarde o verifique los permisos del token de GitHub (requiere alcance de usuario).",
     "sync-completed-found-newrepocount-new-repositori": "¡Sincronización completada! {{newRepoCount}} nuevos repositorios encontrados.",
     "sync-completed-all-repositories-are-up-to-date": "¡Sincronización completada! Todos los repositorios están actualizados.",
     "github-token-has-expired-or-is-invalid-please-lo": "El token de GitHub ha caducado o no es válido; inicie sesión nuevamente.",
     "sync-failed-please-check-your-network-connection": "Error de sincronización. Verifique su conexión de red o vuelva a intentarlo más tarde.",
     "list-sync-new-categories_one": " ({{count}} categoría nueva creada)",
-    "list-sync-new-categories_other": " ({{count}} categorías nuevas creadas)",
-    "list-sync-complete": "Se sincronizaron {{lists}} listas ({{newCount}} categorías nuevas creadas)."
+    "list-sync-new-categories_other": " ({{count}} categorías nuevas creadas)"
   },
   "repositoryHealthPanel": {
     "activity": "Actividad",

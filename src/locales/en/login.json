@@ -55,5 +55,8 @@
     "token-permissions-classic-star-lists": "`user`",
     "token-permissions-classic-fork-workflows": "`repo`",
     "token-permissions-local-storage": "Your token is stored only on this device and your own backend — never on the app's servers."
+  },
+  "login": {
+    "api-secret": "API secret"
   }
 }

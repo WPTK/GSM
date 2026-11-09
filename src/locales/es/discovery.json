@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "Canales externos de descubrimiento",
-    "manageRss": "Canal de descubrimiento RSS",
-    "name": "Nombre del canal",
-    "url": "URL HTTPS del feed",
-    "add": "Añadir feed",
-    "checking": "Comprobando feed…",
-    "copy": "Copiar",
-    "copied": "Copiado",
-    "rssFormat": "Pega una URL pública de feed RSS o Atom: la app extrae los enlaces a repositorios de GitHub mencionados (los primeros 30 por actualización).",
-    "rss-invalid": "No se encontraron enlaces a repositorios de GitHub en el feed.",
-    "remove": "Eliminar {{name}}",
-    "format": "Pega un enlace HTTPS público cuya respuesta JSON enumere repositorios de GitHub en su campo repositories, hasta 30 repositorios públicos.",
-    "cors-note": "El sitio debe permitir solicitudes del navegador (CORS). No se envía el token de GitHub al feed.",
-    "invalid": "Introduce un nombre y una URL HTTPS válida.",
-    "duplicate": "El feed ya existe o se alcanzó el límite de diez feeds.",
-    "invalid-format": "El JSON no contiene una lista válida de repositorios.",
-    "cors": "No se pudo leer el feed. Comprueba la URL y la configuración CORS.",
-    "unreadable": "No se pudo leer el feed. Comprueba la URL, la disponibilidad y el formato JSON."
+    "copied": "Copiado"
   },
   "discoverySidebar": {
     "just-now": "justo",
@@ -41,18 +24,12 @@
     "items-2": "individual)",
     "syncing-weekly-submissions-v1-scanned": "Sincronizando envíos semanales... {{v1}} elementos escaneados",
     "fetching-repo-details-v1-v2": "Detalles completos del almacén... {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "Recuperando la cronología de los blogueros que sigues... {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "Obteniendo mensajes de los siguientes canales... {{v1}}/{{v2}}",
     "just-now": "justo",
     "diffmin-m-ago": "Hace {{diffMin}} minutos",
     "diffhours-h-ago": "Hace {{diffHours}} horas",
     "updated": "actualizado el",
     "refresh": "refrescar",
     "each-refresh-shows-different-content": "Puedes ver contenido diferente cada vez que actualizas",
-    "time-range": "rango de tiempo",
-    "today": "hoy",
-    "this-week": "esta semana",
-    "this-month": "este mes",
     "topic-filter": "Filtro de tema",
     "topic": "tema",
     "ai": "IA",
@@ -65,10 +42,6 @@
     "game": "juego",
     "only-show-submissions-included-in-the-weekly-iss": "Mostrar solo los envíos que se han incluido en la revista semanal.",
     "in-weekly": "Semanal incluido",
-    "manage-the-follow-list": "Administrar la lista de bloggers a seguir",
-    "follow-list": "lista de seguimiento",
-    "manage-the-channel-list": "Administrar la siguiente lista de canales",
-    "channel-list": "lista de canales",
     "stop-analysis": "Detener análisis",
     "stop": "detener",
     "analyze-with-ai": "análisis de IA",
@@ -89,11 +62,7 @@
     "waiting-for-github-api-response": "API de GitHub respondiendo",
     "repo-search": "Búsqueda de almacén",
     "enter-keywords-to-search-github-repositories": "Ingrese palabras clave para buscar repositorios de GitHub",
-    "x-tweets": "x tuit",
-    "fetches-github-projects-from-followed-accounts-l": "Conéctese directamente a x.com para obtener los proyectos de GitHub en los últimos tweets de los bloggers que sigue. Se requiere versión de escritorio o modo servidor.",
     "start-sync": "Iniciar sincronización",
-    "telegram-channels": "canal de telegramas",
-    "fetches-github-projects-from-followed-channels-m": "Conéctese directamente a la vista previa pública de t.me para capturar proyectos de GitHub en mensajes de seguimiento del canal. Se requiere versión de escritorio o modo servidor.",
     "ruanyifeng-weekly": "Ruan Yifeng Semanal",
     "sync-open-source-submissions-from-the-weekly-ear": "Sincronice los envíos de proyectos de código abierto de Technology Enthusiasts Weekly y obtenga automáticamente envíos anteriores al cargar más",
     "no-data-yet": "Aún no hay datos",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "No se encontró el token de GitHub, inicie sesión nuevamente.",
     "failed-to-load-more-please-retry": "No se pudo cargar más, inténtalo de nuevo.",
-    "failed-to-fetch-x-tweets": "No se pudieron obtener X tweets",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "No se pudieron obtener los tweets X. Verifique la conexión de red o verifique la cookie de autenticación X en la configuración.",
-    "failed-to-fetch-telegram-messages": "Falló la recuperación del mensaje de Telegram",
-    "failed-to-fetch-telegram-messages-please-check-y": "No se pudieron recibir los mensajes de Telegram, verifique la conexión de red o siga el canal.",
     "failed-to-fetch-data-please-check-your-network-c": "No se pudieron obtener datos, verifique la conexión de red o el token de GitHub.",
     "please-configure-ai-service-in-settings-first": "Primero configure el servicio de IA en la configuración.",
     "ai-service-configuration-is-incomplete-please-ch": "La configuración del servicio de IA está incompleta; verifique el punto final de la API, la clave y el nombre del modelo.",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "El análisis de IA falló; verifique la configuración de IA y la conexión de red",
     "ai-analysis-failed-please-check-your-ai-configur": "El análisis de IA falló, verifique la configuración de IA."
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "Conexión exitosa: se analizaron {{messageCount}} mensajes del canal, incluidos {{repoCount}} enlaces al repositorio de GitHub.",
-    "failed-error": "Error de conexión: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "La carga del texto falló, verifique la red y vuelva a intentarlo."
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "Conexión exitosa: {{tweetCount}} tweets analizados, incluidos {{repoCount}} enlaces al repositorio de GitHub.",
-    "failed-error": "Error de conexión: {{error}}"
   },
   "discoveryChannel": {
     "trending": "tendencia",
@@ -177,15 +134,5 @@
   },
   "discoveryPlatform": {
     "All": "Todas las plataformas"
-  },
-  "trendingHistoryPanel": {
-    "title": "Cambios de ranking",
-    "hint": "Comparado con el último día registrado",
-    "new-entry": "Nuevo en la lista",
-    "rising": "Sube",
-    "falling": "Baja",
-    "streak-days": "{{v1}} días seguidos",
-    "stars-gained": "+{{v1}} stars desde la primera vez",
-    "first-seen": "El primero se registró {{v1}}"
   }
 }

@@ -261,16 +261,12 @@
     "searching-vector-index": "ベクター ライブラリを検索…",
     "ai-semantic-reranking": "AI セマンティック並べ替え…",
     "github-token-not-found-please-login-again": "GitHub トークンが見つかりません。再度ログインしてください。",
-    "failed-to-get-github-username-please-login-again": "GitHub ユーザー名を取得できません。再度ログインしてください。",
-    "synced-v1-lists-applied-to-appliedtotal-unlocked": "{{v1}} 個のリストが同期され、ロックされていない {{appliedTotal}} 個のウェアハウスに適用されました: {{listSummary}}{{createdHint}}",
-    "list-sync-failed-starred-repositories-were-synce": "リストの同期に失敗しました。スター ウェアハウスは同期されました。後でもう一度試すか、GitHub トークンの権限を確認してください (ユーザー スコープが必要です)。",
     "sync-completed-found-newrepocount-new-repositori": "同期が完了しました！ {{newRepoCount}} 個の新しいリポジトリが見つかりました。",
     "sync-completed-all-repositories-are-up-to-date": "同期が完了しました！すべてのリポジトリは最新です。",
     "github-token-has-expired-or-is-invalid-please-lo": "GitHub トークンの有効期限が切れているか、無効です。再度ログインしてください。",
     "sync-failed-please-check-your-network-connection": "同期に失敗しました。ネットワーク接続を確認するか、後でもう一度試してください。",
     "list-sync-new-categories_one": "（{{count}} 個の分類を新規作成）",
-    "list-sync-new-categories_other": "（{{count}} 個の分類を新規作成）",
-    "list-sync-complete": "{{lists}} 個の list を同期しました（{{newCount}} 個の分類を新規作成）。"
+    "list-sync-new-categories_other": "（{{count}} 個の分類を新規作成）"
   },
   "repositoryHealthPanel": {
     "activity": "アクティビティ",

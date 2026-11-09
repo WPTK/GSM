@@ -9,23 +9,11 @@
     "backend-connection-successful": "¡La conexión de backend fue exitosa!",
     "backend-not-available": "El servidor no está disponible",
     "partial-sync-failure-v1-failed-v2-succeeded": "Error de sincronización parcial: {{v1}} falló, {{v2}} se realizó correctamente",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "Sincronizado con el backend: almacén {{v1}}, versión {{v2}}, configuración de AI {{v3}}, configuración de WebDAV {{v4}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "Sincronizado con el backend: almacén {{v1}}, versión {{v2}}, configuración de AI {{v3}}",
     "sync-failed": "Error de sincronización",
     "sync-from-backend": "Sincronización desde el backend",
     "syncing-from-backend-will-overwrite-local-data-c": "La sincronización desde el backend sobrescribirá los datos locales. ¿Quieres continuar?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Sincronizado desde backend: Almacén {{v1}}, Versión {{v2}}, Configuración AI {{v3}}, Configuración WebDAV {{v4}}"
-  },
-  "useBackupActions": {
-    "please-configure-and-activate-webdav-service-fir": "Primero configure y active el servicio WebDAV.",
-    "data-backup-successful": "¡Copia de seguridad de datos exitosa!",
-    "data-backup-failed": "¡La copia de seguridad de datos falló!",
-    "backup-failed": "Error en la copia de seguridad",
-    "restore-data": "Recuperar datos",
-    "restoring-data-will-overwrite-all-current-data-c": "La restauración de datos sobrescribirá todos los datos actuales. ¿Quieres continuar?",
-    "no-backup-files-found": "Archivo de copia de seguridad no encontrado.",
-    "backup-file-is-empty-cannot-restore": "El contenido del archivo de copia de seguridad está vacío y no se puede restaurar.",
-    "data-restored-from-backup-repositories-v1-releas": "Datos restaurados desde la copia de seguridad: Almacén {{v1}}, Versión {{v2}}, Clasificación personalizada {{v3}}.",
-    "restore-failed": "La recuperación falló"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Sincronizado desde backend: Almacén {{v1}}, Versión {{v2}}, Configuración AI {{v3}}"
   },
   "useDesktopActions": {
     "load-failed": "Error al cargar",
@@ -53,24 +41,6 @@
   },
   "useNetworkActions": {
     "save-failed": "Error al guardar"
-  },
-  "useStarSyncActions": {
-    "not-connected-to-github-yet": "No has iniciado sesión en GitHub, conéctate primero",
-    "push-categories-to-github-lists": "Sincronizar la clasificación del almacén con la lista de GitHub",
-    "push-confirm-body-selected": "Categorías seleccionadas: {{count}}. Se escribirán en listas de GitHub con el mismo nombre:\n\n· Las listas existentes con el mismo nombre se sobrescribirán (se quitan los repositorios que ya no coinciden)\n· Las listas que falten se crearán (privadas por defecto)\n· Las demás listas no se modifican\n\n¿Continuar?",
-    "push-confirm-body": "Escriba cada categoría local (incluidas las categorías predeterminadas y personalizadas) en la Lista de GitHub con el mismo nombre:\n\n· Una lista con el mismo nombre sobrescribirá a sus miembros (los repositorios que no coincidan con la categoría serán eliminados de la lista)\n· Si no hay una lista con el mismo nombre, crea una nueva (privada por defecto)\n· El almacén se añadirá al listado correspondiente según su clasificación coincidente\n· Se conservarán otras membresías de la lista que no pertenecen a la categoría local.\n\n¿Estás seguro de que quieres continuar?"
-  },
-  "useWebDAVActions": {
-    "webdav-url-is-required": "Se requiere la URL de WebDAV",
-    "webdav-url-must-start-with-http-or-https": "La URL de WebDAV debe comenzar con http:// o https://",
-    "username-is-required": "El nombre de usuario es obligatorio",
-    "password-is-required": "Se requiere contraseña",
-    "path-is-required": "Se requiere camino",
-    "path-must-start-with": "La ruta debe comenzar con /",
-    "custom-user-agent-invalid-chars": "El User-Agent personalizado solo puede contener caracteres latinos (Latin-1)",
-    "webdav-connection-successful": "¡Conexión WebDAV exitosa!",
-    "webdav-connection-failed-please-check-configurat": "La conexión WebDAV falló, verifique la configuración.",
-    "webdav-test-failed": "La prueba WebDAV falló"
   },
   "generalPanel": {
     "account-token-hint": "Cuenta corriente {{login}}. Después del vencimiento, puede reemplazar el token directamente aquí sin cerrar sesión.",

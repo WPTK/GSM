@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "Externe Entdeckungs-Feeds",
-    "manageRss": "RSS-Entdeckungskanal",
-    "name": "Kanalname",
-    "url": "HTTPS-Feed-URL",
-    "add": "Feed hinzufügen",
-    "checking": "Feed wird geprüft…",
-    "copy": "Kopieren",
-    "copied": "Kopiert",
-    "rssFormat": "Füge eine öffentliche RSS- oder Atom-Feed-URL ein – die App extrahiert die darin genannten GitHub-Repositories (erste 30 pro Aktualisierung).",
-    "rss-invalid": "Keine GitHub-Repository-Links im Feed gefunden.",
-    "remove": "{{name}} entfernen",
-    "format": "Füge einen öffentlichen HTTPS-Link ein, dessen JSON-Antwort GitHub-Repositories im Feld „repositories“ auflistet – bis zu 30 öffentliche Repositories.",
-    "cors-note": "Die Website muss Browseranfragen (CORS) erlauben. Das GitHub-Token wird nicht an den Feed gesendet.",
-    "invalid": "Geben Sie einen Namen und eine gültige HTTPS-URL ein.",
-    "duplicate": "Der Feed ist bereits vorhanden oder das Limit von zehn Feeds wurde erreicht.",
-    "invalid-format": "Das JSON enthält keine gültige Repository-Liste.",
-    "cors": "Feed konnte nicht gelesen werden. Prüfen Sie URL und CORS-Einstellungen.",
-    "unreadable": "Feed konnte nicht gelesen werden. Prüfen Sie URL, Verfügbarkeit und JSON-Format."
+    "copied": "Kopiert"
   },
   "discoverySidebar": {
     "just-now": "Nur",
@@ -42,18 +25,12 @@
     "items-2": "individuell)",
     "syncing-weekly-submissions-v1-scanned": "Wöchentliche Übermittlungen werden synchronisiert... {{v1}} Elemente gescannt",
     "fetching-repo-details-v1-v2": "Vollständige Lagerdetails... {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "Abrufen der Chronik der Blogger, denen Sie folgen... {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "Nachrichten von folgenden Kanälen werden abgerufen... {{v1}}/{{v2}}",
     "just-now": "Nur",
     "diffmin-m-ago": "Vor {{diffMin}} Minuten",
     "diffhours-h-ago": "Vor {{diffHours}} Stunden",
     "updated": "aktualisiert am",
     "refresh": "auffrischen",
     "each-refresh-shows-different-content": "Bei jeder Aktualisierung können Sie andere Inhalte sehen",
-    "time-range": "Zeitbereich",
-    "today": "Heute",
-    "this-week": "diese Woche",
-    "this-month": "diesen Monat",
     "topic-filter": "Themenfilter",
     "topic": "Thema",
     "ai": "KI",
@@ -66,10 +43,6 @@
     "game": "Spiel",
     "only-show-submissions-included-in-the-weekly-iss": "Zeigen Sie nur Beiträge an, die im Wochenmagazin enthalten sind",
     "in-weekly": "Wöchentlich inklusive",
-    "manage-the-follow-list": "Verwalten Sie die Liste der Blogger, denen Sie folgen möchten",
-    "follow-list": "Beobachtungsliste",
-    "manage-the-channel-list": "Folgende Kanalliste verwalten",
-    "channel-list": "Kanalliste",
     "stop-analysis": "Stoppen Sie die Analyse",
     "stop": "stoppen",
     "analyze-with-ai": "KI-Analyse",
@@ -90,11 +63,7 @@
     "waiting-for-github-api-response": "GitHub-API antwortet",
     "repo-search": "Lagersuche",
     "enter-keywords-to-search-github-repositories": "Geben Sie Schlüsselwörter ein, um GitHub-Repositorys zu durchsuchen",
-    "x-tweets": "X-Tweet",
-    "fetches-github-projects-from-followed-accounts-l": "Stellen Sie eine direkte Verbindung zu x.com her, um die GitHub-Projekte in den neuesten Tweets der Blogger zu sehen, denen Sie folgen. Es ist eine Desktop-Version oder ein Servermodus erforderlich.",
     "start-sync": "Beginnen Sie mit der Synchronisierung",
-    "telegram-channels": "Telegram-Kanal",
-    "fetches-github-projects-from-followed-channels-m": "Stellen Sie eine direkte Verbindung zur öffentlichen Vorschau von t.me her, um GitHub-Projekte in Follow-Channel-Nachrichten zu erfassen. Es ist eine Desktop-Version oder ein Servermodus erforderlich.",
     "ruanyifeng-weekly": "Ruan Yifeng Weekly",
     "sync-open-source-submissions-from-the-weekly-ear": "Synchronisieren Sie die Open-Source-Projekteinreichungen von Technology Enthusiasts Weekly und erhalten Sie automatisch frühere Einreichungen, wenn Sie mehr laden",
     "no-data-yet": "Noch keine Daten",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "GitHub-Token nicht gefunden, bitte melden Sie sich erneut an.",
     "failed-to-load-more-please-retry": "Es konnten keine weiteren Dateien geladen werden. Bitte versuchen Sie es erneut",
-    "failed-to-fetch-x-tweets": "X Tweets konnten nicht abgerufen werden",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "X-Tweets konnten nicht abgerufen werden. Bitte überprüfen Sie die Netzwerkverbindung oder überprüfen Sie das X-Authentifizierungs-Cookie in den Einstellungen.",
-    "failed-to-fetch-telegram-messages": "Der Abruf der Telegram-Nachricht ist fehlgeschlagen",
-    "failed-to-fetch-telegram-messages-please-check-y": "Es konnten keine Telegram-Nachrichten empfangen werden. Bitte überprüfen Sie die Netzwerkverbindung oder folgen Sie dem Kanal.",
     "failed-to-fetch-data-please-check-your-network-c": "Daten konnten nicht abgerufen werden. Bitte überprüfen Sie die Netzwerkverbindung oder den GitHub-Token.",
     "please-configure-ai-service-in-settings-first": "Bitte konfigurieren Sie zunächst den AI-Dienst in den Einstellungen.",
     "ai-service-configuration-is-incomplete-please-ch": "Die Konfiguration des AI-Dienstes ist unvollständig. Bitte überprüfen Sie den API-Endpunkt, den Schlüssel und den Modellnamen.",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "Die KI-Analyse ist fehlgeschlagen. Bitte überprüfen Sie die KI-Konfiguration und die Netzwerkverbindung",
     "ai-analysis-failed-please-check-your-ai-configur": "Die KI-Analyse ist fehlgeschlagen. Bitte überprüfen Sie die KI-Konfiguration."
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "Verbindung erfolgreich: {{messageCount}} Kanalnachrichten wurden analysiert, einschließlich {{repoCount}} GitHub-Repository-Links.",
-    "failed-error": "Verbindung fehlgeschlagen: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "Das Laden des Textes ist fehlgeschlagen. Bitte überprüfen Sie das Netzwerk und versuchen Sie es erneut"
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "Verbindung erfolgreich: {{tweetCount}} Tweets analysiert, einschließlich {{repoCount}} GitHub-Repository-Links.",
-    "failed-error": "Verbindung fehlgeschlagen: {{error}}"
   },
   "discoveryChannel": {
     "trending": "Trend",
@@ -177,15 +134,5 @@
   },
   "discoveryPlatform": {
     "All": "Alle Plattformen"
-  },
-  "trendingHistoryPanel": {
-    "title": "Veränderungen im Ranking",
-    "hint": "Vergleich mit dem zuletzt erfassten Tag",
-    "new-entry": "Neu in der Liste",
-    "rising": "Gestiegen",
-    "falling": "Gefallen",
-    "streak-days": "{{v1}} Tage in Folge",
-    "stars-gained": "+{{v1}} stars seit dem ersten Eintrag",
-    "first-seen": "Erster Eintrag des Spitzenreiters {{v1}}"
   }
 }

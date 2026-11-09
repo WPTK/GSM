@@ -261,16 +261,12 @@
     "searching-vector-index": "检索向量库…",
     "ai-semantic-reranking": "AI 语义重排序…",
     "github-token-not-found-please-login-again": "GitHub token 未找到，请重新登录。",
-    "failed-to-get-github-username-please-login-again": "无法获取 GitHub 用户名，请重新登录。",
-    "synced-v1-lists-applied-to-appliedtotal-unlocked": "已同步 {{v1}} 个 list，并应用到 {{appliedTotal}} 个未锁定仓库：{{listSummary}}{{createdHint}}",
-    "list-sync-failed-starred-repositories-were-synce": "List 同步失败，星标仓库已同步。请稍后重试，或检查 GitHub Token 权限（需 user scope）。",
     "sync-completed-found-newrepocount-new-repositori": "同步完成！发现 {{newRepoCount}} 个新仓库。",
     "sync-completed-all-repositories-are-up-to-date": "同步完成！所有仓库都是最新的。",
     "github-token-has-expired-or-is-invalid-please-lo": "GitHub token 已过期或无效，请重新登录。",
     "sync-failed-please-check-your-network-connection": "同步失败，请检查网络连接或稍后重试。",
     "list-sync-new-categories_one": "（新建 {{count}} 个分类）",
-    "list-sync-new-categories_other": "（新建 {{count}} 个分类）",
-    "list-sync-complete": "已同步 {{lists}} 个 list（新建 {{newCount}} 个分类）。"
+    "list-sync-new-categories_other": "（新建 {{count}} 个分类）"
   },
   "repositoryHealthPanel": {
     "activity": "活跃度",

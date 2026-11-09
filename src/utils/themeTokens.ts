@@ -19,7 +19,7 @@ export const DEFAULT_THEME_TOKENS: ThemeTokens = {
 /** 可选的强调色（与主题预设的色相拉开，深浅两种模式都能看清）。 */
 export const ACCENT_PRESETS = [
   '#2563eb', '#7c3aed', '#db2777', '#dc2626',
-  '#ea580c', '#ca8a04', '#16a34a', '#0891b2',
+  '#0d9488', '#4f46e5', '#16a34a', '#0891b2',
 ] as const;
 
 export const ACCENT_PRESET_NAME_KEYS: Record<(typeof ACCENT_PRESETS)[number], string> = {
@@ -27,8 +27,8 @@ export const ACCENT_PRESET_NAME_KEYS: Record<(typeof ACCENT_PRESETS)[number], st
   '#7c3aed': 'themeSettingsCard.color-violet',
   '#db2777': 'themeSettingsCard.color-pink',
   '#dc2626': 'themeSettingsCard.color-red',
-  '#ea580c': 'themeSettingsCard.color-orange',
-  '#ca8a04': 'themeSettingsCard.color-yellow',
+  '#0d9488': 'themeSettingsCard.color-teal',
+  '#4f46e5': 'themeSettingsCard.color-indigo',
   '#16a34a': 'themeSettingsCard.color-green',
   '#0891b2': 'themeSettingsCard.color-cyan',
 };

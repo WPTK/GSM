@@ -9,23 +9,11 @@
     "backend-connection-successful": "Backend connection successful!",
     "backend-not-available": "Backend not available",
     "partial-sync-failure-v1-failed-v2-succeeded": "Partial sync failure: {{v1}} failed, {{v2}} succeeded",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "Synced to backend: repos {{v1}}, releases {{v2}}, AI configs {{v3}}, WebDAV configs {{v4}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "Synced to backend: repos {{v1}}, releases {{v2}}, AI configs {{v3}}",
     "sync-failed": "Sync failed",
     "sync-from-backend": "Sync from Backend",
     "syncing-from-backend-will-overwrite-local-data-c": "Syncing from backend will overwrite local data. Continue?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Synced from backend: repos {{v1}}, releases {{v2}}, AI configs {{v3}}, WebDAV configs {{v4}}"
-  },
-  "useBackupActions": {
-    "please-configure-and-activate-webdav-service-fir": "Please configure and activate WebDAV service first.",
-    "data-backup-successful": "Data backup successful!",
-    "data-backup-failed": "Data backup failed!",
-    "backup-failed": "Backup failed",
-    "restore-data": "Restore Data",
-    "restoring-data-will-overwrite-all-current-data-c": "Restoring data will overwrite all current data. Continue?",
-    "no-backup-files-found": "No backup files found.",
-    "backup-file-is-empty-cannot-restore": "Backup file is empty, cannot restore.",
-    "data-restored-from-backup-repositories-v1-releas": "Data restored from backup: repositories {{v1}}, releases {{v2}}, custom categories {{v3}}.",
-    "restore-failed": "Restore failed"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Synced from backend: repos {{v1}}, releases {{v2}}, AI configs {{v3}}"
   },
   "useDesktopActions": {
     "load-failed": "Load failed",
@@ -53,24 +41,6 @@
   },
   "useNetworkActions": {
     "save-failed": "Save failed"
-  },
-  "useStarSyncActions": {
-    "not-connected-to-github-yet": "Not connected to GitHub yet",
-    "push-categories-to-github-lists": "Push categories to GitHub lists",
-    "push-confirm-body-selected": "Selected categories: {{count}}. They will be written to GitHub Lists of the same name:\n\n· Existing same-name lists will be overwritten (repos no longer matching are removed)\n· Missing lists will be created (private by default)\n· Other lists are not touched\n\nContinue?",
-    "push-confirm-body": "Each local category (default & custom) will be written to a GitHub List of the same name:\n\n· Existing same-name lists will be overwritten (repos no longer matching are removed)\n· Missing lists will be created (private by default)\n· Repos are added to the lists matching their category\n· Memberships in lists not managed locally are preserved\n\nContinue?"
-  },
-  "useWebDAVActions": {
-    "webdav-url-is-required": "WebDAV URL is required",
-    "webdav-url-must-start-with-http-or-https": "WebDAV URL must start with http:// or https://",
-    "username-is-required": "Username is required",
-    "password-is-required": "Password is required",
-    "path-is-required": "Path is required",
-    "path-must-start-with": "Path must start with /",
-    "custom-user-agent-invalid-chars": "Custom User-Agent can only contain Latin-1 characters",
-    "webdav-connection-successful": "WebDAV connection successful!",
-    "webdav-connection-failed-please-check-configurat": "WebDAV connection failed. Please check configuration.",
-    "webdav-test-failed": "WebDAV test failed"
   },
   "generalPanel": {
     "account-token-hint": "Signed in as {{login}}. Update an expired token here without logging out.",
