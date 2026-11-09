@@ -1,0 +1,56 @@
+# Hosts that may appear as absolute URLs in the built frontend (dist/) and
+# server (server/dist/). Checked by `npm run check:egress`. Exact hosts only.
+
+[runtime]
+# Contacted by the server on the user's behalf (see server/src/services/proxyService.ts).
+api.github.com
+github.com
+raw.githubusercontent.com
+avatars.githubusercontent.com
+user-images.githubusercontent.com
+private-user-images.githubusercontent.com
+repository-images.githubusercontent.com
+api.anthropic.com
+edge.microsoft.com
+clients5.google.com
+grep.app
+
+[link-outs]
+# Shown to the user as links; the app never fetches them.
+zread.ai
+
+[namespaces-and-library-strings]
+# XML namespaces and URLs embedded in third-party library code or CSS.
+www.w3.org
+www.eclipse.org
+www.ibm.com
+chevrotain.io
+langium.org
+en.wikipedia.org
+react.dev
+rolldown.rs
+tailwindcss.com
+
+[placeholders]
+# Example values in form fields and docs strings.
+example.com
+api.example.com
+search.example.com
+query-string.invalid
+localhost
+127.0.0.1
+
+[pending-phase-3]
+# AI provider preset hosts, to be replaced by a server-side list.
+api.openai.com
+api.deepseek.com
+api.cohere.com
+generativelanguage.googleapis.com
+api.siliconflow.cn
+api.xiaomimimo.com
+token-plan-cn.xiaomimimo.com
+integrate.api.nvidia.com
+
+[pending-phase-6]
+# Vector-search provider hosts.
+github-stars-vectorize.your-name.workers.dev
