@@ -57,6 +57,11 @@ const GREP_ALLOWED_PARAMS = new Set(['q', 'words', 'regexp', 'case', 'f.lang', '
 const TRANSLATE_PARAM_VALUE = /^[A-Za-z0-9_.-]{0,32}$/;
 
 function relayUpstream(res: Response, status: number, headers: Record<string, string>, data: unknown): void {
+  // An upstream 401/403 is not about this user's session; passing it on would look like a logout.
+  if (status === 401 || status === 403) {
+    res.status(502).json({ error: 'Upstream refused the request', code: 'UPSTREAM_ERROR' });
+    return;
+  }
   const retryAfter = headers['retry-after'];
   if (retryAfter) res.set('Retry-After', retryAfter);
   res.set('X-Content-Type-Options', 'nosniff');

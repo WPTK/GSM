@@ -1,3 +1,4 @@
+import { EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
 import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
@@ -306,8 +307,8 @@ router.get('/api/settings', (_req, res) => {
       const key = row.key as string;
       const value = row.value as string | null;
 
-      // The GitHub token is server-side configuration (GITHUB_TOKEN); never reported here.
-      if (key === 'github_token') continue;
+      // Server-side configuration (GITHUB_TOKEN) and legacy rows are never reported here.
+      if (EXCLUDED_SETTING_KEYS.has(key)) continue;
 
       settings[key] = value;
     }

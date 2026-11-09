@@ -8,8 +8,56 @@ const MAX_URL_LENGTH = 2048;
 const CACHE_MAX_BYTES = 64 * 1024 * 1024;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const BROWSER_CACHE_SECONDS = 7 * 24 * 60 * 60;
+/** Signed private-image URLs expire quickly; keep them no longer than this. */
+const PRIVATE_IMAGE_TTL_MS = 5 * 60 * 1000;
+const PRIVATE_IMAGE_BROWSER_CACHE_SECONDS = 5 * 60;
+const MAX_CONCURRENT_UPSTREAM = 4;
+const MAX_QUEUED_UPSTREAM = 32;
+const QUEUE_WAIT_MS = 10000;
 
 export const imageCache = new ImageCache(CACHE_MAX_BYTES, CACHE_TTL_MS);
+
+/** Bounds concurrent upstream fetches; extra requests wait briefly, then get 503. */
+class UpstreamGate {
+  private active = 0;
+  private readonly waiters: Array<() => void> = [];
+
+  async acquire(): Promise<boolean> {
+    if (this.active < MAX_CONCURRENT_UPSTREAM) {
+      this.active++;
+      return true;
+    }
+    if (this.waiters.length >= MAX_QUEUED_UPSTREAM) return false;
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        const i = this.waiters.indexOf(grant);
+        if (i >= 0) this.waiters.splice(i, 1);
+        resolve(false);
+      }, QUEUE_WAIT_MS);
+      const grant = (): void => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      this.waiters.push(grant);
+    });
+  }
+
+  release(): void {
+    const next = this.waiters.shift();
+    if (next) next(); // the slot passes straight to the next waiter
+    else this.active--;
+  }
+}
+
+const upstreamGate = new UpstreamGate();
+
+const PRIVATE_IMAGE_HOST = 'private-user-images.githubusercontent.com';
+
+/** Cache key: the signed query of private images is never stored or kept as a key. */
+function cacheKeyFor(url: URL): string {
+  if (url.hostname.toLowerCase() === PRIVATE_IMAGE_HOST) return `${url.origin}${url.pathname}`;
+  return url.toString();
+}
 
 const IMAGE_CDN_HOSTS = new Set([
   'avatars.githubusercontent.com',
@@ -57,12 +105,13 @@ function baseContentType(header: string | undefined): string | null {
 function sendImage(
   res: import('express').Response,
   image: { body: Buffer; contentType: string },
+  isPrivate = false,
 ): void {
   res.status(200);
   res.set({
     'Content-Type': image.contentType,
     'Content-Length': String(image.body.length),
-    'Cache-Control': `private, max-age=${BROWSER_CACHE_SECONDS}`,
+    'Cache-Control': `private, max-age=${isPrivate ? PRIVATE_IMAGE_BROWSER_CACHE_SECONDS : BROWSER_CACHE_SECONDS}`,
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'none'; sandbox",
   });
@@ -95,15 +144,23 @@ router.get('/api/img', async (req, res) => {
     return;
   }
 
-  const cacheKey = target.toString();
+  const isPrivate = target.hostname.toLowerCase() === PRIVATE_IMAGE_HOST;
+  const cacheKey = cacheKeyFor(target);
   const cached = imageCache.get(cacheKey);
   if (cached) {
-    sendImage(res, cached);
+    sendImage(res, cached, isPrivate);
     return;
   }
 
-  const result = await proxyRequest({
-    url: cacheKey,
+  if (!(await upstreamGate.acquire())) {
+    res.set('Retry-After', '2');
+    res.status(503).json({ error: 'Image proxy is busy', code: 'BUSY' });
+    return;
+  }
+  let result: Awaited<ReturnType<typeof proxyRequest>>;
+  try {
+    result = await proxyRequest({
+    url: target.toString(),
     method: 'GET',
     // No credentials: these are public image locations.
     headers: { Accept: 'image/*', 'User-Agent': 'GithubStarsManager-Backend' },
@@ -111,7 +168,10 @@ router.get('/api/img', async (req, res) => {
     responseType: 'buffer',
     maxBytes: MAX_IMAGE_BYTES,
     checkUrl: assertAllowedImageUrl,
-  });
+    });
+  } finally {
+    upstreamGate.release();
+  }
 
   if (result.status === 413) {
     res.status(413).json({ error: 'Image too large', code: 'IMAGE_TOO_LARGE' });
@@ -141,8 +201,8 @@ router.get('/api/img', async (req, res) => {
   }
 
   const image = { body: result.data, contentType };
-  imageCache.set(cacheKey, image);
-  sendImage(res, image);
+  imageCache.set(cacheKey, image, Date.now(), isPrivate ? PRIVATE_IMAGE_TTL_MS : CACHE_TTL_MS);
+  sendImage(res, image, isPrivate);
 });
 
 export default router;

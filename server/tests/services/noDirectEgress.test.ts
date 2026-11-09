@@ -26,6 +26,12 @@ const FORBIDDEN: Array<[string, RegExp]> = [
   ['http/https import', /from\s+['"](?:node:)?https?['"]|require\(\s*['"](?:node:)?https?['"]\s*\)/],
   ['net/tls socket', /from\s+['"](?:node:)?(?:net|tls|http2)['"]/],
   ['undici/node-fetch/got', /from\s+['"](?:undici|node-fetch|got|superagent|ky)['"]/],
+  ['globalThis.fetch', /\b(?:globalThis|global|window|self)\s*(?:\.\s*fetch|\[\s*['"]fetch['"]\s*\])/],
+  ['dynamic import of http/https/net/tls', /import\(\s*['"](?:node:)?(?:https?|net|tls|http2|dgram|undici|axios)['"]\s*\)/],
+  ['createRequire(...)(network module)', /createRequire\s*\([^)]*\)\s*\(\s*['"](?:node:)?(?:https?|net|tls|http2|dgram|undici|axios|node-fetch|got)['"]\s*\)/],
+  ['require of undici/node-fetch/got', /require\(\s*['"](?:undici|node-fetch|got|superagent|ky)['"]\s*\)/],
+  ['require of net/tls/dgram', /require\(\s*['"](?:node:)?(?:net|tls|http2|dgram)['"]\s*\)/],
+  ['import of dgram', /from\s+['"](?:node:)?dgram['"]/],
   ['XMLHttpRequest/WebSocket', /\b(?:XMLHttpRequest|new\s+WebSocket)\b/],
 ];
 
@@ -40,6 +46,20 @@ describe('central egress', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('the detector catches the bypasses it claims to', () => {
+    const samples = [
+      'globalThis.fetch(url)',
+      'await import("node:https")',
+      "createRequire(import.meta.url)('http')",
+      "require('undici')",
+      "import tls from 'node:tls'",
+      "const net = require('net')",
+    ];
+    for (const code of samples) {
+      expect(FORBIDDEN.some(([, re]) => re.test(code)), code).toBe(true);
+    }
   });
 
   it('proxyService is the one place that imports axios', () => {

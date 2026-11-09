@@ -39,6 +39,14 @@ function shouldUpgradeInsecureRequests(): boolean {
  *
  * @returns Configured Express application.
  */
+morgan.token('safe-path', (req) => ((req as { originalUrl?: string }).originalUrl ?? req.url ?? '').split('?')[0]);
+morgan.token('safe-referrer', (req) => {
+  const ref = req.headers.referer ?? req.headers.referrer;
+  return typeof ref === 'string' ? ref.split('?')[0].split('#')[0] : '-';
+});
+export const ACCESS_LOG_FORMAT =
+  ':remote-addr - :remote-user [:date[clf]] ":method :safe-path HTTP/:http-version" :status :res[content-length] ":safe-referrer" ":user-agent"';
+
 export function createApp(): express.Express {
   const app = express();
   const upgradeInsecureRequests = shouldUpgradeInsecureRequests();
@@ -64,12 +72,15 @@ export function createApp(): express.Express {
       referrerPolicy: { policy: 'no-referrer' },
     }),
   );
-  app.use(morgan('combined', { stream: morganLoggerStream }));
+  // Access log: path only. Query strings can carry secrets (signed image URLs, search terms),
+  // and Referer headers can carry them too, so neither is ever logged.
+  app.use(morgan(ACCESS_LOG_FORMAT, { stream: morganLoggerStream }));
 
-  // In separated deployments behind a trusted reverse proxy (e.g. Nginx),
-  // trust the immediate proxy hop so req.ip reflects the actual client IP.
-  // Full-stack single-process deployments (with STATIC_DIR) do not trust proxies
-  // by default unless explicitly configured via TRUST_PROXY.
+  // TRUST_PROXY (default: off). Set it only when a reverse proxy you control sits in front, so
+  // req.ip and the https/Secure-cookie detection come from its X-Forwarded-* headers. Accepts
+  // 'true', 'false', a hop count ('1'), or an Express trust-proxy value such as 'loopback' or a
+  // CIDR list. The front proxy must also preserve the Host header: the CSRF check compares
+  // Origin with Host. Revisit in Phase 4 (deployment).
   if (process.env.TRUST_PROXY) {
     const rawTrustProxy = process.env.TRUST_PROXY.trim();
     if (rawTrustProxy === 'true') {

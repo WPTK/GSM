@@ -175,4 +175,60 @@ describe('outbound allowlist', () => {
     expect(axiosMock.mock.calls[2][0].responseType).toBe('arraybuffer');
     expect(asBuffer.data).toEqual(Buffer.from([1, 2, 3]));
   });
+  it('requires https and the default port', () => {
+    expect(() => assertOutboundAllowed('http://api.github.com/user')).toThrow(RequestRejectedError);
+    expect(() => assertOutboundAllowed('https://api.github.com:8443/user')).toThrow(RequestRejectedError);
+    expect(() => assertOutboundAllowed('https://api.github.com:443/user')).not.toThrow();
+    expect(() => assertOutboundAllowed('wss://api.github.com/x')).toThrow(RequestRejectedError);
+  });
+
+  it('drops every header except Accept, User-Agent and Content-Type on a cross-origin hop', async () => {
+    axiosMock
+      .mockResolvedValueOnce({ status: 302, headers: { location: 'https://raw.githubusercontent.com/x' }, data: '' })
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+    await proxyRequest({
+      url: 'https://api.github.com/start',
+      method: 'GET',
+      responseType: 'text',
+      headers: {
+        Accept: 'text/plain',
+        'User-Agent': 'ua',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer secret',
+        'x-api-key': 'secret',
+        'anthropic-version': '2023-06-01',
+        Cookie: 'a=b',
+      },
+    });
+    const second = axiosMock.mock.calls[1][0].headers as Record<string, string>;
+    expect(Object.keys(second).map((k) => k.toLowerCase()).sort()).toEqual(['accept', 'content-type', 'user-agent']);
+  });
+
+  it('keeps all headers on a same-origin hop', async () => {
+    axiosMock
+      .mockResolvedValueOnce({ status: 302, headers: { location: '/other' }, data: '' })
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+    await proxyRequest({ url: 'https://api.github.com/start', method: 'GET', responseType: 'text', headers: { 'x-api-key': 'k' } });
+    expect(axiosMock.mock.calls[1][0].headers['x-api-key']).toBe('k');
+  });
+
+  it('never puts upstream error text in the client body', async () => {
+    axiosMock.mockRejectedValueOnce({ isAxiosError: true, code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 10.1.2.3:443 /secret?token=abc' });
+    const refused = await proxyRequest({ url: 'https://api.github.com/x', method: 'GET' });
+    expect(JSON.stringify(refused.data)).not.toMatch(/10\.1\.2\.3|token=abc|details/);
+    axiosMock.mockRejectedValueOnce(new Error('internal failure token=abc'));
+    const bad = await proxyRequest({ url: 'https://api.github.com/x', method: 'GET' });
+    expect(bad.status).toBe(502);
+    expect(JSON.stringify(bad.data)).not.toMatch(/token=abc|details/);
+  });
+
+  it('blocks private, CGNAT, loopback and link-local IP literals by CIDR', async () => {
+    const { isPrivateOrLoopback } = await import('../../src/services/proxyService.js');
+    for (const h of ['100.64.0.1', '100.127.255.254', '127.5.5.5', '169.254.10.10', '10.9.9.9', '172.31.0.1', '192.168.1.1', '::1', 'fc00::1', 'fdab::1', 'fe80::1', 'febf::1', '::ffff:100.64.0.1']) {
+      expect(isPrivateOrLoopback(h), h).toBe(true);
+    }
+    for (const h of ['100.63.255.255', '100.128.0.0', '8.8.8.8', '172.32.0.1', '2606:4700::1111']) {
+      expect(isPrivateOrLoopback(h), h).toBe(false);
+    }
+  });
 });

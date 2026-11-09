@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios';
+import { BlockList, isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress, LookupOptions } from 'node:dns';
 import { Agent as HttpAgent, type AgentOptions as HttpAgentOptions } from 'node:http';
@@ -65,11 +66,16 @@ export function resetOutboundAllowlistForTests(): void {
  * Logs the host only, never the path, query string or credentials.
  */
 export function assertOutboundAllowed(rawUrl: string | URL): void {
-  let hostname: string;
+  let parsed: URL;
   try {
-    hostname = (rawUrl instanceof URL ? rawUrl : new URL(rawUrl)).hostname;
+    parsed = rawUrl instanceof URL ? rawUrl : new URL(rawUrl);
   } catch {
     throw new RequestRejectedError('Blocked outbound request: invalid URL', 400, 'INVALID_URL');
+  }
+  const hostname = parsed.hostname;
+  if (parsed.protocol !== 'https:' || (parsed.port !== '' && parsed.port !== '443')) {
+    logger.warn('egress.blocked', `host=${hostname.toLowerCase()} reason=scheme-or-port`);
+    throw new RequestRejectedError('Outbound requests must use https on the default port', 403, 'EGRESS_BLOCKED');
   }
   const host = hostname.toLowerCase().replace(/\.$/, '').replace(/^\[(.+)\]$/, '$1');
   if (!getOutboundAllowlist().has(host)) {
@@ -115,7 +121,23 @@ export interface ProxyResponse {
 }
 
 const BLOCKED_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.169.254']);
-const PRIVATE_IP_PATTERNS = [/^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./];
+
+/** Ranges that are never valid outbound targets (loopback, private, CGNAT, link-local, multicast). */
+const BLOCKED_RANGES = new BlockList();
+for (const [net, prefix] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
+  ['172.16.0.0', 12], ['192.168.0.0', 16], ['224.0.0.0', 4],
+] as const) BLOCKED_RANGES.addSubnet(net, prefix, 'ipv4');
+for (const [net, prefix] of [['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]] as const) {
+  BLOCKED_RANGES.addSubnet(net, prefix, 'ipv6');
+}
+
+/** True for an IP literal inside a blocked range. Hostnames return false. */
+function isBlockedIpLiteral(host: string): boolean {
+  const family = isIP(host);
+  if (family === 0) return false;
+  return BLOCKED_RANGES.check(host, family === 4 ? 'ipv4' : 'ipv6');
+}
 
 // 无论严格/宽松档，DNS 解析结果或 IP 字面量命中一律拒绝：云元数据（IMDS 的
 // v4/v6 端点）与未指定地址不可能是合法业务目标。宽松档（allowPrivate）仅
@@ -127,8 +149,9 @@ const MAX_REDIRECT_HOPS = 5;
 const DEFAULT_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-// 跨主机重定向不携带的凭证头，防止 Authorization/Cookie 泄露到跳转目标。
-const CREDENTIAL_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization']);
+// Headers that survive a cross-origin redirect hop. Everything else (Authorization, Cookie,
+// x-api-key, anthropic-*, ...) is dropped so credentials never follow a redirect to another origin.
+const CROSS_ORIGIN_SAFE_HEADERS = new Set(['accept', 'user-agent', 'content-type']);
 
 /** 过滤出策略允许的解析结果：IMDS/未指定地址任何档位拒绝，严格档额外拒绝私网/回环段。 */
 function filterAllowedAddresses(allowPrivate: boolean, addresses: LookupAddress[]): LookupAddress[] {
@@ -247,7 +270,7 @@ export function isPrivateOrLoopback(hostname: string): boolean {
   const h = normalizeHostname(hostname);
   if (BLOCKED_HOSTS.has(h)) return true;
   if (isLocalOrLanHostname(h)) return true;
-  if (PRIVATE_IP_PATTERNS.some(p => p.test(h))) return true;
+  if (isBlockedIpLiteral(h)) return true;
   if (isPrivateOrLocalIpv6(h)) return true;
   return false;
 }
@@ -281,8 +304,10 @@ export function validateUrl(rawUrl: string, opts: ValidateUrlOptions = {}): void
   if (isLocalOrLanHostname(hostname)) {
     throw new Error(`Blocked proxy request: LAN hostname '${hostname}' is not allowed`);
   }
-  if (PRIVATE_IP_PATTERNS.some(p => p.test(hostname))) {
-    throw new Error(`Blocked proxy request: private IP '${hostname}' is not allowed`);
+  if (isBlockedIpLiteral(hostname)) {
+    throw new Error(hostname.includes(':')
+      ? `Blocked proxy request: private IPv6 address '${hostname}' is not allowed`
+      : `Blocked proxy request: private IP '${hostname}' is not allowed`);
   }
   if (isPrivateOrLocalIpv6(hostname)) {
     throw new Error(`Blocked proxy request: private IPv6 address '${hostname}' is not allowed`);
@@ -362,10 +387,10 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
         const location = response.headers?.location;
         if (typeof location === 'string' && location) {
           const nextUrl = new URL(location, currentUrl).toString();
-          // A cross-origin (or https->http) hop drops credential headers.
+          // A cross-origin (or https->http) hop keeps only the safe header allowlist.
           if (new URL(nextUrl).origin !== new URL(currentUrl).origin) {
             currentHeaders = Object.fromEntries(
-              Object.entries(currentHeaders).filter(([k]) => !CREDENTIAL_HEADERS.has(k.toLowerCase())),
+              Object.entries(currentHeaders).filter(([k]) => CROSS_ORIGIN_SAFE_HEADERS.has(k.toLowerCase())),
             );
           }
           // 303 always becomes GET; 301/302 turn POST into GET; 307/308 keep method and body.
@@ -421,10 +446,12 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
         return { status: 413, headers: {}, data: { error: 'Response too large', code: 'RESPONSE_TOO_LARGE' } };
       }
       if (error.code === 'ECONNREFUSED') {
-        return { status: 502, headers: {}, data: { error: 'Proxy connection refused', code: 'PROXY_CONNECTION_REFUSED', details: error.message } };
+        logger.warn('proxy.error', 'upstream connection refused');
+        return { status: 502, headers: {}, data: { error: 'Proxy connection refused', code: 'PROXY_CONNECTION_REFUSED' } };
       }
       if (error.code === 'ETIMEDOUT') {
-        return { status: 504, headers: {}, data: { error: 'Proxy connection timeout', code: 'PROXY_TIMEOUT', details: error.message } };
+        logger.warn('proxy.error', 'upstream connection timed out');
+        return { status: 504, headers: {}, data: { error: 'Proxy connection timeout', code: 'PROXY_TIMEOUT' } };
       }
       if (error.response) {
         return {
@@ -435,6 +462,6 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
       }
     }
     logger.errorFromError('proxy.error', 'Proxy request failed', error);
-    return { status: 502, headers: {}, data: { error: 'Bad Gateway', code: 'BAD_GATEWAY', details: error instanceof Error ? error.message : 'Unknown error' } };
+    return { status: 502, headers: {}, data: { error: 'Bad Gateway', code: 'BAD_GATEWAY' } };
   }
 }

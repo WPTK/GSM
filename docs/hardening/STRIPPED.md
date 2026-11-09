@@ -16,3 +16,11 @@ Format: item -> files -> reason.
 - CORS middleware -> `server/src/index.ts`, dependencies `cors`, `@types/cors` -> the app is same-origin only.
 - HTML parser and legacy bundle -> dependencies `parse5` (server), `@vitejs/plugin-legacy` (root) -> unused after the above, and the legacy build doubled the shipped code.
 - Release and preview workflows -> `.github/workflows/docker-publish.yml`, `docker-publish-frontend.yml`, `docker-publish-fullstack.yml`, `build-desktop.yml`, `ui-preview.yml` -> the fork publishes nothing; CI builds the image without pushing. The `.github/ui-preview/` helper directory is left in place, unused.
+
+## Stream A: known limitations
+
+- Logout does not revoke a session. The cookie is a stateless signed token, so `DELETE /api/auth/session` only clears it in that browser. To revoke every session, rotate `API_SECRET` (the cookie key is derived from it).
+- The CSRF check compares `Origin` with `Host`. A front proxy must preserve the original `Host` header, or cookie-authenticated writes get 403 `CSRF_ORIGIN_MISMATCH`.
+- `TRUST_PROXY` (default off) is passed to Express `trust proxy`. Accepts `true`, `false`, a hop count, or values such as `loopback` or a CIDR list. Set it when a reverse proxy sits in front, so https detection (the `Secure` cookie flag) and client IPs come from `X-Forwarded-*`. Phase 4 (deployment) must decide the value.
+- Outbound requests need https on the default port, and the host must be on the allowlist. A local AI endpoint on http or a non-443 port (for example Ollama on 11434) is not reachable until it sits behind an https front on 443.
+- The legacy `proxy_config` and `rpc_download_config` settings rows are deleted by migration v4 and never served or exported.

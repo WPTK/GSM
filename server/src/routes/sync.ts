@@ -1,3 +1,4 @@
+import { EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
 import { decrypt } from '../services/crypto.js';
@@ -6,8 +7,6 @@ import { toDisplayPref, DESCRIPTION_DISPLAY_VALUES, TAGS_DISPLAY_VALUES } from '
 
 const router = Router();
 
-/** Settings keys that are server-side configuration and never travel through export/import. */
-const EXCLUDED_SETTING_KEYS = new Set(['github_token', 'proxy_config', 'rpc_download_config']);
 
 /** 与前端 NOASSERTION_KEYS 对齐：空白 / NOASSERTION / Other / none 等落 null。 */
 const NO_LICENSE_KEYS = new Set(['', 'noassertion', 'other', 'none', 'no-license']);

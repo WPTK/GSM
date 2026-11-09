@@ -233,7 +233,6 @@ describe('proxyRequest', () => {
     expect(result.data).toEqual({
       error: 'Proxy connection refused',
       code: 'PROXY_CONNECTION_REFUSED',
-      details: 'connect ECONNREFUSED',
     });
     expect(result.headers).toEqual({});
   });
@@ -308,7 +307,7 @@ describe('proxyRequest', () => {
     expect(cfg.data).toBe('{"repo":[]}');
   });
 
-  it('should forward to axios for a private-IP URL when allowPrivate is set (fixes #244 local AI)', async () => {
+  it('should forward to axios for a private-IP URL when allowPrivate is set (https, default port)', async () => {
     mockAxios.mockResolvedValueOnce({
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -316,7 +315,7 @@ describe('proxyRequest', () => {
     });
 
     const result = await proxyRequest({
-      url: 'http://192.168.1.10:11434/v1/chat/completions',
+      url: 'https://192.168.1.10/v1/chat/completions',
       method: 'POST',
       headers: { Authorization: 'Bearer local' },
       body: { model: 'llama', messages: [] },
@@ -325,12 +324,12 @@ describe('proxyRequest', () => {
 
     expect(result.status).toBe(200);
     const cfg = mockAxios.mock.calls[0][0];
-    expect(cfg.url).toBe('http://192.168.1.10:11434/v1/chat/completions');
+    expect(cfg.url).toBe('https://192.168.1.10/v1/chat/completions');
   });
 
   it('should return 502 without calling axios for a private-IP URL in strict mode', async () => {
     const result = await proxyRequest({
-      url: 'http://192.168.1.10:11434/v1/chat/completions',
+      url: 'https://192.168.1.10/v1/chat/completions',
       method: 'POST',
     });
 
@@ -376,12 +375,12 @@ describe('proxyRequest redirect & DNS hardening', () => {
 
     expect(result.status).toBe(502);
     expect(axiosMock).toHaveBeenCalledTimes(1); // 第二跳未发出
-    expect((result.data as { details: string }).details).toContain('127.0.0.1');
+    expect(result.data).toMatchObject({ code: 'BAD_GATEWAY' });
   });
 
   it('allows a redirect hop to a private address in allowPrivate mode', async () => {
     axiosMock
-      .mockResolvedValueOnce({ status: 302, headers: { location: 'http://192.168.1.10:11434/v1' }, data: '' })
+      .mockResolvedValueOnce({ status: 302, headers: { location: 'https://192.168.1.10/v1' }, data: '' })
       .mockResolvedValueOnce({ status: 200, headers: { 'content-type': 'application/json' }, data: { ok: 1 } });
 
     const result = await proxyRequest({
@@ -391,7 +390,7 @@ describe('proxyRequest redirect & DNS hardening', () => {
     });
 
     expect(result.status).toBe(200);
-    expect(axiosMock.mock.calls[1][0].url).toBe('http://192.168.1.10:11434/v1');
+    expect(axiosMock.mock.calls[1][0].url).toBe('https://192.168.1.10/v1');
   });
 
   it('attaches policy-checking lookup agents for direct requests', async () => {
@@ -410,10 +409,9 @@ describe('proxyRequest redirect & DNS hardening', () => {
     expect(cfg.proxy).toBe(false);
   });
 
-  it('strips credential headers on same-host HTTPS-to-HTTP downgrade redirect', async () => {
+  it('refuses an https-to-http downgrade redirect before any credential is sent', async () => {
     axiosMock
-      .mockResolvedValueOnce({ status: 302, headers: { location: 'http://api.github.com/final' }, data: '' })
-      .mockResolvedValueOnce({ status: 200, headers: { 'content-type': 'application/json' }, data: { ok: 1 } });
+      .mockResolvedValueOnce({ status: 302, headers: { location: 'http://api.github.com/final' }, data: '' });
 
     const result = await proxyRequest({
       url: 'https://api.github.com/first',
@@ -421,11 +419,8 @@ describe('proxyRequest redirect & DNS hardening', () => {
       headers: { Authorization: 'Bearer secret', Cookie: 'session=1' },
     });
 
-    expect(result.status).toBe(200);
-    const second = axiosMock.mock.calls[1][0];
-    expect(second.url).toBe('http://api.github.com/final');
-    expect(second.headers.Authorization).toBeUndefined();
-    expect(second.headers.Cookie).toBeUndefined();
+    expect(result.status).toBe(403);
+    expect(axiosMock).toHaveBeenCalledTimes(1);
   });
 
   it('strips credential headers on cross-host redirect and converts 303 to GET', async () => {
@@ -470,7 +465,7 @@ describe('IMDS protection in allowPrivate mode', () => {
 
     expect(result.status).toBe(502);
     expect(axiosMock).not.toHaveBeenCalled();
-    expect((result.data as { details: string }).details).toContain('fd00:ec2::254');
+    expect(result.data).toMatchObject({ code: 'BAD_GATEWAY' });
   });
 
 });

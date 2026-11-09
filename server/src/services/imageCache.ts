@@ -33,10 +33,10 @@ export class ImageCache {
     return { body: entry.body, contentType: entry.contentType };
   }
 
-  set(key: string, value: CachedImage, now: number = Date.now()): void {
+  set(key: string, value: CachedImage, now: number = Date.now(), ttlMs: number = this.ttlMs): void {
     if (value.body.length > this.maxBytes) return;
     this.delete(key);
-    this.entries.set(key, { ...value, expiresAt: now + this.ttlMs });
+    this.entries.set(key, { ...value, expiresAt: now + ttlMs });
     this.totalBytes += value.body.length;
     while (this.totalBytes > this.maxBytes) {
       const oldest = this.entries.keys().next();

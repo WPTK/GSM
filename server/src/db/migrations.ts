@@ -1,3 +1,4 @@
+import { LEGACY_SETTING_KEYS } from './settingsKeys.js';
 import type Database from 'better-sqlite3';
 import { initializeSchema, addColumnIfMissing } from './schema.js';
 import { logger } from '../services/logger.js';
@@ -12,6 +13,11 @@ const migrations: Record<number, (db: Database.Database) => void> = {
   3: (db) => {
     addColumnIfMissing(db, 'repositories', 'description_display', 'TEXT');
     addColumnIfMissing(db, 'repositories', 'tags_display', 'TEXT');
+  },
+  // Stream A: the proxy and RPC-download features are gone; drop their stored rows.
+  4: (db) => {
+    const del = db.prepare('DELETE FROM settings WHERE key = ?');
+    for (const key of LEGACY_SETTING_KEYS) del.run(key);
   },
 };
 
