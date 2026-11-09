@@ -1,17 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import legacy from '@vitejs/plugin-legacy';
 
 export default defineConfig({
   base: './',
-  plugins: [
-    react(),
-    legacy({
-      targets: ['defaults', 'not IE 11', 'Chrome >= 60', 'Firefox >= 60', 'Safari >= 12', 'Edge >= 79'],
-      additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
-      modernPolyfills: true,
-    }),
-  ],
+  plugins: [react()],
+  server: {
+    // Dev: the browser talks to this origin only; the API server is proxied.
+    proxy: {
+      '/api': 'http://127.0.0.1:3000',
+    },
+  },
   optimizeDeps: {
     include: ['lucide-react'],
   },

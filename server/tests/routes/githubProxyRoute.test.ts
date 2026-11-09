@@ -1,36 +1,21 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import express from 'express';
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const proxyRequestMock = vi.fn();
 const validateUrlMock = vi.fn();
 
-vi.mock('../../src/db/connection.js', () => ({
-  getDb: () => ({
-    prepare: (sql: string) => ({
-      get: (key: string) => {
-        if (!sql.includes('FROM settings')) return undefined;
-        if (key === 'github_token') return { value: 'encrypted-token' };
-        if (key === 'proxy_config') return {
-          value: JSON.stringify({ enabled: true, type: 'http', host: '127.0.0.1', port: 7890 }),
-        };
-        return undefined;
-      },
-    }),
-  }),
-}));
-
-vi.mock('../../src/services/crypto.js', () => ({
-  decrypt: (value: string) => value === 'encrypted-token' ? 'github-token' : value,
-  encrypt: (value: string) => value,
-}));
-
 vi.mock('../../src/services/proxyService.js', () => ({
   validateUrl: validateUrlMock,
   proxyRequest: proxyRequestMock,
+  isPrivateOrLoopback: () => false,
 }));
 
 const { default: proxyRouter } = await import('../../src/routes/proxy.js');
+const { resetGithubTokenForTests } = await import('../../src/services/githubToken.js');
 
 const createTestApp = () => {
   const app = express();
@@ -40,104 +25,82 @@ const createTestApp = () => {
 };
 
 describe('GitHub proxy routes', () => {
+  afterEach(() => {
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN_FILE;
+    resetGithubTokenForTests();
+  });
+
   beforeEach(() => {
+    process.env.GITHUB_TOKEN = 'github-token';
+    resetGithubTokenForTests();
     proxyRequestMock.mockReset();
     validateUrlMock.mockReset();
     proxyRequestMock.mockResolvedValue({ status: 200, data: { ok: true }, headers: { 'content-type': 'application/json' } });
   });
 
-  it('forwards GitHub API request body and configured proxy', async () => {
+  it('forwards the GitHub API request body with the server-side token', async () => {
     const app = createTestApp();
 
     await request(app)
-      .post('/api/proxy/github/gists/abc123')
+      .post('/api/proxy/github/user/starred/octo/repo')
       .send({
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: 'updated' }),
+        body: JSON.stringify({ a: 1 }),
       })
       .expect(200, { ok: true });
 
     expect(proxyRequestMock).toHaveBeenCalledOnce();
     const options = proxyRequestMock.mock.calls[0][0];
-    expect(options.url).toBe('https://api.github.com/gists/abc123');
-    expect(options.method).toBe('PATCH');
-    expect(options.body).toBe(JSON.stringify({ description: 'updated' }));
+    expect(options.url).toBe('https://api.github.com/user/starred/octo/repo');
+    expect(options.method).toBe('PUT');
+    expect(options.body).toBe(JSON.stringify({ a: 1 }));
     expect(options.headers.Authorization).toBe('Bearer github-token');
     expect(options.headers['Content-Type']).toBe('application/json');
-    expect(options.proxyConfig).toMatchObject({ enabled: true, type: 'http', host: '127.0.0.1', port: 7890 });
+    expect(options).not.toHaveProperty('proxyConfig');
   });
 
-  it('proxies raw gist file URLs through the configured proxy as text', async () => {
-    const app = createTestApp();
-    proxyRequestMock.mockResolvedValueOnce({
-      status: 200,
-      data: 'raw file text',
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
-
-    await request(app)
-      .post('/api/proxy/github-raw')
-      .send({ url: 'https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/file' })
-      .expect(200, 'raw file text');
-
-    expect(validateUrlMock).toHaveBeenCalledWith('https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/file');
-    expect(proxyRequestMock).toHaveBeenCalledOnce();
-    const options = proxyRequestMock.mock.calls[0][0];
-    expect(options.url).toBe('https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/file');
-    expect(options.method).toBe('GET');
-    expect(options.preserveRawResponse).toBe(true);
-    expect(options.proxyConfig).toMatchObject({ enabled: true, type: 'http', host: '127.0.0.1', port: 7890 });
+  it('reads the token from GITHUB_TOKEN_FILE when GITHUB_TOKEN is not set', async () => {
+    delete process.env.GITHUB_TOKEN;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-token-'));
+    const file = path.join(dir, 'token');
+    fs.writeFileSync(file, 'file-token\n');
+    process.env.GITHUB_TOKEN_FILE = file;
+    resetGithubTokenForTests();
+    try {
+      await request(createTestApp()).post('/api/proxy/github/user').send({ method: 'GET' }).expect(200);
+      expect(proxyRequestMock.mock.calls[0][0].headers.Authorization).toBe('Bearer file-token');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  it('rejects malformed raw gist URLs as client errors', async () => {
-    const app = createTestApp();
+  it('answers 400 GITHUB_TOKEN_NOT_CONFIGURED when no token is configured on the server', async () => {
+    delete process.env.GITHUB_TOKEN;
+    resetGithubTokenForTests();
 
-    await request(app)
-      .post('/api/proxy/github-raw')
-      .send({ url: 'not a url' })
-      .expect(400, { error: 'Invalid URL format', code: 'INVALID_URL' });
-
-    expect(validateUrlMock).not.toHaveBeenCalled();
+    await request(createTestApp())
+      .post('/api/proxy/github/user')
+      .send({ method: 'GET' })
+      .expect(400, { error: 'GitHub token not configured', code: 'GITHUB_TOKEN_NOT_CONFIGURED' });
     expect(proxyRequestMock).not.toHaveBeenCalled();
   });
 
-  it('rejects raw URLs from non-GitHub content hosts', async () => {
-    const app = createTestApp();
-
-    await request(app)
+  it('no longer exposes the raw-content proxy', async () => {
+    const res = await request(createTestApp())
       .post('/api/proxy/github-raw')
-      .send({ url: 'https://example.com/file.txt' })
-      .expect(400, { error: 'Host example.com not allowed', code: 'HOST_NOT_ALLOWED' });
-
-    expect(validateUrlMock).not.toHaveBeenCalled();
+      .send({ url: 'https://raw.githubusercontent.com/o/r/main/x' });
+    expect(res.status).toBe(404);
     expect(proxyRequestMock).not.toHaveBeenCalled();
   });
 
-  it('does not let client raw headers override server GitHub credentials', async () => {
-    const app = createTestApp();
-
-    await request(app)
-      .post('/api/proxy/github-raw')
-      .send({
-        url: 'https://gist.githubusercontent.com/karpathy/8627fe009c40f57531cb18360106ce95/raw/file',
-        headers: {
-          Authorization: 'Bearer client-token',
-          'Proxy-Authorization': 'Basic client-proxy',
-          Host: 'evil.example.com',
-          'Content-Length': '999',
-          'X-Custom': 'kept',
-        },
-      })
-      .expect(200, { ok: true });
-
-    expect(proxyRequestMock).toHaveBeenCalledOnce();
-    const options = proxyRequestMock.mock.calls[0][0];
-    expect(options.headers.Authorization).toBe('Bearer github-token');
-    expect(options.headers['Proxy-Authorization']).toBeUndefined();
-    expect(options.headers.Host).toBeUndefined();
-    expect(options.headers['Content-Length']).toBeUndefined();
-    expect(options.headers['X-Custom']).toBe('kept');
+  it('rejects path traversal in the target path', async () => {
+    await request(createTestApp())
+      .post('/api/proxy/github/repos/../../etc')
+      .send({ method: 'GET' })
+      .expect(400);
+    expect(proxyRequestMock).not.toHaveBeenCalled();
   });
 
   it('relays upstream rate-limit headers to the client and skips unrelated ones', async () => {
@@ -157,7 +120,7 @@ describe('GitHub proxy routes', () => {
     });
 
     const res = await request(app)
-      .post('/api/proxy/github/gists/abc123')
+      .post('/api/proxy/github/repos/octo/repo')
       .send({ method: 'GET' })
       .expect(429);
 

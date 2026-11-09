@@ -4,7 +4,23 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import type { LookupOptions } from 'node:dns';
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
-import { createSafeLookup, proxyRequest } from '../../src/services/proxyService.js';
+import { createSafeLookup, proxyRequest, resetOutboundAllowlistForTests } from '../../src/services/proxyService.js';
+
+// The egress allowlist is checked on every hop; list every host these tests contact.
+process.env.OUTBOUND_ALLOWLIST = [
+  'api.github.com',
+  'api.openai.com',
+  'example.com',
+  'dav.example.com',
+  'slow.example.com',
+  'down.example.com',
+  'other.example.com',
+  'metadata.example.com',
+  'gateway.example.com',
+  'mixed.example.com',
+  '192.168.1.10',
+].join(',');
+resetOutboundAllowlistForTests();
 
 // 确定性测试：mock axios，避免对真实外网的依赖（原测试依赖网络连通性，环境不通时随机失败）。
 vi.mock('axios', () => {
@@ -92,7 +108,7 @@ describe('proxyRequest', () => {
     expect(cfg.data).toEqual(requestBody); // 对象 body 保持原样透传
   });
 
-  it('should forward POST request with string body', async () => {
+  it('should forward a non-JSON method and string body', async () => {
     const xmlBody = '<?xml version="1.0"?><propfind/>';
     mockAxios.mockResolvedValueOnce({
       status: 207,
@@ -217,7 +233,6 @@ describe('proxyRequest', () => {
     expect(result.data).toEqual({
       error: 'Proxy connection refused',
       code: 'PROXY_CONNECTION_REFUSED',
-      details: 'connect ECONNREFUSED',
     });
     expect(result.headers).toEqual({});
   });
@@ -271,7 +286,7 @@ describe('proxyRequest', () => {
     expect(mockAxios.mock.calls[0][0].timeout).toBe(30000);
   });
 
-  it('should handle PUT method with body for WebDAV', async () => {
+  it('should handle PUT method with a string body', async () => {
     mockAxios.mockResolvedValueOnce({
       status: 201,
       headers: { 'content-type': 'text/plain' },
@@ -292,7 +307,7 @@ describe('proxyRequest', () => {
     expect(cfg.data).toBe('{"repo":[]}');
   });
 
-  it('should forward to axios for a private-IP URL when allowPrivate is set (fixes #244 local AI)', async () => {
+  it('should forward to axios for a private-IP URL when allowPrivate is set (https, default port)', async () => {
     mockAxios.mockResolvedValueOnce({
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -300,7 +315,7 @@ describe('proxyRequest', () => {
     });
 
     const result = await proxyRequest({
-      url: 'http://192.168.1.10:11434/v1/chat/completions',
+      url: 'https://192.168.1.10/v1/chat/completions',
       method: 'POST',
       headers: { Authorization: 'Bearer local' },
       body: { model: 'llama', messages: [] },
@@ -309,12 +324,12 @@ describe('proxyRequest', () => {
 
     expect(result.status).toBe(200);
     const cfg = mockAxios.mock.calls[0][0];
-    expect(cfg.url).toBe('http://192.168.1.10:11434/v1/chat/completions');
+    expect(cfg.url).toBe('https://192.168.1.10/v1/chat/completions');
   });
 
   it('should return 502 without calling axios for a private-IP URL in strict mode', async () => {
     const result = await proxyRequest({
-      url: 'http://192.168.1.10:11434/v1/chat/completions',
+      url: 'https://192.168.1.10/v1/chat/completions',
       method: 'POST',
     });
 
@@ -360,12 +375,12 @@ describe('proxyRequest redirect & DNS hardening', () => {
 
     expect(result.status).toBe(502);
     expect(axiosMock).toHaveBeenCalledTimes(1); // 第二跳未发出
-    expect((result.data as { details: string }).details).toContain('127.0.0.1');
+    expect(result.data).toMatchObject({ code: 'BAD_GATEWAY' });
   });
 
   it('allows a redirect hop to a private address in allowPrivate mode', async () => {
     axiosMock
-      .mockResolvedValueOnce({ status: 302, headers: { location: 'http://192.168.1.10:11434/v1' }, data: '' })
+      .mockResolvedValueOnce({ status: 302, headers: { location: 'https://192.168.1.10/v1' }, data: '' })
       .mockResolvedValueOnce({ status: 200, headers: { 'content-type': 'application/json' }, data: { ok: 1 } });
 
     const result = await proxyRequest({
@@ -375,7 +390,7 @@ describe('proxyRequest redirect & DNS hardening', () => {
     });
 
     expect(result.status).toBe(200);
-    expect(axiosMock.mock.calls[1][0].url).toBe('http://192.168.1.10:11434/v1');
+    expect(axiosMock.mock.calls[1][0].url).toBe('https://192.168.1.10/v1');
   });
 
   it('attaches policy-checking lookup agents for direct requests', async () => {
@@ -394,25 +409,9 @@ describe('proxyRequest redirect & DNS hardening', () => {
     expect(cfg.proxy).toBe(false);
   });
 
-  it('enforces the local DNS pre-check in proxy mode (remote proxy owns resolution)', async () => {
-    dnsLookupMock.mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
-
-    const result = await proxyRequest({
-      url: 'https://example.com/api',
-      method: 'GET',
-      allowPrivate: true,
-      proxyConfig: { enabled: true, type: 'http', host: 'proxy.local', port: 7890 },
-    });
-
-    expect(result.status).toBe(502);
-    expect(axiosMock).not.toHaveBeenCalled();
-    expect((result.data as { details: string }).details).toContain('169.254.169.254');
-  });
-
-  it('strips credential headers on same-host HTTPS-to-HTTP downgrade redirect', async () => {
+  it('refuses an https-to-http downgrade redirect before any credential is sent', async () => {
     axiosMock
-      .mockResolvedValueOnce({ status: 302, headers: { location: 'http://api.github.com/final' }, data: '' })
-      .mockResolvedValueOnce({ status: 200, headers: { 'content-type': 'application/json' }, data: { ok: 1 } });
+      .mockResolvedValueOnce({ status: 302, headers: { location: 'http://api.github.com/final' }, data: '' });
 
     const result = await proxyRequest({
       url: 'https://api.github.com/first',
@@ -420,33 +419,8 @@ describe('proxyRequest redirect & DNS hardening', () => {
       headers: { Authorization: 'Bearer secret', Cookie: 'session=1' },
     });
 
-    expect(result.status).toBe(200);
-    const second = axiosMock.mock.calls[1][0];
-    expect(second.url).toBe('http://api.github.com/final');
-    expect(second.headers.Authorization).toBeUndefined();
-    expect(second.headers.Cookie).toBeUndefined();
-  });
-
-  it('re-runs the DNS pre-check per redirect hop in proxy mode', async () => {
-    dnsLookupMock
-      .mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }])
-      .mockResolvedValueOnce([{ address: '169.254.169.254', family: 4 }]);
-    axiosMock.mockResolvedValueOnce({
-      status: 302,
-      headers: { location: 'https://metadata.example.com/x' },
-      data: '',
-    });
-
-    const result = await proxyRequest({
-      url: 'https://api.github.com/first',
-      method: 'GET',
-      allowPrivate: true,
-      proxyConfig: { enabled: true, type: 'http', host: 'proxy.local', port: 7890 },
-    });
-
-    expect(result.status).toBe(502);
+    expect(result.status).toBe(403);
     expect(axiosMock).toHaveBeenCalledTimes(1);
-    expect(dnsLookupMock).toHaveBeenCalledTimes(2);
   });
 
   it('strips credential headers on cross-host redirect and converts 303 to GET', async () => {
@@ -491,23 +465,9 @@ describe('IMDS protection in allowPrivate mode', () => {
 
     expect(result.status).toBe(502);
     expect(axiosMock).not.toHaveBeenCalled();
-    expect((result.data as { details: string }).details).toContain('fd00:ec2::254');
+    expect(result.data).toMatchObject({ code: 'BAD_GATEWAY' });
   });
 
-  it('blocks DNS AAAA records returning IPv4-mapped IMDS in proxy mode', async () => {
-    dnsLookupMock.mockResolvedValue([{ address: '::ffff:169.254.169.254', family: 6 }]);
-
-    const result = await proxyRequest({
-      url: 'https://metadata.example.com/secret',
-      method: 'GET',
-      allowPrivate: true,
-      proxyConfig: { enabled: true, type: 'http', host: 'proxy.local', port: 7890 },
-    });
-
-    expect(result.status).toBe(502);
-    expect(axiosMock).not.toHaveBeenCalled();
-    expect((result.data as { details: string }).details).toContain('169.254.169.254');
-  });
 });
 
 describe('createSafeLookup (connection-level pinning)', () => {

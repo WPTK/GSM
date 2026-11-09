@@ -1,19 +1,97 @@
 import axios, { AxiosRequestConfig } from 'axios';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress, LookupOptions } from 'node:dns';
 import { Agent as HttpAgent, type AgentOptions as HttpAgentOptions } from 'node:http';
 import { Agent as HttpsAgent, type AgentOptions as HttpsAgentOptions } from 'node:https';
 import { logger } from './logger.js';
-import { redactUrl } from './logSanitizer.js';
 
-export interface ProxyConfig {
-  enabled: boolean;
-  type: 'http' | 'socks5';
-  host: string;
-  port: number;
-  username?: string;
-  password?: string;
+/**
+ * Default outbound allowlist (exact hostnames). Override with the
+ * OUTBOUND_ALLOWLIST environment variable (comma separated). Every server-side
+ * outbound request goes through proxyRequest(), which checks this list for the
+ * initial URL and for every redirect hop.
+ */
+export const DEFAULT_OUTBOUND_ALLOWLIST = [
+  'api.github.com',
+  'github.com',
+  'raw.githubusercontent.com',
+  'avatars.githubusercontent.com',
+  'user-images.githubusercontent.com',
+  'private-user-images.githubusercontent.com',
+  'repository-images.githubusercontent.com',
+  'api.anthropic.com',
+  'edge.microsoft.com',
+  'clients5.google.com',
+  'grep.app',
+] as const;
+
+/** Thrown for a request that must not be sent; mapped to an HTTP status by proxyRequest. */
+export class RequestRejectedError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code: string,
+  ) {
+    super(message);
+    this.name = 'RequestRejectedError';
+  }
+}
+
+let allowlistCache: Set<string> | null = null;
+
+function parseAllowlist(raw: string | undefined): Set<string> {
+  const entries = (raw ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase().replace(/\.$/, ''))
+    .filter(Boolean);
+  return new Set(entries.length > 0 ? entries : DEFAULT_OUTBOUND_ALLOWLIST);
+}
+
+/** The allowlist is read from the environment once and then cached. */
+export function getOutboundAllowlist(): ReadonlySet<string> {
+  if (!allowlistCache) {
+    allowlistCache = parseAllowlist(process.env.OUTBOUND_ALLOWLIST);
+  }
+  return allowlistCache;
+}
+
+/** Test hook: forget the cached allowlist so the next call re-reads the environment. */
+export function resetOutboundAllowlistForTests(): void {
+  allowlistCache = null;
+}
+
+/**
+ * Throws a 403 EGRESS_BLOCKED error unless the URL's host is on the allowlist.
+ * Logs the host only, never the path, query string or credentials.
+ */
+export function assertOutboundAllowed(rawUrl: string | URL): void {
+  let parsed: URL;
+  try {
+    parsed = rawUrl instanceof URL ? rawUrl : new URL(rawUrl);
+  } catch {
+    throw new RequestRejectedError('Blocked outbound request: invalid URL', 400, 'INVALID_URL');
+  }
+  const hostname = parsed.hostname;
+  if (parsed.protocol !== 'https:' || (parsed.port !== '' && parsed.port !== '443')) {
+    logger.warn('egress.blocked', `host=${hostname.toLowerCase()} reason=scheme-or-port`);
+    throw new RequestRejectedError('Outbound requests must use https on the default port', 403, 'EGRESS_BLOCKED');
+  }
+  const host = hostname.toLowerCase().replace(/\.$/, '').replace(/^\[(.+)\]$/, '$1');
+  if (!getOutboundAllowlist().has(host)) {
+    logger.warn('egress.blocked', `host=${host}`);
+    throw new RequestRejectedError('Outbound host is not on the allowlist', 403, 'EGRESS_BLOCKED');
+  }
+}
+
+/** URL for logs: origin and path only. Query strings can carry secrets. */
+export function safeUrlForLog(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return '[invalid-url]';
+  }
 }
 
 export interface ProxyRequestOptions {
@@ -22,9 +100,17 @@ export interface ProxyRequestOptions {
   headers?: Record<string, string>;
   body?: string | object;
   timeout?: number;
-  proxyConfig?: ProxyConfig | null;
-  preserveRawResponse?: boolean;
-  /** 放行回环/私有网段（仅用于用户自有配置来源的 URL）。 */
+  /**
+   * 'json' (default): parse JSON when possible, otherwise return the text.
+   * 'text': return the body untouched as a string.
+   * 'buffer': return the body as a Buffer.
+   */
+  responseType?: 'json' | 'text' | 'buffer';
+  /** Abort and answer 413 RESPONSE_TOO_LARGE once the response body exceeds this many bytes. */
+  maxBytes?: number;
+  /** Extra per-URL check, run for the initial URL and again for every redirect hop. Throw RequestRejectedError to refuse. */
+  checkUrl?: (url: URL) => void;
+  /** Allow loopback/private ranges (only for URLs that come from the owner's own configuration). */
   allowPrivate?: boolean;
 }
 
@@ -35,7 +121,23 @@ export interface ProxyResponse {
 }
 
 const BLOCKED_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0', '169.254.169.254']);
-const PRIVATE_IP_PATTERNS = [/^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./];
+
+/** Ranges that are never valid outbound targets (loopback, private, CGNAT, link-local, multicast). */
+const BLOCKED_RANGES = new BlockList();
+for (const [net, prefix] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
+  ['172.16.0.0', 12], ['192.168.0.0', 16], ['224.0.0.0', 4],
+] as const) BLOCKED_RANGES.addSubnet(net, prefix, 'ipv4');
+for (const [net, prefix] of [['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]] as const) {
+  BLOCKED_RANGES.addSubnet(net, prefix, 'ipv6');
+}
+
+/** True for an IP literal inside a blocked range. Hostnames return false. */
+function isBlockedIpLiteral(host: string): boolean {
+  const family = isIP(host);
+  if (family === 0) return false;
+  return BLOCKED_RANGES.check(host, family === 4 ? 'ipv4' : 'ipv6');
+}
 
 // 无论严格/宽松档，DNS 解析结果或 IP 字面量命中一律拒绝：云元数据（IMDS 的
 // v4/v6 端点）与未指定地址不可能是合法业务目标。宽松档（allowPrivate）仅
@@ -44,48 +146,12 @@ const ALWAYS_BLOCKED_RESOLVED_IPS = new Set(['169.254.169.254', 'fd00:ec2::254',
 
 // axios 自动跟随重定向时不会重跑目标校验，改为手动逐跳处理（见 proxyRequest）。
 const MAX_REDIRECT_HOPS = 5;
+const DEFAULT_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-// 跨主机重定向不携带的凭证头，防止 Authorization/Cookie 泄露到跳转目标。
-const CREDENTIAL_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization']);
-
-/** 解析 hostname 并校验全部解析结果（IMDS 封禁 + 严格档私网段）。
- *  解析失败时放行——后续连接会以同样的 DNS 错误自然失败。
- *  仅用于代理模式：直连请求由 createSafeLookup 的连接级固定负责。 */
-async function assertResolvedHostsSafe(rawUrl: string, allowPrivate: boolean): Promise<void> {
-  let hostname: string;
-  try {
-    hostname = new URL(rawUrl).hostname;
-  } catch {
-    return; // URL 本身非法，validateUrl 会给出明确错误
-  }
-  // URL.hostname 不含方括号，这里防御性剥离后判断 IP 字面量
-  const bareHostname = hostname.replace(/^\[|\]$/g, '');
-  if (isIP(bareHostname)) {
-    // IP 字面量已在 validateUrl 按字面量校验；宽松档的 validateUrl 只封 v4
-    // IMDS，这里对全部字面量再兜底一道 IMDS/未指定地址死守
-    if (ALWAYS_BLOCKED_RESOLVED_IPS.has(bareHostname)) {
-      throw new Error(`Blocked proxy request: protected address '${bareHostname}' is not allowed`);
-    }
-    return;
-  }
-
-  let addresses: Array<{ address: string }>;
-  try {
-    addresses = await lookup(hostname, { all: true, verbatim: true });
-  } catch {
-    return;
-  }
-  // 归一化覆盖 ::ffff:169.254.169.254 等 IPv4 映射型写法
-  const violating = addresses.find(({ address }) => {
-    const normalized = normalizeHostname(address);
-    return ALWAYS_BLOCKED_RESOLVED_IPS.has(normalized) || (!allowPrivate && isPrivateOrLoopback(normalized));
-  });
-  if (violating) {
-    const normalized = normalizeHostname(violating.address);
-    const kind = ALWAYS_BLOCKED_RESOLVED_IPS.has(normalized) ? 'protected' : 'private';
-    throw new Error(`Blocked proxy request: hostname '${hostname}' resolves to ${kind} address '${normalized}'`);
-  }
-}
+// Headers that survive a cross-origin redirect hop. Everything else (Authorization, Cookie,
+// x-api-key, anthropic-*, ...) is dropped so credentials never follow a redirect to another origin.
+const CROSS_ORIGIN_SAFE_HEADERS = new Set(['accept', 'user-agent', 'content-type']);
 
 /** 过滤出策略允许的解析结果：IMDS/未指定地址任何档位拒绝，严格档额外拒绝私网/回环段。 */
 function filterAllowedAddresses(allowPrivate: boolean, addresses: LookupAddress[]): LookupAddress[] {
@@ -150,7 +216,7 @@ function getDirectAgents(allowPrivate: boolean): { httpAgent: HttpAgent; httpsAg
 
 export interface ValidateUrlOptions {
   /** 宽松模式：放行回环地址与私有网段。仅用于「用户主动提供的自有配置」所来源的 URL
-   *  （已保存的 AI / WebDAV 配置、WebDAV 测试连接的内联地址、下载目标），
+   *  （已保存的 AI 配置），
    *  不应作用于任意或半可信的输入（如 AI 内联 config）。 */
   allowPrivate?: boolean;
 }
@@ -204,7 +270,7 @@ export function isPrivateOrLoopback(hostname: string): boolean {
   const h = normalizeHostname(hostname);
   if (BLOCKED_HOSTS.has(h)) return true;
   if (isLocalOrLanHostname(h)) return true;
-  if (PRIVATE_IP_PATTERNS.some(p => p.test(h))) return true;
+  if (isBlockedIpLiteral(h)) return true;
   if (isPrivateOrLocalIpv6(h)) return true;
   return false;
 }
@@ -238,8 +304,10 @@ export function validateUrl(rawUrl: string, opts: ValidateUrlOptions = {}): void
   if (isLocalOrLanHostname(hostname)) {
     throw new Error(`Blocked proxy request: LAN hostname '${hostname}' is not allowed`);
   }
-  if (PRIVATE_IP_PATTERNS.some(p => p.test(hostname))) {
-    throw new Error(`Blocked proxy request: private IP '${hostname}' is not allowed`);
+  if (isBlockedIpLiteral(hostname)) {
+    throw new Error(hostname.includes(':')
+      ? `Blocked proxy request: private IPv6 address '${hostname}' is not allowed`
+      : `Blocked proxy request: private IP '${hostname}' is not allowed`);
   }
   if (isPrivateOrLocalIpv6(hostname)) {
     throw new Error(`Blocked proxy request: private IPv6 address '${hostname}' is not allowed`);
@@ -247,56 +315,33 @@ export function validateUrl(rawUrl: string, opts: ValidateUrlOptions = {}): void
 }
 
 export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyResponse> {
-  const { url, method, headers = {}, body, timeout = 30000, proxyConfig, preserveRawResponse = false } = options;
+  const {
+    url,
+    method,
+    headers = {},
+    body,
+    timeout = 30000,
+    responseType = 'json',
+    maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
+  } = options;
 
   try {
-    validateUrl(url, { allowPrivate: options.allowPrivate });
-    if (proxyConfig?.enabled) {
-      // 代理模式下目标由远程代理解析，无法本地固定连接地址：以本地解析结果做
-      // 预检（覆盖同宿主/共享解析器的常见部署），远程代理自身的出口策略是用户
-      // 显式选择的委派边界。直连请求由下方注入的 safe lookup 在连接级强制执行。
-      await assertResolvedHostsSafe(url, Boolean(options.allowPrivate));
-    }
-    logger.info('proxy.request', `${method} ${redactUrl(url)}`);
+    // Every hop (the first URL and each redirect target) runs the same checks:
+    // protocol/private-range policy, the egress allowlist, then the caller's own rule.
+    const checkHop = (hopUrl: string): void => {
+      validateUrl(hopUrl, { allowPrivate: options.allowPrivate });
+      assertOutboundAllowed(hopUrl);
+      options.checkUrl?.(new URL(hopUrl));
+    };
+    checkHop(url);
+    logger.info('proxy.request', `${method} ${safeUrlForLog(url)}`);
 
-    // 代理配置只依赖 proxyConfig，循环外构建一次，每一跳复用。
-    // 直连时注入带策略校验的 lookup（连接级固定，杜绝校验后重绑定）。
-    let httpAgent: AxiosRequestConfig['httpAgent'];
-    let httpsAgent: AxiosRequestConfig['httpsAgent'];
-    let proxySetting: AxiosRequestConfig['proxy'];
-    if (proxyConfig?.enabled && proxyConfig.host && proxyConfig.port) {
-      if (proxyConfig.type === 'socks5') {
-        // SOCKS5: axios 不原生支持，使用 socks-proxy-agent
-        const { SocksProxyAgent } = await import('socks-proxy-agent');
-        const socksUrl = `socks5://${proxyConfig.host}:${proxyConfig.port}`;
-        const agent = new SocksProxyAgent(socksUrl);
-        httpAgent = agent;
-        httpsAgent = agent;
-        proxySetting = false; // 禁用 axios 内置代理，使用自定义 agent
-      } else {
-        // HTTP/HTTPS 代理
-        proxySetting = {
-          protocol: 'http',
-          host: proxyConfig.host,
-          port: proxyConfig.port,
-        };
-        if (proxyConfig.username && proxyConfig.password) {
-          proxySetting.auth = {
-            username: proxyConfig.username,
-            password: proxyConfig.password,
-          };
-        }
-      }
-    } else {
-      // 显式禁用代理，防止 axios 回退到环境变量 HTTP_PROXY/HTTPS_PROXY
-      proxySetting = false;
-      const direct = getDirectAgents(Boolean(options.allowPrivate));
-      httpAgent = direct.httpAgent;
-      httpsAgent = direct.httpsAgent;
-    }
+    // Direct connections only: the custom lookup pins the connection to a
+    // validated IP, so DNS rebinding after validation cannot reach a private range.
+    // proxy:false stops axios from falling back to HTTP_PROXY/HTTPS_PROXY.
+    const direct = getDirectAgents(Boolean(options.allowPrivate));
 
-    // 关闭 axios 自动重定向，手动逐跳跟随：每一跳都重跑 validateUrl 与
-    // DNS 解析校验，防止初始 URL 合法、重定向到内网/IMDS 绕过策略。
+    // axios redirects are disabled; follow them by hand so each hop is re-checked.
     let currentUrl = url;
     let currentMethod = method;
     let currentBody = body;
@@ -308,15 +353,18 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
         method: currentMethod.toLowerCase() as AxiosRequestConfig['method'],
         headers: currentHeaders,
         timeout,
-        maxRedirects: 0, // 重定向由本循环处理，axios 只发单跳
-        proxy: proxySetting,
-        validateStatus: () => true, // 不抛出 HTTP 错误状态码
+        maxRedirects: 0,
+        maxContentLength: maxBytes,
+        maxBodyLength: MAX_REQUEST_BODY_BYTES,
+        proxy: false,
+        httpAgent: direct.httpAgent,
+        httpsAgent: direct.httpsAgent,
+        validateStatus: () => true, // do not throw on HTTP error statuses
       };
-      if (httpAgent) {
-        axiosConfig.httpAgent = httpAgent;
-        axiosConfig.httpsAgent = httpsAgent;
-      }
-      if (preserveRawResponse) {
+      if (responseType === 'buffer') {
+        axiosConfig.responseType = 'arraybuffer';
+      } else {
+        // Keep the body as raw text; JSON parsing (if wanted) happens below.
         axiosConfig.responseType = 'text';
         axiosConfig.transformResponse = [(data) => data];
       }
@@ -331,42 +379,34 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
         }
       }
 
-      // codeql[js/request-forgery] 目标 URL 均先过 validateUrl（协议白名单、IMDS 硬封禁、私网段策略，
-      // 含逐跳重定向校验与 DNS 解析结果校验）；用户主动提供的自有配置来源（已保存的 AI/WebDAV 配置、
-      // WebDAV 测试连接的内联地址、下载目标）按业务必须支持无证书 http 内网地址，allowPrivate 仅对这些
-      // 来源放开；AI 内联 config 等任意输入保持严格档。
+      // codeql[js/request-forgery] The URL passed checkHop above: protocol policy, IMDS block,
+      // private-range policy, the egress allowlist and DNS-pinned connections, on every hop.
       const response = await axios(axiosConfig);
 
       if (REDIRECT_STATUSES.has(response.status) && hop < MAX_REDIRECT_HOPS) {
         const location = response.headers?.location;
         if (typeof location === 'string' && location) {
           const nextUrl = new URL(location, currentUrl).toString();
-          // 跨 origin（跨主机，或同主机 HTTPS→HTTP 降级）跳转不携带凭证头，
-          // 防止 Authorization/Cookie 泄露到其他主机或明文通道
+          // A cross-origin (or https->http) hop keeps only the safe header allowlist.
           if (new URL(nextUrl).origin !== new URL(currentUrl).origin) {
             currentHeaders = Object.fromEntries(
-              Object.entries(currentHeaders).filter(([k]) => !CREDENTIAL_HEADERS.has(k.toLowerCase())),
+              Object.entries(currentHeaders).filter(([k]) => CROSS_ORIGIN_SAFE_HEADERS.has(k.toLowerCase())),
             );
           }
-          // 与 follow-redirects 既有语义保持一致：303 固定转 GET；
-          // 301/302 对 POST 转 GET；307/308 及其余方法（WebDAV PROPFIND 等）
-          // 保留原方法与请求体
+          // 303 always becomes GET; 301/302 turn POST into GET; 307/308 keep method and body.
           if (response.status === 303
             || ((response.status === 301 || response.status === 302) && currentMethod.toUpperCase() === 'POST')) {
             currentMethod = 'GET';
             currentBody = undefined;
           }
           currentUrl = nextUrl;
-          validateUrl(currentUrl, { allowPrivate: options.allowPrivate });
-          if (proxyConfig?.enabled) {
-            await assertResolvedHostsSafe(currentUrl, Boolean(options.allowPrivate));
-          }
-          logger.info('proxy.redirect', `${response.status} -> ${redactUrl(currentUrl)}`);
+          checkHop(currentUrl);
+          logger.info('proxy.redirect', `${response.status} -> ${safeUrlForLog(currentUrl)}`);
           continue;
         }
       }
 
-      logger.info('proxy.response', `${currentMethod} ${redactUrl(currentUrl)} -> ${response.status}`);
+      logger.info('proxy.response', `${currentMethod} ${safeUrlForLog(currentUrl)} -> ${response.status}`);
 
       const responseHeaders: Record<string, string> = {};
       if (response.headers) {
@@ -376,38 +416,44 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
       }
 
       let data: unknown;
-      if (preserveRawResponse) {
-        data = typeof response.data === 'string' ? response.data : String(response.data ?? '');
+      if (responseType === 'buffer') {
+        data = Buffer.from(response.data as ArrayBuffer);
       } else {
-        const contentType = String(response.headers['content-type'] || '');
-        if (contentType.includes('application/json') && typeof response.data === 'object') {
+        if (typeof response.data !== 'string') {
           data = response.data;
-        } else if (typeof response.data === 'string') {
+        } else if (responseType === 'text') {
+          data = response.data;
+        } else {
           try {
             data = JSON.parse(response.data);
           } catch {
             data = response.data;
           }
-        } else {
-          data = response.data;
         }
       }
 
       return { status: response.status, headers: responseHeaders, data };
     }
   } catch (error) {
+    if (error instanceof RequestRejectedError) {
+      return { status: error.status, headers: {}, data: { error: error.message, code: error.code } };
+    }
     if (axios.isAxiosError(error)) {
       if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
         return { status: 504, headers: {}, data: { error: 'Gateway Timeout', code: 'GATEWAY_TIMEOUT' } };
       }
+      if (error.message.includes('maxContentLength')) {
+        return { status: 413, headers: {}, data: { error: 'Response too large', code: 'RESPONSE_TOO_LARGE' } };
+      }
       if (error.code === 'ECONNREFUSED') {
-        return { status: 502, headers: {}, data: { error: 'Proxy connection refused', code: 'PROXY_CONNECTION_REFUSED', details: error.message } };
+        logger.warn('proxy.error', 'upstream connection refused');
+        return { status: 502, headers: {}, data: { error: 'Proxy connection refused', code: 'PROXY_CONNECTION_REFUSED' } };
       }
       if (error.code === 'ETIMEDOUT') {
-        return { status: 504, headers: {}, data: { error: 'Proxy connection timeout', code: 'PROXY_TIMEOUT', details: error.message } };
+        logger.warn('proxy.error', 'upstream connection timed out');
+        return { status: 504, headers: {}, data: { error: 'Proxy connection timeout', code: 'PROXY_TIMEOUT' } };
       }
       if (error.response) {
-        // 请求已发出，服务器返回了错误状态码
         return {
           status: error.response.status,
           headers: {},
@@ -416,6 +462,6 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
       }
     }
     logger.errorFromError('proxy.error', 'Proxy request failed', error);
-    return { status: 502, headers: {}, data: { error: 'Bad Gateway', code: 'BAD_GATEWAY', details: error instanceof Error ? error.message : 'Unknown error' } };
+    return { status: 502, headers: {}, data: { error: 'Bad Gateway', code: 'BAD_GATEWAY' } };
   }
 }

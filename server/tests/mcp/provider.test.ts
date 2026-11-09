@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getDbMock } = vi.hoisted(() => ({ getDbMock: vi.fn() }));
+const { getDbMock, proxyRequestMock } = vi.hoisted(() => ({ getDbMock: vi.fn(), proxyRequestMock: vi.fn() }));
 
 vi.mock('../../src/db/connection.js', () => ({ getDb: getDbMock }));
+// Every outbound call must go through proxyRequest (egress allowlist); the provider never uses fetch.
+vi.mock('../../src/services/proxyService.js', () => ({
+  proxyRequest: proxyRequestMock,
+  safeUrlForLog: (url: string) => url.split('?')[0],
+}));
 vi.mock('../../src/services/crypto.js', () => ({ decrypt: (value: string) => value }));
 vi.mock('../../src/config.js', () => ({ config: { encryptionKey: 'test-key' } }));
 vi.mock('../../src/services/logger.js', () => ({
@@ -100,16 +105,18 @@ function configureDb(options: {
   });
 }
 
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+function jsonResponse(payload: unknown, status = 200) {
+  return { status, headers: { 'content-type': 'application/json' }, data: JSON.stringify(payload) };
+}
+
+function rawResponse(text: string, status = 200) {
+  return { status, headers: {}, data: text };
 }
 
 describe('MCP provider discovery', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    proxyRequestMock.mockReset();
     configureDb();
   });
 
@@ -142,12 +149,12 @@ describe('MCP provider discovery', () => {
       .mockResolvedValueOnce(jsonResponse({
         matches: [{ id: '1', score: 0.9 }],
       }));
-    vi.stubGlobal('fetch', fetchMock);
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.vectorSearch('retrieval', { topK: 2, threshold: 0.4 });
     expect(result).toMatchObject({ available: true, matches: [{ id: 1, score: 0.9 }] });
     expect(result).not.toHaveProperty('filtering');
-    const workerBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    const workerBody = JSON.parse(fetchMock.mock.calls[1][0].body as string);
     expect(workerBody.topK).toBe(2);
     expect(workerBody.threshold).toBe(0.4);
   });
@@ -167,7 +174,7 @@ describe('MCP provider discovery', () => {
           { id: '2', score: 0.8 },
         ],
       }));
-    vi.stubGlobal('fetch', fetchMock);
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.vectorSearch('retrieval', {
       topK: 1,
@@ -186,7 +193,7 @@ describe('MCP provider discovery', () => {
       candidateCount: 2,
       filteredCount: 1,
     });
-    const workerBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    const workerBody = JSON.parse(fetchMock.mock.calls[1][0].body as string);
     expect(workerBody.topK).toBe(50);
   });
 
@@ -208,13 +215,13 @@ describe('MCP provider discovery', () => {
           { id: '3', score: 0.8 },
         ],
       }));
-    vi.stubGlobal('fetch', fetchMock);
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.findSimilarRepositories('acme/source', { topK: 2, threshold: 0.2 });
     expect(result).toMatchObject({ available: true, sourceExcluded: true });
     expect(result.matches.map((match) => match.full_name)).toEqual(['acme/alpha-two', 'acme/zeta']);
     expect(result.matches.some((match) => match.id === 1)).toBe(false);
-    const workerBody = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    const workerBody = JSON.parse(fetchMock.mock.calls[1][0].body as string);
     expect(workerBody.topK).toBe(10);
   });
 
@@ -222,41 +229,29 @@ describe('MCP provider discovery', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ embeddings: [[0.1, 0.2]] }))
       .mockRejectedValueOnce(new TypeError('fetch failed'));
-    vi.stubGlobal('fetch', fetchMock);
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.vectorSearch('retrieval', {});
     expect(result).toMatchObject({ available: false });
     expect((result as { reason: string }).reason).toBe('worker_query_failed');
   });
 
-  it('maps a worker timeout abort to worker_query_failed instead of throwing', async () => {
+  it('maps a worker gateway timeout (504 from proxyRequest) to a worker_query_failed reason', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ embeddings: [[0.1, 0.2]] }))
-      .mockImplementationOnce((_url: unknown, init?: { signal?: AbortSignal }) =>
-        new Promise((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () =>
-            reject(new DOMException('This operation was aborted', 'AbortError'))
-          );
-        })
-      );
-    vi.stubGlobal('fetch', fetchMock);
-    vi.useFakeTimers();
-    try {
-      const pending = provider.vectorSearch('retrieval', {});
-      await vi.advanceTimersByTimeAsync(15_000);
-      const result = await pending;
-      expect(result).toMatchObject({ available: false });
-      expect((result as { reason: string }).reason).toBe('worker_query_failed');
-    } finally {
-      vi.useRealTimers();
-    }
+      .mockResolvedValueOnce(jsonResponse({ error: 'Gateway Timeout', code: 'GATEWAY_TIMEOUT' }, 504));
+    proxyRequestMock.mockImplementation(fetchMock);
+
+    const result = await provider.vectorSearch('retrieval', {});
+    expect(result).toMatchObject({ available: false });
+    expect((result as { reason: string }).reason).toMatch(/^worker_query_failed/);
   });
 
   it('maps a non-JSON worker response to worker_query_failed instead of throwing', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ embeddings: [[0.1, 0.2]] }))
-      .mockResolvedValueOnce(new Response('<html>gateway error</html>', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+      .mockResolvedValueOnce(rawResponse('<html>gateway error</html>'));
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.vectorSearch('retrieval', {});
     expect(result).toMatchObject({ available: false });
@@ -267,7 +262,7 @@ describe('MCP provider discovery', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ embeddings: [[0.1, 0.2]] }))
       .mockRejectedValueOnce(new TypeError('fetch failed'));
-    vi.stubGlobal('fetch', fetchMock);
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.findSimilarRepositories('acme/alpha', { topK: 3 });
     expect(result).toMatchObject({ available: false });
@@ -277,8 +272,8 @@ describe('MCP provider discovery', () => {
   it('rejects a JSON null worker payload instead of throwing or returning empty matches', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ embeddings: [[0.1, 0.2]] }))
-      .mockResolvedValueOnce(new Response('null', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+      .mockResolvedValueOnce(rawResponse('null'));
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.vectorSearch('retrieval', {});
     expect(result).toEqual({ available: false, reason: 'worker_query_failed' });
@@ -288,7 +283,7 @@ describe('MCP provider discovery', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ embeddings: [[0.1, 0.2]] }))
       .mockResolvedValueOnce(jsonResponse({ matches: 'not-an-array' }));
-    vi.stubGlobal('fetch', fetchMock);
+    proxyRequestMock.mockImplementation(fetchMock);
 
     const result = await provider.vectorSearch('retrieval', {});
     expect(result).toEqual({ available: false, reason: 'worker_query_failed' });

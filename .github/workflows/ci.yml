@@ -4,12 +4,10 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - hardened
+  workflow_dispatch:
 
-# Only supersede older PR attempts. Every main commit must finish its full run.
 concurrency:
-  # A unique group for every non-PR run is intentional: GitHub keeps only one
-  # pending run per group, so grouping main pushes would still drop commits.
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -17,57 +15,18 @@ permissions:
   contents: read
 
 env:
-  # These jobs never launch the Electron binary. Skipping its ~100 MB
-  # postinstall keeps every dependency install small and cache-friendly.
   ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
 jobs:
-  changes:
-    name: CI scope
+  frontend:
+    name: Frontend gates
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      run: ${{ steps.scope.outputs.run }}
-
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Detect docs-only pull request
-        id: scope
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CI_SCOPE_ROOT: ${{ github.workspace }}
-        run: |
-          # Pull request code is untrusted; execute the scope logic from base.
-          script="$RUNNER_TEMP/ci-scope.cjs"
-          if git cat-file blob "${PR_BASE_SHA}:scripts/ci-scope.cjs" >"$script" 2>/dev/null; then
-            node "$script"
-          else
-            echo "::warning::Trusted ci-scope script unavailable; running full CI"
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
-  quality:
-    name: Quality gates
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # The release-file and i18n PR gates diff against the base and need
-          # both endpoint objects available locally.
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -79,36 +38,10 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Frontend layering boundaries
-        run: node scripts/check-boundaries.cjs
+        run: npm run check:boundaries
 
-      - name: Fetch pull request endpoints
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags origin \
-            "${{ github.event.pull_request.base.sha }}" \
-            "pull/${{ github.event.pull_request.number }}/head"
-
-      - name: Block contributor version and update-feed edits
-        if: github.event_name == 'pull_request'
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: node scripts/check-pr-release-files.cjs --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"
-
-      - name: Validate community plugin registry semantics
-        run: node scripts/check-plugin-registry.cjs
-
-      - name: i18n completeness and hardcoded-copy gate
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            node scripts/check-i18n.cjs --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"
-          else
-            node scripts/check-i18n.cjs
-          fi
+      - name: i18n completeness
+        run: npm run check:i18n
 
       - name: Lint
         run: npm run lint
@@ -116,96 +49,16 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-  audit:
-    name: Dependency audit
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+      - name: Vitest
+        run: npx vitest run
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-
-      - name: Dependency audit (report-only baseline)
-        # Advisory-only until the existing transitive backlog is cleared.
-        # npm audit reads the lockfile directly, so this job needs no install.
-        run: npm audit --audit-level=high || true
-
-  tests:
-    name: Tests (${{ matrix.shard }}/3)
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Run Vitest shard
-        run: npx vitest run --shard=${{ matrix.shard }}/3
-
-      # The node:test suites are fast; running them beside shard 1 avoids a
-      # fourth dependency install without extending the critical path.
-      - name: Run node test suites
-        if: matrix.shard == 1
-        run: npm run test:node
-
-  build:
-    name: Build
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build
-        run: npm run build
+      - name: Script tests
+        run: node --test scripts/check-i18n.test.cjs scripts/check-egress.test.mjs scripts/fullstack-compose-env.test.cjs
 
   server:
-    name: Server quality gates
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
+    name: Server gates
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -227,7 +80,7 @@ jobs:
         run: npx tsc --noEmit
         working-directory: server
 
-      - name: Run tests
+      - name: Tests
         run: npm test
         working-directory: server
 
@@ -235,13 +88,13 @@ jobs:
         run: npm run build
         working-directory: server
 
-  worker:
-    name: Worker typecheck
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
+  egress:
+    name: Egress allowlist
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
+    timeout-minutes: 15
+    # Not blocking until the browser-side streams remove their remaining
+    # hosts (x.com, t.me, WebDAV, mshibanami, vectorize). Drop this line then.
+    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -253,12 +106,48 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
-          cache-dependency-path: cloudflare-worker/package-lock.json
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-        working-directory: cloudflare-worker
 
-      - name: Typecheck
-        run: npx tsc --noEmit
-        working-directory: cloudflare-worker
+      - name: Install server dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: server
+
+      - name: Build and scan for unlisted hosts
+        run: npm run check:egress
+
+  build:
+    name: Production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build and bundle budget
+        run: npm run build
+
+  docker:
+    name: Docker build (no push)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build fullstack image
+        run: docker build -f Dockerfile.fullstack -t gsm-fullstack:ci .

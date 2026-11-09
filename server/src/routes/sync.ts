@@ -1,14 +1,12 @@
+import { EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
-import { encrypt, decrypt } from '../services/crypto.js';
+import { decrypt } from '../services/crypto.js';
 import { config } from '../config.js';
 import { toDisplayPref, DESCRIPTION_DISPLAY_VALUES, TAGS_DISPLAY_VALUES } from './repositories.js';
 
 const router = Router();
 
-// 控制字符或 Latin-1 以外的码位会被 undici 拒绝，直接拒绝存储
-const sanitizeUserAgent = (value: unknown): string | null =>
-  typeof value === 'string' && !/[^\u0020-\u007e\u00a0-\u00ff]/.test(value) ? value : null;
 
 /** 与前端 NOASSERTION_KEYS 对齐：空白 / NOASSERTION / Other / none 等落 null。 */
 const NO_LICENSE_KEYS = new Set(['', 'noassertion', 'other', 'none', 'no-license']);
@@ -54,34 +52,13 @@ router.post('/api/sync/export', (_req, res) => {
       return masked;
     });
 
-    // WebDAV configs — mask password
-    const webdavRows = db.prepare('SELECT * FROM webdav_configs').all() as Record<string, unknown>[];
-    const webdavConfigs = webdavRows.map((row) => {
-      const masked = { ...row };
-      if (masked.password_encrypted && typeof masked.password_encrypted === 'string') {
-        try {
-          masked.password_masked = maskApiKey(decrypt(masked.password_encrypted, config.encryptionKey));
-        } catch {
-          masked.password_masked = '****';
-        }
-      }
-      delete masked.password_encrypted;
-      return masked;
-    });
-
-    // Settings — mask github_token
+    // Settings — secrets that no longer live in the database are not exported
     const settingsRows = db.prepare('SELECT * FROM settings').all() as Record<string, unknown>[];
     const settings: Record<string, unknown> = {};
     for (const row of settingsRows) {
       const key = row.key as string;
-      let value = row.value as string | null;
-      if (key === 'github_token' && value) {
-        try {
-          value = maskApiKey(decrypt(value, config.encryptionKey));
-        } catch {
-          value = '****';
-        }
-      }
+      const value = row.value as string | null;
+      if (EXCLUDED_SETTING_KEYS.has(key)) continue;
       settings[key] = value;
     }
 
@@ -93,7 +70,6 @@ router.post('/api/sync/export', (_req, res) => {
       categories,
       asset_filters: assetFilters,
       ai_configs: aiConfigs,
-      webdav_configs: webdavConfigs,
       settings,
     });
   } catch (err) {
@@ -352,43 +328,14 @@ router.post('/api/sync/import', (req, res) => {
         counts.ai_configs = aiConfigs.length;
       }
 
-      // WebDAV Configs — skip masked secrets
-      const webdavConfigs = data.webdav_configs as Record<string, unknown>[] | undefined;
-      if (Array.isArray(webdavConfigs) && webdavConfigs.length > 0) {
-        for (const c of webdavConfigs) {
-          const existing = db.prepare('SELECT password_encrypted FROM webdav_configs WHERE id = ?').get(c.id) as Record<string, unknown> | undefined;
-          const existingPwd = (existing?.password_encrypted as string) ?? null;
-          db.prepare(`
-            INSERT OR REPLACE INTO webdav_configs (id, name, url, username, password_encrypted, path, is_active, custom_user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            c.id, c.name ?? '', c.url ?? '', c.username ?? '',
-            existingPwd,
-            c.path ?? '/', (c.is_active ?? c.isActive) ? 1 : 0,
-            sanitizeUserAgent(
-              typeof c.custom_user_agent === 'string' ? c.custom_user_agent
-              : typeof c.customUserAgent === 'string' ? c.customUserAgent
-              : undefined
-            )
-          );
-        }
-        counts.webdav_configs = webdavConfigs.length;
-      }
-
-      // Settings — skip masked github_token
+      // Settings — the GitHub token, proxy and aria2 settings are not accepted any more
       const settings = data.settings as Record<string, unknown> | undefined;
       if (settings && typeof settings === 'object') {
         const settingsStmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
         let settingsCount = 0;
         for (const [key, value] of Object.entries(settings)) {
-          if (key === 'github_token' && typeof value === 'string' && value.startsWith('***')) {
-            continue; // Skip masked token
-          }
-          if (key === 'github_token' && value && typeof value === 'string') {
-            settingsStmt.run(key, encrypt(value, config.encryptionKey));
-          } else {
-            settingsStmt.run(key, (value as string) ?? null);
-          }
+          if (EXCLUDED_SETTING_KEYS.has(key)) continue;
+          settingsStmt.run(key, (value as string) ?? null);
           settingsCount++;
         }
         counts.settings = settingsCount;

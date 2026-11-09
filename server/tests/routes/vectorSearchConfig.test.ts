@@ -107,12 +107,13 @@ describe('vector search config route (GET/PUT /api/configs/vector-search)', () =
     mockGetReturningRow(row);
 
     const res = await request(createTestApp()).get('/api/configs/vector-search?decrypt=true');
+    // ?decrypt=true is ignored: secrets always come back masked.
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       enabled: true,
       workerUrl: fullConfig.workerUrl,
-      authToken: fullConfig.authToken,
+      authToken: '***' + fullConfig.authToken.slice(-4),
       embeddingConfigId: fullConfig.embeddingConfigId,
       indexMode: fullConfig.indexMode,
       readmeMaxChars: fullConfig.readmeMaxChars,
