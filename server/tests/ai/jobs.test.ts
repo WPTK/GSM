@@ -9,7 +9,7 @@ const { resetClaudeConfigForTests, markModelsVerified } = await import('../../sr
 const { clearEstimatesForTests, createEstimate } = await import('../../src/ai/estimate.js');
 const { createJob, getJob, resumeJobsOnBoot, cancelJob, SpendConfirmRequiredError } = await import('../../src/ai/jobs.js');
 const { pollBatchesOnce } = await import('../../src/ai/batchPoller.js');
-const { getAiState, stopCreditProbeForTests, runCreditProbe, CREDIT_PROBE_INTERVAL_MS, resumeCreditProbeSchedule } = await import('../../src/ai/creditState.js');
+const { getAiState, stopCreditProbeForTests, runCreditProbe, CREDIT_PROBE_INTERVAL_MS, PROBE_RETRY_BASE_MS, resumeCreditProbeSchedule, setCreditLow } = await import('../../src/ai/creditState.js');
 const { analyzeRepo, AnalysisInvalidError } = await import('../../src/ai/analyze.js');
 const { buildSystem, decideCache } = await import('../../src/ai/cache.js');
 const { fetchReadme } = await import('../../src/ai/readme.js');
@@ -314,5 +314,87 @@ describe('credit-low state', () => {
     expect(await runCreditProbe()).toBe(true);
     await waitFor(() => getJob(job.id).status === 'submitted');
     expect(fake.calls.batchCreate[1].requests).toHaveLength(20);
+  });
+});
+
+describe('submit races and crash window', () => {
+  it('a cancel that lands during batches.create wins and the new batch is cancelled', async () => {
+    const ids = insertRepos(db, 21);
+    const est = await estimateFor(ids);
+    let jobId = '';
+    fake.impl.batchCreate = () => {
+      cancelJob(jobId); // the user cancels while create() is in flight
+      return { id: 'batch_race', processing_status: 'in_progress' };
+    };
+    jobId = createJob(est.id, false).id;
+    await waitFor(() => fake.calls.batchCancel.includes('batch_race'));
+    expect(getJob(jobId).status).toBe('cancelled');
+  });
+
+  it('a restart after the intent marker but before the id was stored fails the job without resubmitting', async () => {
+    const ids = insertRepos(db, 21);
+    const est = await estimateFor(ids);
+    fake.impl.batchCreate = () => new Promise(() => undefined); // process "dies" inside create()
+    const job = createJob(est.id, false);
+    await waitFor(() => (db.prepare('SELECT batch_id FROM ai_jobs WHERE id = ?').get(job.id) as any).batch_id?.startsWith('pending:'));
+    const second = makeFakeClient();
+    setAnthropicClientForTests(second);
+    resumeJobsOnBoot();
+    const j = getJob(job.id);
+    expect(j.status).toBe('failed');
+    expect(j.items.every((i) => i.status === 'failed' && /start the run again/.test(i.error ?? ''))).toBe(true);
+    expect(second.calls.batchCreate).toHaveLength(0);
+  });
+});
+
+describe('estimate is an upper bound', () => {
+  it('covers 1024 output tokens and one retry for every repo (direct)', async () => {
+    const ids = insertRepos(db, 20);
+    const est = await estimateFor(ids);
+    const p = est.response.cache.prefixTokens; // 900, cached
+    expect(est.response.cache.cache).toBe('used');
+    // worst case by hand: every repo called twice, both hitting max_tokens, README at the cap
+    const perRepoIn = Math.ceil((('own/r1'.length + 'desc'.length + 160 + 2000) / 3)) + 80 + 4; // slack for id length
+    const requests = 40;
+    const worst =
+      (p * 0.125 + (requests - 1) * p * 0.01 + 2 * 20 * perRepoIn * 0.1 + requests * 1024 * 0.5) / 1_000_000;
+    expect(est.response.usd).toBeGreaterThanOrEqual(worst);
+    expect(est.response.outputTokens).toBe(40 * 1024);
+  });
+
+  it('for a batch adds one undiscounted direct retry pass', async () => {
+    const ids = insertRepos(db, 21);
+    const est = await estimateFor(ids);
+    expect(est.response.batch).toBe(true);
+    expect(est.response.outputTokens).toBe(2 * 21 * 1024);
+    const oneBatchPass = (21 * 900 * 0.125 + 21 * 1024 * 0.5) / 1_000_000 * 0.5;
+    expect(est.response.usd).toBeGreaterThan(oneBatchPass);
+  });
+});
+
+describe('credit probe failures that are not credit errors', () => {
+  it('retry in 5 minutes with backoff instead of waiting 24 hours', async () => {
+    vi.useFakeTimers();
+    setCreditLow();
+    let probes = 0;
+    fake.impl.create = () => { probes++; throw Object.assign(new Error('overloaded'), { status: 529 }); };
+    await vi.advanceTimersByTimeAsync(CREDIT_PROBE_INTERVAL_MS + 1000); // first (daily) probe fails
+    expect(probes).toBe(1);
+    expect(getAiState().state).toBe('credit_low');
+    await vi.advanceTimersByTimeAsync(PROBE_RETRY_BASE_MS + 1000);
+    expect(probes).toBe(2);
+    await vi.advanceTimersByTimeAsync(PROBE_RETRY_BASE_MS * 2 + 1000);
+    expect(probes).toBe(3); // doubled gap
+    const next = Date.parse(getAiState().nextCheckAt as string) - Date.now();
+    expect(next).toBeLessThanOrEqual(PROBE_RETRY_BASE_MS * 4);
+  });
+
+  it('a real credit error keeps the 24 hour hold', async () => {
+    vi.useFakeTimers();
+    setCreditLow();
+    fake.impl.create = () => { throw Object.assign(new Error('Your credit balance is too low'), { status: 400 }); };
+    await vi.advanceTimersByTimeAsync(CREDIT_PROBE_INTERVAL_MS + 1000);
+    const next = Date.parse(getAiState().nextCheckAt as string) - Date.now();
+    expect(next).toBeGreaterThan(CREDIT_PROBE_INTERVAL_MS - 5000);
   });
 });

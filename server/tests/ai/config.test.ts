@@ -83,6 +83,12 @@ describe('startup validation', () => {
     await expect(validateModels(makeFakeClient())).rejects.toThrow(/pricing/);
   });
 
+  it('refuses a chat model without a pricing entry', async () => {
+    process.env.ANTHROPIC_API_KEY = SECRET;
+    process.env.CLAUDE_MODEL_CHAT = 'claude-unpriced-chat';
+    await expect(validateModels(makeFakeClient())).rejects.toThrow(/CLAUDE_MODEL_CHAT=claude-unpriced-chat has no entry/);
+  });
+
   it('checks both models and marks the server connected', async () => {
     process.env.ANTHROPIC_API_KEY = SECRET;
     const fake = makeFakeClient();

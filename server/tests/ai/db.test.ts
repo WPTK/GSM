@@ -54,6 +54,16 @@ describe('migration v5', () => {
     expect(db.prepare('SELECT MAX(version) v FROM schema_version').get()).toEqual({ v: 5 });
   });
 
+  it('falls back to the is_active row when activeAIConfig points at a missing config', () => {
+    const db = oldDbAtV4();
+    runMigrations(db);
+    db.exec('DROP TABLE ai_job_items; DROP TABLE ai_jobs; DELETE FROM schema_version WHERE version = 5;');
+    db.prepare("INSERT INTO ai_configs (id, name, base_url, api_key_encrypted, model, is_active, custom_prompt, use_custom_prompt) VALUES ('c2','Other','https://x','k','m',1,'Use the fallback',1)").run();
+    db.prepare("INSERT INTO settings (key, value) VALUES ('activeAIConfig', 'gone')").run();
+    runMigrations(db);
+    expect(db.prepare("SELECT value FROM settings WHERE key = 'ai.customAnalysisPrompt'").get()).toEqual({ value: 'Use the fallback' });
+  });
+
   it('does not overwrite an existing server prompt and skips configs with the prompt switched off', () => {
     const db = oldDbAtV4();
     runMigrations(db);

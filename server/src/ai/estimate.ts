@@ -17,8 +17,6 @@ import {
 } from './contract.js';
 
 export const ESTIMATE_TTL_MS = 30 * 60 * 1000;
-/** Fixed output budget per repository used by the upper bound (the real max_tokens is higher). */
-export const OUTPUT_BUDGET_TOKENS = 512;
 /** Conservative characters-per-token ratio for the per-repository heuristic. */
 const CHARS_PER_TOKEN = 3;
 const PER_REPO_OVERHEAD_TOKENS = 80;
@@ -132,7 +130,14 @@ export function perRepoInputTokens(repo: RepoRecord): number {
   return Math.ceil((metaChars + README_CAP_CHARS) / CHARS_PER_TOKEN) + PER_REPO_OVERHEAD_TOKENS;
 }
 
-/** Upper-bound cost in USD for a run. Pure: no I/O. */
+/**
+ * Upper-bound cost in USD for a run. Pure: no I/O.
+ *
+ * Worst case assumed: every repository hits max_tokens (1024) on every call and returns invalid
+ * output once, so it is called twice. A batch is one discounted pass plus one undiscounted
+ * direct retry call per repository (batch caching is best-effort, so every batch request is
+ * charged as a cache write).
+ */
 export function computeCost(opts: {
   model: string;
   repoCount: number;
@@ -146,26 +151,36 @@ export function computeCost(opts: {
   const maxPerRepo = n > 0 ? Math.ceil(opts.perRepoInputTokensTotal / n) : 0;
   const tier = tierFor(opts.model, p + maxPerRepo * 2);
   const M = 1_000_000;
-  const outputTokens = n * opts.outputPerRepo;
-  const inputTokens = n * p + opts.perRepoInputTokensTotal;
+  const R = opts.perRepoInputTokensTotal;
+  const used = cache.cache === 'used';
 
-  let prefixCost: number;
-  if (cache.cache === 'used') {
-    // Direct runs write the cache once and read it afterwards. Batches cache on a best-effort
-    // basis, so the upper bound charges every request as a cache write.
-    prefixCost = opts.batch
-      ? (n * p * tier.cacheWrite5m) / M
-      : (p * tier.cacheWrite5m + Math.max(0, n - 1) * p * tier.cacheRead) / M;
-  } else {
-    prefixCost = (n * p * tier.input) / M;
+  // Direct requests: the first writes the cache, the rest read it.
+  const directCost = (requests: number, repoInput: number, output: number): number => {
+    const prefix = used
+      ? (p * tier.cacheWrite5m + Math.max(0, requests - 1) * p * tier.cacheRead) / M
+      : (requests * p * tier.input) / M;
+    return prefix + (repoInput * tier.input) / M + (output * tier.output) / M;
+  };
+
+  if (!opts.batch) {
+    const requests = 2 * n;
+    const output = requests * opts.outputPerRepo;
+    return {
+      inputTokens: requests * p + 2 * R,
+      outputTokens: output,
+      usd: Math.ceil(directCost(requests, 2 * R, output) * 10000) / 10000,
+    };
   }
-  const repoCost = (opts.perRepoInputTokensTotal * tier.input) / M;
-  const outCost = (outputTokens * tier.output) / M;
-  let usd = prefixCost + repoCost + outCost;
-  if (opts.batch) usd *= 1 - BATCH_DISCOUNT;
-  return { inputTokens, outputTokens, usd: Math.ceil(usd * 10000) / 10000 };
-}
 
+  const passPrefix = (n * p * (used ? tier.cacheWrite5m : tier.input)) / M;
+  const batchPass = (passPrefix + (R * tier.input) / M + (n * opts.outputPerRepo * tier.output) / M) * (1 - BATCH_DISCOUNT);
+  const retryPass = directCost(n, R, n * opts.outputPerRepo);
+  return {
+    inputTokens: 2 * n * p + 2 * R,
+    outputTokens: 2 * n * opts.outputPerRepo,
+    usd: Math.ceil((batchPass + retryPass) * 10000) / 10000,
+  };
+}
 export class EstimateInputError extends Error {}
 
 function prune(now: number): void {
@@ -189,7 +204,7 @@ export async function createEstimate(req: AnalysisEstimateRequest): Promise<Stor
     repoCount: repos.length,
     prefixTokens: cache.prefixTokens,
     perRepoInputTokensTotal: total,
-    outputPerRepo: Math.min(OUTPUT_BUDGET_TOKENS, ANALYSIS_MAX_TOKENS),
+    outputPerRepo: ANALYSIS_MAX_TOKENS,
     batch,
     cache,
   });

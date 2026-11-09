@@ -14,6 +14,11 @@ export interface StoredAiState {
   nextCheckAt?: string;
 }
 
+/** A probe that fails for a reason other than credit retries sooner: 5 min, doubling, up to 1 hour. */
+export const PROBE_RETRY_BASE_MS = 5 * 60 * 1000;
+export const PROBE_RETRY_MAX_MS = 60 * 60 * 1000;
+let probeFailures = 0;
+
 const CREDIT_MESSAGE = /credit balance is too low/i;
 
 /**
@@ -104,23 +109,24 @@ export async function runCreditProbe(): Promise<boolean> {
       max_tokens: 1,
       messages: [{ role: 'user', content: '.' }],
     });
+    probeFailures = 0;
     clearCreditLow();
     return true;
   } catch (err) {
-    if (!isCreditLowError(err)) {
-      logger.warn('ai.credit', 'credit probe failed for a reason other than credit; will retry tomorrow');
+    // Only a real credit error earns the 24 hour hold; anything else (network, 5xx) retries soon.
+    let delay = CREDIT_PROBE_INTERVAL_MS;
+    if (isCreditLowError(err)) {
+      probeFailures = 0;
+    } else {
+      delay = Math.min(PROBE_RETRY_BASE_MS * 2 ** probeFailures, PROBE_RETRY_MAX_MS);
+      probeFailures++;
+      logger.warn('ai.credit', `credit probe failed for a reason other than credit; retrying in ${Math.round(delay / 60000)} min`);
     }
-    const next: StoredAiState = {
-      state: 'credit_low',
-      since: getAiState().since,
-      nextCheckAt: new Date(Date.now() + CREDIT_PROBE_INTERVAL_MS).toISOString(),
-    };
-    writeState(next);
-    scheduleProbe(CREDIT_PROBE_INTERVAL_MS);
+    writeState({ state: 'credit_low', since: getAiState().since, nextCheckAt: new Date(Date.now() + delay).toISOString() });
+    scheduleProbe(delay);
     return false;
   }
 }
-
 /** On boot: when the stored state is credit_low, probe at its nextCheckAt (or now if that has passed). */
 export function resumeCreditProbeSchedule(): void {
   const state = getAiState();
@@ -132,4 +138,5 @@ export function resumeCreditProbeSchedule(): void {
 export function stopCreditProbeForTests(): void {
   if (probeTimer) clearTimeout(probeTimer);
   probeTimer = null;
+  probeFailures = 0;
 }

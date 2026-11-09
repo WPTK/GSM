@@ -17,7 +17,7 @@ export async function validateModels(client?: AnthropicLike): Promise<void> {
   const { bulk, chat } = getModels();
   const api = client ?? getAnthropicClient();
   for (const [role, id] of [['CLAUDE_MODEL_BULK', bulk], ['CLAUDE_MODEL_CHAT', chat]] as const) {
-    if (role === 'CLAUDE_MODEL_BULK' && !hasPricing(id)) {
+    if (!hasPricing(id)) {
       throw new ClaudeStartupError(`${role}=${id} has no entry in ai/pricing.json, so the spend guard cannot price it; refusing to start`);
     }
     try {

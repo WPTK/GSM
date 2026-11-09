@@ -42,6 +42,17 @@ import {
 
 const router = Router();
 
+/** Relay limits: a hostile or buggy client cannot queue unbounded upstream work. */
+export const MAX_RELAY_CHARS = 800_000;
+export const MAX_CONCURRENT_RELAYS = 4;
+let activeRelays = 0;
+
+function relayChars(body: z.infer<typeof AiMessagesRequestSchema>): number {
+  let total = (body.system?.length ?? 0) + JSON.stringify(body.tools ?? []).length;
+  for (const m of body.messages) total += typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length;
+  return total;
+}
+
 function sendError(res: Response, status: number, code: AiErrorCode, message: string): void {
   const body: AiErrorBody = { error: message, code };
   res.status(status).json(body);
@@ -150,14 +161,36 @@ router.post('/api/ai/messages', async (req, res) => {
   if (body.maxTokens > MAX_TOKENS_BY_PURPOSE[body.purpose]) {
     return sendError(res, 400, 'VALIDATION_ERROR', `maxTokens: at most ${MAX_TOKENS_BY_PURPOSE[body.purpose]} for purpose ${body.purpose}`);
   }
+  if (relayChars(body) > MAX_RELAY_CHARS) {
+    return sendError(res, 400, 'VALIDATION_ERROR', `messages: at most ${MAX_RELAY_CHARS} characters in total`);
+  }
   if (!ensureReady(res) || !ensureCredit(res)) return;
+  if (activeRelays >= MAX_CONCURRENT_RELAYS) {
+    res.setHeader('Retry-After', '1');
+    return sendError(res, 429, 'AI_RATE_LIMITED', 'Too many AI requests in flight; retry shortly');
+  }
+  activeRelays++;
+  let released = false;
+  const release = () => {
+    if (!released) {
+      released = true;
+      activeRelays--;
+    }
+  };
+  res.on('close', release);
 
   const params = buildParams(body);
   const client = getAnthropicClient();
 
   if (!body.stream) {
+    const controller = new AbortController();
+    let done = false;
+    res.on('close', () => {
+      if (!done) controller.abort();
+    });
     try {
-      const message = await client.messages.create(params);
+      const message = await client.messages.create(params, { signal: controller.signal });
+      done = true;
       const calls = toolCallsOf(message);
       const out: AiMessagesResponse = {
         text: messageText(message),
@@ -167,6 +200,8 @@ router.post('/api/ai/messages', async (req, res) => {
       };
       res.json(out);
     } catch (err) {
+      done = true;
+      if (controller.signal.aborted) return; // client left; nothing to answer
       const d = describeUpstreamError(err);
       logger.warn('ai.messages', `relay failed (${d.code})`);
       if (d.retryAfter) res.setHeader('Retry-After', d.retryAfter);
