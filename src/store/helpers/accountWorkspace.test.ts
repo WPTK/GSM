@@ -35,22 +35,14 @@ const repo = (id: number): Repository => ({
 const source = (overrides: Partial<AccountWorkspaceSource> = {}): AccountWorkspaceSource => ({
   repositories: [repo(1)],
   lastSync: '2026-09-16T00:00:00.000Z',
-  gists: [],
-  starredGists: [],
-  selectedGistCategory: 'all',
   releases: [],
   releaseSubscriptions: new Set([1]),
   releaseSourceSettings: defaultReleaseSourceSettings,
   readReleases: new Set([2]),
-  forks: [],
-  readForks: new Set(),
   customCategories: [{ id: 'custom-1', name: 'Keep', icon: '', isCustom: true, keywords: [] }],
   hiddenDefaultCategoryIds: [],
   categoryOrder: ['custom-1'],
   defaultCategoryOverrides: {},
-  categoryListIdMap: { 'custom-1': 'L1' },
-  syncMode: 'stars-and-lists',
-  syncModeConfigured: true,
   ...overrides,
 });
 
@@ -77,16 +69,9 @@ describe('workspaceHasData predicate', () => {
     expect(workspaceHasData(emptyAccountWorkspace())).toBe(false);
   });
 
-  it('returns false when only syncMode or syncModeConfigured are set', () => {
-    expect(workspaceHasData({ syncMode: 'stars-and-lists' as const, syncModeConfigured: true })).toBe(false);
-  });
-
   it('returns true when content lists hold items', () => {
     expect(workspaceHasData({ repositories: [repo(1)] })).toBe(true);
-    expect(workspaceHasData({ gists: [{ id: 'g1' } as unknown as import('../../types').Gist] })).toBe(true);
-    expect(workspaceHasData({ starredGists: [{ id: 'g2' } as unknown as import('../../types').Gist] })).toBe(true);
     expect(workspaceHasData({ releases: [{ id: 10 } as unknown as import('../../types').Release] })).toBe(true);
-    expect(workspaceHasData({ forks: [{ id: 20 } as unknown as import('../../types').ForkRepo] })).toBe(true);
   });
 
   it('returns true when user-defined categories or category mappings exist', () => {
@@ -94,7 +79,6 @@ describe('workspaceHasData predicate', () => {
     expect(workspaceHasData({ categoryOrder: ['c1'] })).toBe(true);
     expect(workspaceHasData({ hiddenDefaultCategoryIds: ['all'] })).toBe(true);
     expect(workspaceHasData({ defaultCategoryOverrides: { all: { name: 'Everything' } } })).toBe(true);
-    expect(workspaceHasData({ categoryListIdMap: { c1: 'L1' } })).toBe(true);
   });
 });
 
@@ -151,7 +135,7 @@ describe('account workspace switching', () => {
   it('restores a parked snapshot when live lists are empty', () => {
     const parked = captureAccountWorkspace(source({ repositories: [repo(1)] }));
     const current = {
-      ...source({ repositories: [], lastSync: null, customCategories: [], categoryOrder: [], categoryListIdMap: {} }),
+      ...source({ repositories: [], lastSync: null, customCategories: [], categoryOrder: [] }),
       accountWorkspaces: { '1': parked },
     };
     const result = switchAccountWorkspace(current, null, '1');
@@ -171,11 +155,10 @@ describe('account workspace switching', () => {
   it('sanitizes persisted account workspace maps', () => {
     expect(normalizeAccountWorkspaces(null)).toEqual({});
     const normalized = normalizeAccountWorkspaces({
-      '1': { repositories: [repo(1)], syncMode: 'stars-and-lists', syncModeConfigured: true },
+      '1': { repositories: [repo(1)] },
       bad: 'nope',
     });
     expect(normalized['1']?.repositories[0].id).toBe(1);
-    expect(normalized['1']?.syncMode).toBe('stars-and-lists');
     expect(normalized.bad).toBeUndefined();
   });
 });

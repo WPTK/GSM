@@ -20,8 +20,7 @@ import {
   ChevronDown,
   Globe,
   X,
-  Newspaper,
-  Users
+  Newspaper
 } from 'lucide-react';
 import { SiAndroid, SiApple, SiLinux } from '@icons-pack/react-simple-icons';
 import { SiWindows } from './SiWindows';

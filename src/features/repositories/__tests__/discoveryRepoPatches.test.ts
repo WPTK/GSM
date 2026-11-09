@@ -18,7 +18,7 @@ const repo: DiscoveryRepo = {
   owner: { login: 'owner', avatar_url: 'https://example.com/avatar.png' },
   topics: ['test'],
   rank: 3,
-  channel: 'trending',
+  channel: 'hot-release',
   platform: 'Macos',
 };
 

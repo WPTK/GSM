@@ -45,44 +45,44 @@ describe('discovery channel visibility', () => {
   beforeEach(() => {
     useAppStore.setState({
       discoveryChannels: useAppStore.getInitialState().discoveryChannels.map(channel => ({ ...channel })),
-      selectedDiscoveryChannel: 'telegram',
+      selectedDiscoveryChannel: 'topic',
     });
   });
 
   it('hides a channel and selects another visible channel', () => {
-    useAppStore.getState().toggleDiscoveryChannel('telegram');
+    useAppStore.getState().toggleDiscoveryChannel('topic');
 
     const state = useAppStore.getState();
-    expect(state.discoveryChannels.find(channel => channel.id === 'telegram')?.enabled).toBe(false);
-    expect(state.selectedDiscoveryChannel).toBe('trending');
+    expect(state.discoveryChannels.find(channel => channel.id === 'topic')?.enabled).toBe(false);
+    expect(state.selectedDiscoveryChannel).toBe('hot-release');
   });
 
   it('keeps the last visible channel available', () => {
     useAppStore.setState({
       discoveryChannels: useAppStore.getState().discoveryChannels.map(channel => ({
         ...channel,
-        enabled: channel.id === 'trending',
+        enabled: channel.id === 'hot-release',
       })),
-      selectedDiscoveryChannel: 'trending',
+      selectedDiscoveryChannel: 'hot-release',
     });
 
-    useAppStore.getState().toggleDiscoveryChannel('trending');
+    useAppStore.getState().toggleDiscoveryChannel('hot-release');
 
-    expect(useAppStore.getState().discoveryChannels.find(channel => channel.id === 'trending')?.enabled).toBe(true);
+    expect(useAppStore.getState().discoveryChannels.find(channel => channel.id === 'hot-release')?.enabled).toBe(true);
   });
 
   it('restores a visible selection from persisted channel settings', () => {
     const discoveryChannels = useAppStore.getInitialState().discoveryChannels.map(channel => ({
       ...channel,
-      enabled: channel.id !== 'telegram',
+      enabled: channel.id !== 'topic',
     }));
     const normalized = normalizePersistedState(
-      { discoveryChannels, selectedDiscoveryChannel: 'telegram' },
+      { discoveryChannels, selectedDiscoveryChannel: 'topic' },
       useAppStore.getState()
     );
 
-    expect(normalized.discoveryChannels?.find(channel => channel.id === 'telegram')?.enabled).toBe(false);
-    expect(normalized.selectedDiscoveryChannel).toBe('trending');
+    expect(normalized.discoveryChannels?.find(channel => channel.id === 'topic')?.enabled).toBe(false);
+    expect(normalized.selectedDiscoveryChannel).toBe('hot-release');
   });
 });
 
@@ -1182,17 +1182,15 @@ describe('useAppStore persisted-state historical fixtures', () => {
     // 分片持久化按引用判脏：hydration 规整化不得在无回填需求时重建重数据数组，
     // 否则每次启动后都会触发一次全量重写。
     const repositories = [createRepository(1, { has_fetched_releases: true }), createRepository(2)];
-    const gists = [{ id: 'gist-1' }];
     const releases = [
       makeRelease(11, { repository: { id: 1, full_name: 'owner/repo-1', name: 'repo-1' } }),
     ];
     const normalized = normalizePersistedState(
-      buildPersistedSnapshot({ repositories, gists, releases }),
+      buildPersistedSnapshot({ repositories, releases }),
       useAppStore.getInitialState(),
     );
 
     expect(normalized.repositories).toBe(repositories);
-    expect(normalized.gists).toBe(gists);
     expect(normalized.releases).toBe(releases);
 
     // 存在需要回填的仓库时，回填行为保持不变
@@ -1219,7 +1217,7 @@ describe('useAppStore persisted-state historical fixtures', () => {
     });
   });
 
-  it('maps legacy daily-dev channels into the most-dev schema and restores the trending channel', async () => {
+  it('maps legacy daily-dev channels into the most-dev schema and drops the removed trending channel', async () => {
     const migrated = await migrateSnapshot(buildPersistedSnapshot({
       subscriptionChannels: [{ id: 'daily-dev', name: 'Daily developers', enabled: false }],
     }));
@@ -1227,8 +1225,8 @@ describe('useAppStore persisted-state historical fixtures', () => {
 
     expect(channels).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'most-dev', nameEn: 'Top Developers', enabled: false }),
-      expect.objectContaining({ id: 'trending', nameEn: 'Trending', enabled: true }),
     ]));
+    expect(channels.some(channel => channel.id === 'trending')).toBe(false);
   });
 
   it('fills the header menu contract for snapshots written before the header configuration existed', async () => {
@@ -1253,12 +1251,10 @@ describe('useAppStore persisted-state historical fixtures', () => {
     const snapshot = buildPersistedSnapshot({
       ...buildTransientDiscoverySnapshot(),
       analyzingRepositoryIds: [1],
-      analyzingGistIds: ['gist-1'],
     });
     const normalized = normalizePersistedState(snapshot, useAppStore.getInitialState());
 
     expect(normalized.analyzingRepositoryIds).toEqual(new Set());
-    expect(normalized.analyzingGistIds).toEqual(new Set());
     expect(normalized).toMatchObject(buildExpectedResetDiscoveryState());
   });
 
@@ -1266,24 +1262,18 @@ describe('useAppStore persisted-state historical fixtures', () => {
     const serialized = partializeState({
       releaseSubscriptions: new Set([1, 2]),
       readReleases: new Set([3]),
-      readForks: new Set([4]),
       releaseExpandedRepositories: new Set([5]),
-      forkExpandedRepositories: new Set([6]),
     });
     const normalized = normalizePersistedState(serialized, useAppStore.getInitialState());
 
     expect(serialized).toMatchObject({
       releaseSubscriptions: [1, 2],
       readReleases: [3],
-      readForks: [4],
       releaseExpandedRepositories: [5],
-      forkExpandedRepositories: [6],
     });
     expect(normalized.releaseSubscriptions).toEqual(new Set([1, 2]));
     expect(normalized.readReleases).toEqual(new Set([3]));
-    expect(normalized.readForks).toEqual(new Set([4]));
     expect(normalized.releaseExpandedRepositories).toEqual(new Set([5]));
-    expect(normalized.forkExpandedRepositories).toEqual(new Set([6]));
   });
 });
 

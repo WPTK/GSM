@@ -1,12 +1,10 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Category, Repository, VectorSearchConfig } from '../../../types';
+import type { Repository, VectorSearchConfig } from '../../../types';
 import {
-  applyListsToRepositories,
   buildSearchPatch,
   countNewStarredRepositories,
   mergeStarredRepositories,
-  planListCategories,
   useSearchActions,
 } from './useSearchActions';
 
@@ -20,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   searchRepositoriesWithSemanticReranking: vi.fn(),
   searchRepositoriesWithSelection: vi.fn(),
   getAllStarredRepositories: vi.fn(),
-  getUserLists: vi.fn(),
   forceSyncToBackend: vi.fn(),
 }));
 
@@ -70,9 +67,6 @@ vi.mock('../../../services/githubApiFactory', () => ({
   createGitHubApiService: () => ({
     getAllStarredRepositories: mocks.getAllStarredRepositories,
   }),
-  createGitHubListsApiService: () => ({
-    getUserLists: mocks.getUserLists,
-  }),
 }));
 
 vi.mock('../../../services/autoSync', () => ({
@@ -116,12 +110,6 @@ const createStoreState = () => ({
   setRepositories: vi.fn(),
   setLastSync: vi.fn(),
   setSyncingStars: vi.fn(),
-  syncMode: 'stars-only' as 'stars-only' | 'stars-and-lists',
-  user: { login: 'me' } as { login: string } | null,
-  addCustomCategory: vi.fn(),
-  customCategories: [] as Category[],
-  hiddenDefaultCategoryIds: [] as string[],
-  defaultCategoryOverrides: {},
   vectorSearchConfig: {
     enabled: false,
     workerUrl: '',
@@ -519,122 +507,25 @@ describe('useSearchActions.syncStars', () => {
     setupStoreMocks();
   });
 
-  it('keeps the setRepositories → forceSyncToBackend → setLastSync order and applies lists', async () => {
+  it('keeps the setRepositories → forceSyncToBackend → setLastSync order', async () => {
     mocks.getAllStarredRepositories.mockResolvedValue([
       baseRepo({ id: 1, full_name: 'owner/repo-one' }),
     ]);
-    mocks.getUserLists.mockResolvedValue([{ id: 'l1', name: 'MyList', isPrivate: false, items: ['owner/repo-one'] }]);
     storeState.repositories = [baseRepo({ id: 1, full_name: 'owner/repo-one' })];
-    // 预置与 list 同名的本地分类，使本用例不触发新建分类分支
-    storeState.customCategories = [{ id: 'custom-1', name: 'MyList', icon: 'x', isCustom: true, keywords: [] }];
 
     const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars('stars-and-lists'); });
+    await act(async () => { await result.current.syncStars(); });
 
     expect(storeState.setRepositories).toHaveBeenCalledTimes(1);
-    const written = storeState.setRepositories.mock.calls[0][0] as Repository[];
-    expect(written[0].custom_tags).toContain('MyList');
-    // list 名命中同名本地分类 → 设分类并加锁
-    expect(written[0].custom_category).toBe('MyList');
-    expect(written[0].category_locked).toBe(true);
-    expect(written[0].last_edited).toEqual(expect.any(String));
-
     const setOrder = storeState.setRepositories.mock.invocationCallOrder[0];
     const syncOrder = mocks.forceSyncToBackend.mock.invocationCallOrder[0];
     const lastSyncOrder = storeState.setLastSync.mock.invocationCallOrder[0];
     expect(setOrder).toBeLessThan(syncOrder);
     expect(syncOrder).toBeLessThan(lastSyncOrder);
 
-    expect(mocks.toast).toHaveBeenCalledWith(
-      '已同步 1 个 list，并应用到 1 个未锁定仓库：MyList(1)',
-      'info',
-    );
     expect(mocks.toast).toHaveBeenCalledWith('同步完成！所有仓库都是最新的。', 'info');
     expect(storeState.setSyncingStars).toHaveBeenCalledWith(true);
     expect(storeState.setSyncingStars).toHaveBeenLastCalledWith(false);
-  });
-
-  it('creates missing categories for cloud lists', async () => {
-    mocks.getAllStarredRepositories.mockResolvedValue([baseRepo({ id: 1, full_name: 'owner/repo-one' })]);
-    mocks.getUserLists.mockResolvedValue([{ id: 'l1', name: 'BrandNewList', isPrivate: false, items: ['owner/repo-one'] }]);
-    storeState.repositories = [baseRepo({ id: 1, full_name: 'owner/repo-one' })];
-
-    const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars('stars-and-lists'); });
-
-    expect(storeState.addCustomCategory).toHaveBeenCalledTimes(1);
-    const created = storeState.addCustomCategory.mock.calls[0][0];
-    expect(created.name).toBe('BrandNewList');
-    expect(created.id).toMatch(/^custom-sync-\d+-0$/);
-    expect(created.isCustom).toBe(true);
-    expect(mocks.toast).toHaveBeenCalledWith(
-      '已同步 1 个 list，并应用到 1 个未锁定仓库：BrandNewList(1)（新建 1 个分类）',
-      'info',
-    );
-  });
-
-  it('keeps the starred sync result when the list sync fails', async () => {
-    mocks.getAllStarredRepositories.mockResolvedValue([baseRepo({ id: 1, full_name: 'owner/repo-one' })]);
-    mocks.getUserLists.mockRejectedValue(new Error('lists unavailable'));
-    storeState.repositories = [baseRepo({ id: 1, full_name: 'owner/repo-one' })];
-
-    const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars('stars-and-lists'); });
-
-    expect(mocks.toast).toHaveBeenCalledWith(
-      'List 同步失败，星标仓库已同步。请稍后重试，或检查 GitHub Token 权限（需 user scope）。',
-      'error',
-    );
-    expect(storeState.setRepositories).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 1, full_name: 'owner/repo-one' }),
-    ]);
-    expect(mocks.forceSyncToBackend).toHaveBeenCalledTimes(1);
-    expect(mocks.toast).toHaveBeenCalledWith('同步完成！所有仓库都是最新的。', 'info');
-  });
-
-  it('syncs lists when auto mode follows the stars-and-lists config', async () => {
-    mocks.getAllStarredRepositories.mockResolvedValue([baseRepo({ id: 1, full_name: 'owner/repo-one' })]);
-    mocks.getUserLists.mockResolvedValue([{ id: 'l1', name: 'MyList', isPrivate: false, items: ['owner/repo-one'] }]);
-    storeState.repositories = [baseRepo({ id: 1, full_name: 'owner/repo-one' })];
-    storeState.syncMode = 'stars-and-lists';
-    storeState.customCategories = [{ id: 'custom-1', name: 'MyList', icon: 'x', isCustom: true, keywords: [] }];
-
-    const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars(); }); // mode 'auto'
-
-    expect(mocks.getUserLists).toHaveBeenCalledTimes(1);
-    const written = storeState.setRepositories.mock.calls[0][0] as Repository[];
-    expect(written[0].custom_tags).toContain('MyList');
-  });
-
-  it('keeps the starred result and toasts the list failure when the user login is missing', async () => {
-    mocks.getAllStarredRepositories.mockResolvedValue([baseRepo({ id: 1, full_name: 'owner/repo-one' })]);
-    storeState.user = null;
-
-    const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars('stars-and-lists'); });
-
-    expect(mocks.getUserLists).not.toHaveBeenCalled();
-    expect(mocks.toast).toHaveBeenCalledWith(
-      'List 同步失败，星标仓库已同步。请稍后重试，或检查 GitHub Token 权限（需 user scope）。',
-      'error',
-    );
-    expect(storeState.setRepositories).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 1, full_name: 'owner/repo-one' }),
-    ]);
-    expect(mocks.forceSyncToBackend).toHaveBeenCalledTimes(1);
-  });
-
-  it('toasts the created-categories summary when no list item matches a local repo', async () => {
-    mocks.getAllStarredRepositories.mockResolvedValue([baseRepo({ id: 1, full_name: 'owner/repo-one' })]);
-    mocks.getUserLists.mockResolvedValue([{ id: 'l1', name: 'BrandNewList', isPrivate: false, items: [] }]);
-    storeState.repositories = [baseRepo({ id: 1, full_name: 'owner/repo-one' })];
-
-    const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars('stars-and-lists'); });
-
-    expect(storeState.addCustomCategory).toHaveBeenCalledTimes(1);
-    expect(mocks.toast).toHaveBeenCalledWith('已同步 1 个 list（新建 1 个分类）。', 'info');
   });
 
   it('toasts the new-repositories count when the sync finds unseen repos', async () => {
@@ -645,7 +536,7 @@ describe('useSearchActions.syncStars', () => {
     ]);
 
     const { result } = renderHook(() => useSearchActions());
-    await act(async () => { await result.current.syncStars('stars-only'); });
+    await act(async () => { await result.current.syncStars(); });
 
     expect(mocks.toast).toHaveBeenCalledWith('同步完成！发现 1 个新仓库。', 'success');
   });
@@ -892,44 +783,5 @@ describe('useSearchActions pure helpers', () => {
     expect(f.get(2)?.ai_summary).toBeUndefined();
     expect(r.get(2)?.ai_summary).toBeUndefined();
     expect(countNewStarredRepositories([reuse, renamed], storeRepos)).toBe(1);
-  });
-
-  it('planListCategories skips reserved names and existing categories', () => {
-    const { toCreate, categoryByLowerName } = planListCategories(
-      [
-        { id: 'l1', name: 'fresh', isPrivate: false, items: [] },
-        { id: 'l2', name: 'none', isPrivate: false, items: [] },
-        { id: 'l3', name: 'existing', isPrivate: false, items: [] },
-      ],
-      [{ id: 'c1', name: 'Existing', icon: '', isCustom: false, keywords: [] }],
-      (idx) => `custom-sync-123-${idx}`,
-    );
-    expect(toCreate).toEqual([
-      { id: 'custom-sync-123-0', name: 'fresh', icon: ' 📋', isCustom: true, keywords: [] },
-    ]);
-    expect(categoryByLowerName.get('fresh')).toBe('fresh');
-    expect(categoryByLowerName.get('existing')).toBe('Existing');
-    expect(categoryByLowerName.has('none')).toBe(false);
-  });
-
-  it('applyListsToRepositories tags, locks by category and respects pre-existing locks', () => {
-    const categoryByLowerName = new Map([['web apps', 'Web Apps']]);
-    const repositories = [
-      baseRepo({ id: 1, full_name: 'owner/locked-early', category_locked: true, custom_category: 'Web Apps' }),
-      baseRepo({ id: 2, full_name: 'owner/normal' }),
-    ];
-    const lists = [
-      { id: 'l1', name: 'Web Apps', isPrivate: false, items: ['owner/locked-early', 'owner/normal'] },
-      { id: 'l2', name: 'Second List', isPrivate: false, items: ['owner/normal'] },
-    ];
-    const { repositories: mapped, appliedTagsCount } = applyListsToRepositories(repositories, lists, categoryByLowerName);
-
-    // 预存在锁定：仅追加标签，不改分类/锁定
-    expect(mapped[0]).toMatchObject({ custom_tags: ['Web Apps'], custom_category: 'Web Apps', category_locked: true });
-    expect(mapped[0].last_edited).toBeUndefined();
-    // 正常仓库：第一个 list 命中分类 → 设分类并加锁；第二个 list 时仓库已被锁定 → 仅追加标签
-    expect(mapped[1]).toMatchObject({ custom_tags: ['Web Apps', 'Second List'], custom_category: 'Web Apps', category_locked: true });
-    expect(mapped[1].last_edited).toEqual(expect.any(String));
-    expect(appliedTagsCount).toEqual({ 'Web Apps': 2, 'Second List': 1 });
   });
 });
