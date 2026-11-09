@@ -41,7 +41,7 @@ const makeTrendingRepo = (overrides: Partial<DiscoveryRepo> = {}): DiscoveryRepo
   owner: { login: 'owner', avatar_url: 'https://github.com/owner.png' },
   topics: [],
   rank: 1,
-  channel: 'trending',
+  channel: 'hot-release',
   platform: 'All',
   ...overrides,
 });

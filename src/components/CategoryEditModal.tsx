@@ -2,15 +2,13 @@ import { useT } from "../i18n/useT";
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Save, X, Plus, ListPlus } from 'lucide-react';
+import { Save, X, Plus } from 'lucide-react';
 import { Modal } from './Modal';
 import { Category } from '../types';
 import { useAppStore, getAllCategories } from '../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useDialog } from '../hooks/useDialog';
 import { validateCategoryName } from '../utils/categoryUtils';
-import { useStarSyncActions } from '../features/settings/hooks/useStarSyncActions';
-import { GITHUB_LISTS_NAME_MAX_LENGTH } from '../store/helpers/listsPushPlan';
 import { CategoryGlyph } from './CategoryGlyph';
 
 const CATEGORY_ICON_CHOICES = [
@@ -69,7 +67,7 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
   category,
   isCreating = false
 }) => {
-  const { addCustomCategory, updateCustomCategory, updateDefaultCategory, resetDefaultCategory, resetDefaultCategoryNameIcon, resetDefaultCategoryKeywords, defaultCategoryOverrides, language, customCategories, isListsPushRunning } = useAppStore(useShallow((state) => ({
+  const { addCustomCategory, updateCustomCategory, updateDefaultCategory, resetDefaultCategory, resetDefaultCategoryNameIcon, resetDefaultCategoryKeywords, defaultCategoryOverrides, language, customCategories } = useAppStore(useShallow((state) => ({
     addCustomCategory: state.addCustomCategory,
     updateCustomCategory: state.updateCustomCategory,
     updateDefaultCategory: state.updateDefaultCategory,
@@ -79,9 +77,7 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
     defaultCategoryOverrides: state.defaultCategoryOverrides,
     language: state.language,
     customCategories: state.customCategories,
-    isListsPushRunning: state.listsPush.isRunning,
   })));
-  const { pushCategoriesToLists } = useStarSyncActions();
 
   const { toast } = useDialog();
   const t = useT('app');
@@ -169,15 +165,6 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
         formData.keywords !== (effectiveCategory.keywords?.join(', ') || '')
       );
 
-  // 推送的是已保存的分类：有未保存修改时禁用；先关闭弹窗再确认，避免对话框叠加
-  const canPush = !isCreating && !!category;
-  const handlePush = () => {
-    if (!category) return;
-    onClose();
-    void pushCategoriesToLists([category.id]);
-  };
-  const isNameTooLong = formData.name.trim().length > GITHUB_LISTS_NAME_MAX_LENGTH;
-
   const handleIconSelect = useCallback((iconValue: string) => {
     setFormData(prev => ({ ...prev, icon: iconValue }));
     setShowCustomInput(false);
@@ -241,11 +228,6 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
             placeholder={t('categoryEditModal.enter-category-name')}
             autoFocus
           />
-          {isNameTooLong && (
-            <p className="app-form-hint text-warning">
-              {t('categoryEditModal.name-too-long-for-github-list', { max: GITHUB_LISTS_NAME_MAX_LENGTH })}
-            </p>
-          )}
         </div>
 
         {/* Icon Selection */}
@@ -399,20 +381,7 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
 
         {/* Action Buttons */}
         <div className="app-category-editor-footer">
-          <div>
-            {canPush && (
-              <Button
-                variant="outline"
-                onClick={handlePush}
-                disabled={!!hasChanges || isListsPushRunning}
-                title={hasChanges ? t('categoryEditModal.save-changes-before-push') : undefined}
-                className="ui-button"
-              >
-                <ListPlus aria-hidden="true" />
-                <span>{t('categoryEditModal.push-to-github-list')}</span>
-              </Button>
-            )}
-          </div>
+          <div />
           <div className="app-dialog-actions">
           <Button
             variant="outline"

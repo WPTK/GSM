@@ -9,23 +9,11 @@
     "backend-connection-successful": "バックエンド接続に成功しました!",
     "backend-not-available": "バックエンドが利用できません",
     "partial-sync-failure-v1-failed-v2-succeeded": "部分的な同期に失敗しました: {{v1}} は失敗しました、{{v2}} は成功しました",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "バックエンドに同期: ウェアハウス {{v1}}、リリース {{v2}}、AI 構成 {{v3}}、WebDAV 構成 {{v4}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "バックエンドに同期: ウェアハウス {{v1}}、リリース {{v2}}、AI 構成 {{v3}}",
     "sync-failed": "同期に失敗しました",
     "sync-from-backend": "バックエンドから同期する",
     "syncing-from-backend-will-overwrite-local-data-c": "バックエンドから同期するとローカル データが上書きされます。続行しますか?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "バックエンドから同期: ウェアハウス {{v1}}、リリース {{v2}}、AI 構成 {{v3}}、WebDAV 構成 {{v4}}"
-  },
-  "useBackupActions": {
-    "please-configure-and-activate-webdav-service-fir": "最初に WebDAV サービスを設定してアクティブ化してください。",
-    "data-backup-successful": "データのバックアップが成功しました。",
-    "data-backup-failed": "データのバックアップに失敗しました!",
-    "backup-failed": "バックアップに失敗しました",
-    "restore-data": "データを回復する",
-    "restoring-data-will-overwrite-all-current-data-c": "データを復元すると、現在のデータがすべて上書きされます。続けますか?",
-    "no-backup-files-found": "バックアップファイルが見つかりません。",
-    "backup-file-is-empty-cannot-restore": "バックアップ ファイルの内容は空なので復元できません。",
-    "data-restored-from-backup-repositories-v1-releas": "バックアップから復元されたデータ: ウェアハウス {{v1}}、リリース {{v2}}、カスタム分類 {{v3}}。",
-    "restore-failed": "回復に失敗しました"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "バックエンドから同期: ウェアハウス {{v1}}、リリース {{v2}}、AI 構成 {{v3}}"
   },
   "useDesktopActions": {
     "load-failed": "読み込みに失敗しました",
@@ -53,24 +41,6 @@
   },
   "useNetworkActions": {
     "save-failed": "保存に失敗しました"
-  },
-  "useStarSyncActions": {
-    "not-connected-to-github-yet": "GitHub にログインしていません。最初に接続してください",
-    "push-categories-to-github-lists": "倉庫分類を GitHub リストに同期する",
-    "push-confirm-body-selected": "選択したカテゴリ数：{{count}}。同名の GitHub リストに書き戻します：\n\n· 同名のリストは上書きされます（一致しなくなったリポジトリは削除されます）\n· 存在しないリストは新規作成されます（デフォルトは非公開）\n· それ以外のリストは変更されません\n\n続行しますか？",
-    "push-confirm-body": "各ローカル カテゴリ (デフォルト カテゴリとカスタム カテゴリを含む) を同じ名前で GitHub リストに書き戻します。\n\n· 同じ名前のリストはそのメンバーを上書きします (カテゴリに一致しないリポジトリはリストから削除されます)\n· 同じ名前のリストがない場合は、新しいリストを作成します (デフォルトではプライベート)\n· 倉庫は、一致する分類に従って対応するリストに追加されます\n· ローカル カテゴリに属さない他のリスト メンバーシップは保持されます。\n\n続行してもよろしいですか?"
-  },
-  "useWebDAVActions": {
-    "webdav-url-is-required": "WebDAV URLは必須です",
-    "webdav-url-must-start-with-http-or-https": "WebDAV URL は http:// または https:// で始まる必要があります",
-    "username-is-required": "ユーザー名は必須です",
-    "password-is-required": "パスワードが必要です",
-    "path-is-required": "パスは必須です",
-    "path-must-start-with": "パスは / で始まる必要があります",
-    "custom-user-agent-invalid-chars": "カスタム User-Agent にはラテン文字（Latin-1）のみを使用できます",
-    "webdav-connection-successful": "WebDAV接続に成功しました！",
-    "webdav-connection-failed-please-check-configurat": "WebDAV 接続に失敗しました。構成を確認してください。",
-    "webdav-test-failed": "WebDAVテストに失敗しました"
   },
   "generalPanel": {
     "account-token-hint": "現在のアカウント {{login}}。有効期限が切れたら、ログアウトせずにここでトークンを直接置き換えることができます。",

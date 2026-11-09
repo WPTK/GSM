@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => {
     repositories: [],
     releases: [],
     aiConfigs: [],
-    webdavConfigs: [],
     activeAIConfig: null,
     activeWebDAVConfig: null,
     hiddenDefaultCategoryIds: [],

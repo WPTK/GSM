@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "外部の発見フィード",
-    "manageRss": "RSS ディスカバリーチャンネル",
-    "name": "チャンネル名",
-    "url": "HTTPS フィード URL",
-    "add": "フィードを追加",
-    "checking": "フィードを確認中…",
-    "copy": "コピー",
-    "copied": "コピーしました",
-    "rssFormat": "公開 RSS/Atom フィードの URL を貼り付けてください。アプリはその中で言及されている GitHub リポジトリのリンクを抽出します（1 回につき先頭 30 件）。",
-    "rss-invalid": "フィード内に GitHub リポジトリのリンクが見つかりませんでした。",
-    "remove": "{{name}} を削除",
-    "format": "公開 HTTPS リンクを貼り付けてください。JSON レスポンスの repositories フィールドに GitHub リポジトリを列挙します（公開リポジトリ最大 30 件）。",
-    "cors-note": "サイトはブラウザーからの CORS リクエストを許可する必要があります。GitHub トークンは送信されません。",
-    "invalid": "名前と有効な HTTPS URL を入力してください。",
-    "duplicate": "既に追加済みか、10 件の上限に達しています。",
-    "invalid-format": "JSON に有効なリポジトリ一覧がありません。",
-    "cors": "フィードを読み取れません。URL と CORS 設定を確認してください。",
-    "unreadable": "フィードを読み取れません。URL、サイトの状態、JSON 形式を確認してください。"
+    "copied": "コピーしました"
   },
   "discoverySidebar": {
     "just-now": "ただ",
@@ -42,18 +25,12 @@
     "items-2": "個人)",
     "syncing-weekly-submissions-v1-scanned": "毎週の提出物を同期しています... {{v1}} 個のアイテムがスキャンされました",
     "fetching-repo-details-v1-v2": "倉庫の詳細を完了... {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "フォローしているブロガーのタイムラインを取得しています... {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "次のチャネルからメッセージを取得しています... {{v1}}/{{v2}}",
     "just-now": "ただ",
     "diffmin-m-ago": "{{diffMin}}分前",
     "diffhours-h-ago": "{{diffHours}}時間前",
     "updated": "に更新されました",
     "refresh": "リフレッシュする",
     "each-refresh-shows-different-content": "更新するたびに異なるコンテンツが表示されます",
-    "time-range": "時間範囲",
-    "today": "今日",
-    "this-week": "今週",
-    "this-month": "今月",
     "topic-filter": "トピックフィルター",
     "topic": "テーマ",
     "ml": "機械学習",
@@ -65,10 +42,6 @@
     "game": "ゲーム",
     "only-show-submissions-included-in-the-weekly-iss": "週刊誌に掲載された投稿のみを表示",
     "in-weekly": "毎週含まれる",
-    "manage-the-follow-list": "フォローするブロガーのリストを管理する",
-    "follow-list": "ウォッチリスト",
-    "manage-the-channel-list": "フォロー中のチャンネルリストを管理します",
-    "channel-list": "チャンネルリスト",
     "stop-analysis": "分析を停止する",
     "stop": "停止",
     "analyze-with-ai": "AI分析",
@@ -89,11 +62,7 @@
     "waiting-for-github-api-response": "GitHub API の応答",
     "repo-search": "倉庫検索",
     "enter-keywords-to-search-github-repositories": "キーワードを入力して GitHub リポジトリを検索します",
-    "x-tweets": "×ツイート",
-    "fetches-github-projects-from-followed-accounts-l": "x.com に直接接続して、フォローしているブロガーの最新のツイートにある GitHub プロジェクトを取得します。デスクトップバージョンまたはサーバーモードが必要です。",
     "start-sync": "同期を開始する",
-    "telegram-channels": "電報チャンネル",
-    "fetches-github-projects-from-followed-channels-m": "t.me パブリック プレビューに直接接続して、フォロー チャネル メッセージで GitHub プロジェクトをキャプチャします。デスクトップバージョンまたはサーバーモードが必要です。",
     "ruanyifeng-weekly": "ルアン・イーフェン・ウィークリー",
     "sync-open-source-submissions-from-the-weekly-ear": "Technology Enthusiasts Weekly のオープンソース プロジェクトの提出物を同期し、さらにロードするときに以前の提出物を自動的に取得します。",
     "no-data-yet": "まだデータがありません",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "GitHub トークンが見つかりません。再度ログインしてください。",
     "failed-to-load-more-please-retry": "さらに読み込めませんでした。もう一度お試しください。",
-    "failed-to-fetch-x-tweets": "X 件のツイートを取得できませんでした",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "X ツイートを取得できませんでした。ネットワーク接続を確認するか、設定で X 認証 Cookie を確認してください。",
-    "failed-to-fetch-telegram-messages": "電報メッセージの取得に失敗しました",
-    "failed-to-fetch-telegram-messages-please-check-y": "Telegram メッセージを取得できませんでした。ネットワーク接続を確認するか、チャネルをフォローしてください。",
     "failed-to-fetch-data-please-check-your-network-c": "データの取得に失敗しました。ネットワーク接続または GitHub トークンを確認してください。",
     "please-configure-ai-service-in-settings-first": "まず設定でAIサービスを設定してください。",
     "ai-service-configuration-is-incomplete-please-ch": "AI サービスの構成が不完全です。API エンドポイント、キー、モデル名を確認してください。",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。AI の構成とネットワーク接続を確認してください。",
     "ai-analysis-failed-please-check-your-ai-configur": "AI 分析に失敗しました。AI の構成を確認してください。"
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "接続成功: {{repoCount}} 個の GitHub リポジトリ リンクを含む、{{messageCount}} 個のチャネル メッセージが解析されました。",
-    "failed-error": "接続に失敗しました: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "テキストの読み込みに失敗しました。ネットワークを確認してもう一度お試しください。"
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "接続成功: {{repoCount}} 個の GitHub リポジトリ リンクを含む、{{tweetCount}} 個のツイートが解析されました。",
-    "failed-error": "接続に失敗しました: {{error}}"
   },
   "discoveryChannel": {
     "trending": "傾向",
@@ -171,21 +128,10 @@
     "most-popular": "最も人気のある",
     "topic": "トピックの探索",
     "x-tweet": "×ツイート",
-    "telegram": "電報チャンネル",
     "weekly": "ルアン・イーフェン・ウィークリー",
     "search": "倉庫検索"
   },
   "discoveryPlatform": {
     "All": "すべてのプラットフォーム"
-  },
-  "trendingHistoryPanel": {
-    "title": "ランキングの変化",
-    "hint": "前回記録した日との比較",
-    "new-entry": "新登場",
-    "rising": "上昇",
-    "falling": "下降",
-    "streak-days": "{{v1}} 日連続",
-    "stars-gained": "初回記録から +{{v1}} stars",
-    "first-seen": "首位は{{v1}}に初記録"
   }
 }

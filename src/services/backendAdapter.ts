@@ -1,9 +1,8 @@
 import { translateBackendError } from '../utils/backendErrors';
 import { normalizeBackendUrl } from '../utils/backendUrl';
 import { logger } from './logger';
-import { setBackendAvailability, setBackendProbed } from './scrapeSupport';
 
-import { Repository, Release, AIConfig, WebDAVConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
+import { Repository, Release, AIConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { isReadmeCandidateItem, type GitHubReadmeCandidateItem } from '../utils/readmeVariants';
 
@@ -117,7 +116,6 @@ class BackendAdapter {
   private commitBackendUrl(url: string | null): void {
     if (this._backendUrl === url) return;
     this._backendUrl = url;
-    setBackendAvailability(url !== null);
   }
 
   async init(preferredUrl?: string): Promise<void> {
@@ -184,7 +182,6 @@ class BackendAdapter {
     } finally {
       // 探测结束：标记结论已落定并通知订阅者。即使可用性没有翻转
       // （如纯浏览器模式保持 null），订阅方也需要重新取值。
-      setBackendProbed();
       for (const listener of this._availabilityListeners) listener();
     }
   }
@@ -652,40 +649,6 @@ class BackendAdapter {
     return this.proxyAIRequestWithConfig(aiConfig, body, signal);
   }
 
-  // === WebDAV Proxy ===
-
-  async proxyWebDAV(
-    configId: string,
-    method: string,
-    path: string,
-    body?: string,
-    headers?: Record<string, string>,
-    inlineConfig?: { url: string; username: string; password: string },
-    signal?: AbortSignal,
-    timeoutMs?: number,
-  ): Promise<Response> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    return this.fetchWithTimeout(`${this._backendUrl}/proxy/webdav`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({
-        configId, method, path, body, headers,
-        // WebDAV 大文件上传可达 300s；不放宽的话代理会先于调用方超时。
-        ...(timeoutMs ? { timeoutMs } : {}),
-        // 配置尚未同步到后端时（例如"测试连接"发生在保存之前），由前端直接带上凭据
-        ...(inlineConfig ? {
-          inlineUrl: inlineConfig.url,
-          inlineUsername: inlineConfig.username,
-          inlinePassword: inlineConfig.password,
-        } : {}),
-      }),
-      ...(signal ? { signal } : {}),
-      // 调用方自带的 AbortController 负责业务级超时；这里只兜底一个硬上限，
-      // 避免 signal 缺失时请求无限挂起。
-    }, timeoutMs ?? 300000);
-  }
-
   // === Data Sync ===
 
   async syncRepositories(repos: Repository[]): Promise<void> {
@@ -779,46 +742,6 @@ class BackendAdapter {
     });
     if (!res.ok) await this.throwTranslatedError(res, 'Fetch AI configs error');
     return res.json() as Promise<AIConfig[]>;
-  }
-
-  async syncWebDAVConfigs(configs: WebDAVConfig[]): Promise<void> {
-    if (!this._backendUrl) return;
-
-    // Pre-sync validation: warn about configs that will likely be skipped
-    for (const c of configs) {
-      if (!c.password) {
-        logger.warn('backendAdapter', 'WebDAV config has empty password, will be skipped', { name: c.name, id: c.id });
-      }
-    }
-
-    const res = await this.fetchWithRetry(`${this._backendUrl}/configs/webdav/bulk`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({ configs })
-    }, 30000, 3);
-    if (!res.ok) await this.throwTranslatedError(res, 'Sync WebDAV configs error');
-
-    // Parse response and throw on partial failure so callers don't clear pending changes
-    try {
-      const data = await res.json() as { synced?: number; skipped?: number; errors?: Array<{ id: string; name: string; reason: string }> };
-      if (data.skipped && data.skipped > 0) {
-        const reasons = data.errors?.map(e => `${e.name}: ${e.reason}`).join('; ') ?? '';
-        throw new Error(`Sync WebDAV configs partial failure: ${data.skipped} skipped${reasons ? ` (${reasons})` : ''}`);
-      }
-    } catch (err) {
-      // Re-throw our own errors; ignore JSON parse errors from empty responses
-      if (err instanceof Error && err.message.startsWith('Sync WebDAV configs partial failure')) throw err;
-    }
-  }
-
-  async fetchWebDAVConfigs(): Promise<WebDAVConfig[]> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/webdav?decrypt=true`, {
-      headers: this.getAuthHeaders()
-    });
-    if (!res.ok) await this.throwTranslatedError(res, 'Fetch WebDAV configs error');
-    return res.json() as Promise<WebDAVConfig[]>;
   }
 
   // === Embedding Configs ===

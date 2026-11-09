@@ -20,8 +20,6 @@ export const createPreferenceSlice: AppStoreSlice<Pick<import('../types').AppAct
   | 'setReadmeModalOpen'
   | 'setHeaderMenuConfig'
   | 'setHasHydrated'
-  | 'setUpdateNotification'
-  | 'dismissUpdateNotification'
   | 'setAnalysisProgress'
   | 'setProxyConfig'
   | 'setRouteMode'
@@ -69,9 +67,6 @@ export const createPreferenceSlice: AppStoreSlice<Pick<import('../types').AppAct
       // Hydration state
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
 
-      // Update actions
-      setUpdateNotification: (notification) => set({ updateNotification: notification }),
-      dismissUpdateNotification: () => set({ updateNotification: null }),
       setAnalysisProgress: (newProgress) => set({ analysisProgress: newProgress }),
       setProxyConfig: (updates) => set((state) => ({
         proxyConfig: { ...state.proxyConfig, ...updates }

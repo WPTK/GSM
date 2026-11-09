@@ -21,12 +21,6 @@ export const SortAlgorithmTooltip: React.FC<SortAlgorithmTooltipProps> = ({ chan
 
   const getAlgorithmInfo = (channel: DiscoveryChannelId): { title: string; description: string; highlight: string } => {
     switch (channel) {
-      case 'trending':
-        return {
-          title: t('sortAlgorithmTooltip.trending-repositories'),
-          highlight: t('sortAlgorithmTooltip.discover-emerging-hot-projects'),
-          description: t('sortAlgorithmTooltip.features-time-range-updated-in-last-30-days-star'),
-        };
       case 'hot-release':
         return {
           title: t('sortAlgorithmTooltip.hot-release'),
@@ -56,18 +50,6 @@ export const SortAlgorithmTooltip: React.FC<SortAlgorithmTooltipProps> = ({ chan
           title: t('sortAlgorithmTooltip.ruanyifeng-weekly'),
           highlight: t('sortAlgorithmTooltip.open-source-picks-from-the-weekly'),
           description: t('sortAlgorithmTooltip.features-source-open-source-submission-issues-of'),
-        };
-      case 'x-tweet':
-        return {
-          title: t('sortAlgorithmTooltip.x-tweets'),
-          highlight: t('sortAlgorithmTooltip.open-source-projects-shared-by-followed-accounts'),
-          description: t('sortAlgorithmTooltip.features-source-repo-links-shared-in-followed-ac'),
-        };
-      case 'telegram':
-        return {
-          title: t('sortAlgorithmTooltip.telegram-channels'),
-          highlight: t('sortAlgorithmTooltip.open-source-projects-shared-by-followed-channels'),
-          description: t('sortAlgorithmTooltip.features-source-repo-links-shared-in-followed-ch'),
         };
       case 'code-search':
         return {

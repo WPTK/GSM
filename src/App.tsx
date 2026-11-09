@@ -10,7 +10,6 @@ import { DebugModeIndicator } from './components/DebugModeIndicator';
 
 import { BackToTop } from './components/BackToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { SyncModeChoiceModal } from './components/SyncModeChoiceModal';
 import { useAppStore, getAllCategories } from './store/useAppStore';
 import { useSystemThemeSync } from './hooks/useSystemThemeSync';
 import { resolveTheme, selectAppShellState } from './store/selectors';
@@ -18,32 +17,21 @@ import { useShallow } from 'zustand/react/shallow';
 import { applyThemePreset } from './lib/themePresets';
 import { applyThemeTokens } from './utils/themeTokens';
 import { changeAppLanguage } from './i18n';
-import { useAutoUpdateCheck } from './hooks/useAutoUpdateCheck';
 import { logger } from './services/logger';
-import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
-import { ListsPushIndicator } from './components/ListsPushIndicator';
-import { PluginPageHost } from './components/PluginPageHost';
 import { useBackendLifecycle } from './features/lifecycle/hooks/useBackendLifecycle';
 import type { AppState } from './types';
 import { hasActiveSearchFilters } from './utils/repoSearch';
-import { isElectron, loadEncryptedXAuthViaDesktop } from './services/electronProxy';
 import { useT } from './i18n/useT';
 import { matchesCategory } from './utils/categoryUtils';
 
 const LazyReleaseTimeline = React.lazy(() =>
   import('./components/ReleaseTimeline').then((module) => ({ default: module.ReleaseTimeline }))
 );
-const LazyForkTimeline = React.lazy(() =>
-  import('./components/ForkTimeline').then((module) => ({ default: module.ForkTimeline }))
-);
 const LazySettingsPanel = React.lazy(() =>
   import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel }))
 );
 const LazyDiscoveryView = React.lazy(() =>
   import('./components/DiscoveryView').then((module) => ({ default: module.DiscoveryView }))
-);
-const LazyGistView = React.lazy(() =>
-  import('./components/GistView').then((module) => ({ default: module.GistView }))
 );
 
 const ViewLoadingFallback: React.FC = () => (
@@ -172,20 +160,6 @@ const ReleasesView = React.memo(() => (
 ));
 ReleasesView.displayName = 'ReleasesView';
 
-const GistsView = React.memo(() => (
-  <LazyViewBoundary>
-    <LazyGistView />
-  </LazyViewBoundary>
-));
-GistsView.displayName = 'GistsView';
-
-const ForksView = React.memo(() => (
-  <LazyViewBoundary>
-    <LazyForkTimeline />
-  </LazyViewBoundary>
-));
-ForksView.displayName = 'ForksView';
-
 const SettingsView = React.memo(() => (
   <LazyViewBoundary>
     <LazySettingsPanel />
@@ -218,7 +192,6 @@ function App() {
     setSelectedCategory,
   } = useAppStore(useShallow(selectAppShellState));
 
-  useAutoUpdateCheck();
   useBackendLifecycle(hasHydrated);
 
   const theme = resolveTheme(themeMode, systemTheme);
@@ -231,26 +204,6 @@ function App() {
       logger.setLevel('debug');
     }
   }, []);
-
-  // Restore persisted encrypted X auth cookies on desktop startup after hydration completes (#356)
-  useEffect(() => {
-    if (!hasHydrated || !isElectron()) return;
-    loadEncryptedXAuthViaDesktop().then((auth) => {
-      if (auth) {
-        const current = useAppStore.getState().xTweetAuth;
-        if (!current || current.authToken !== auth.authToken || current.ct0 !== auth.ct0) {
-          logger.info('xAuth', 'Restoring encrypted X auth from disk');
-          useAppStore.getState().setXTweetAuth(auth);
-        } else {
-          logger.debug('xAuth', 'Encrypted X auth already matches in-memory state; skipping restore');
-        }
-      } else {
-        logger.debug('xAuth', 'No encrypted X auth found on disk');
-      }
-    }).catch((err: unknown) => {
-      logger.errorFromError('xAuth', 'Failed to load encrypted X auth from disk', err);
-    });
-  }, [hasHydrated]);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -313,12 +266,8 @@ function App() {
             onCategorySelect={handleCategorySelect}
           />
         );
-      case 'gists':
-        return <GistsView />;
       case 'releases':
         return <ReleasesView />;
-      case 'forks':
-        return <ForksView />;
       case 'subscription':
         return (
           <ErrorBoundary>
@@ -349,16 +298,12 @@ function App() {
 
   return (
     <div className="ui-shell min-h-screen transition-colors duration-200">
-      <UpdateNotificationBanner />
       <Header />
       <main className="app-main">
         {currentViewContent}
       </main>
       <BackToTop />
       <DebugModeIndicator />
-      <SyncModeChoiceModal />
-      <ListsPushIndicator />
-      <PluginPageHost />
     </div>
   );
 }

@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "Внешние каналы поиска",
-    "manageRss": "RSS-канал обнаружения",
-    "name": "Название канала",
-    "url": "HTTPS-адрес ленты",
-    "add": "Добавить ленту",
-    "checking": "Проверка ленты…",
-    "copy": "Копировать",
-    "copied": "Скопировано",
-    "rssFormat": "Вставьте публичную ссылку на RSS- или Atom-ленту — приложение извлечёт упомянутые в ней ссылки на репозитории GitHub (первые 30 за обновление).",
-    "rss-invalid": "В ленте не найдены ссылки на репозитории GitHub.",
-    "remove": "Удалить {{name}}",
-    "format": "Вставьте публичную HTTPS-ссылку, JSON-ответ которой перечисляет репозитории GitHub в поле repositories — до 30 публичных репозиториев.",
-    "cors-note": "Сайт должен разрешать запросы браузера (CORS). Токен GitHub в ленту не отправляется.",
-    "invalid": "Укажите название и корректный HTTPS-адрес.",
-    "duplicate": "Лента уже добавлена либо достигнут предел в десять лент.",
-    "invalid-format": "JSON не содержит корректного списка репозиториев.",
-    "cors": "Не удалось прочитать ленту. Проверьте адрес и настройки CORS.",
-    "unreadable": "Не удалось прочитать ленту. Проверьте адрес, доступность и формат JSON."
+    "copied": "Скопировано"
   },
   "discoverySidebar": {
     "just-now": "только",
@@ -42,18 +25,12 @@
     "items-2": "индивидуальный)",
     "syncing-weekly-submissions-v1-scanned": "Синхронизация еженедельных отправок... Отсканировано {{v1}} элементов",
     "fetching-repo-details-v1-v2": "Полная информация о складе... {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "Получение хроники блоггеров, на которых вы подписаны... {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "Получение сообщений из следующих каналов... {{v1}}/{{v2}}",
     "just-now": "только",
     "diffmin-m-ago": "{{diffMin}} минуты назад",
     "diffhours-h-ago": "{{diffHours}} часа назад",
     "updated": "обновлено",
     "refresh": "обновить",
     "each-refresh-shows-different-content": "Вы можете видеть разный контент каждый раз при обновлении",
-    "time-range": "временной диапазон",
-    "today": "сегодня",
-    "this-week": "На этой неделе",
-    "this-month": "в этом месяце",
     "topic-filter": "Тематический фильтр",
     "topic": "тема",
     "ai": "ИИ",
@@ -66,10 +43,6 @@
     "game": "игра",
     "only-show-submissions-included-in-the-weekly-iss": "Показывать только материалы, включенные в еженедельный журнал.",
     "in-weekly": "Еженедельно включено",
-    "manage-the-follow-list": "Управляйте списком блоггеров, на которых стоит подписаться",
-    "follow-list": "список наблюдения",
-    "manage-the-channel-list": "Управление следующим списком каналов",
-    "channel-list": "Список каналов",
     "stop-analysis": "Остановить анализ",
     "stop": "останавливаться",
     "analyze-with-ai": "ИИ-анализ",
@@ -90,11 +63,7 @@
     "waiting-for-github-api-response": "GitHub API отвечает",
     "repo-search": "Поиск склада",
     "enter-keywords-to-search-github-repositories": "Введите ключевые слова для поиска в репозиториях GitHub.",
-    "x-tweets": "Х-твит",
-    "fetches-github-projects-from-followed-accounts-l": "Подключитесь напрямую к x.com, чтобы получить проекты GitHub из последних твитов блоггеров, на которых вы подписаны. Требуется настольная версия или серверный режим.",
     "start-sync": "Начать синхронизацию",
-    "telegram-channels": "Telegram-канал",
-    "fetches-github-projects-from-followed-channels-m": "Подключитесь напрямую к общедоступной предварительной версии t.me, чтобы сохранять проекты GitHub в сообщениях канала. Требуется настольная версия или серверный режим.",
     "ruanyifeng-weekly": "Жуан Ифэн Еженедельник",
     "sync-open-source-submissions-from-the-weekly-ear": "Синхронизируйте заявки на проекты с открытым исходным кодом из журнала Technology Enthusiasts Weekly и автоматически получайте более ранние заявки при загрузке дополнительных материалов.",
     "no-data-yet": "Данных пока нет",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "Токен GitHub не найден. Войдите снова.",
     "failed-to-load-more-please-retry": "Не удалось загрузить больше. Повторите попытку.",
-    "failed-to-fetch-x-tweets": "Не удалось получить X твитов.",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "Не удалось получить X-твиты. Проверьте сетевое соединение или проверьте файл cookie аутентификации X в настройках.",
-    "failed-to-fetch-telegram-messages": "Не удалось получить сообщение Telegram.",
-    "failed-to-fetch-telegram-messages-please-check-y": "Не удалось получить сообщения Telegram. Проверьте сетевое соединение или перейдите по каналу.",
     "failed-to-fetch-data-please-check-your-network-c": "Не удалось получить данные. Проверьте сетевое соединение или токен GitHub.",
     "please-configure-ai-service-in-settings-first": "Пожалуйста, сначала настройте службу AI в настройках.",
     "ai-service-configuration-is-incomplete-please-ch": "Конфигурация службы AI не завершена. Проверьте конечную точку API, ключ и название модели.",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "Анализ AI не удался. Проверьте конфигурацию AI и сетевое соединение.",
     "ai-analysis-failed-please-check-your-ai-configur": "Анализ AI не удался, проверьте конфигурацию AI."
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "Соединение успешно: проанализировано {{messageCount}} сообщений канала, включая {{repoCount}} ссылки на репозиторий GitHub.",
-    "failed-error": "Не удалось подключиться: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "Не удалось загрузить текст. Проверьте сеть и повторите попытку."
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "Соединение успешно: обработано {{tweetCount}} твитов, включая {{repoCount}} ссылки на репозиторий GitHub.",
-    "failed-error": "Не удалось подключиться: {{error}}"
   },
   "discoveryChannel": {
     "trending": "тенденция",
@@ -171,21 +128,10 @@
     "most-popular": "самый популярный",
     "topic": "Исследование темы",
     "x-tweet": "Х-твит",
-    "telegram": "Telegram-канал",
     "weekly": "Жуан Ифэн Еженедельник",
     "search": "Поиск склада"
   },
   "discoveryPlatform": {
     "All": "Все платформы"
-  },
-  "trendingHistoryPanel": {
-    "title": "Изменения рейтинга",
-    "hint": "В сравнении с предыдущим записанным днём",
-    "new-entry": "Новое в списке",
-    "rising": "Рост",
-    "falling": "Падение",
-    "streak-days": "{{v1}} дней подряд",
-    "stars-gained": "+{{v1}} stars с первого наблюдения",
-    "first-seen": "Первая запись о лидере: {{v1}}"
   }
 }

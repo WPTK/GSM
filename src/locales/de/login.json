@@ -55,5 +55,8 @@
     "token-permissions-classic-star-lists": "`user`",
     "token-permissions-classic-fork-workflows": "`repo`",
     "token-permissions-local-storage": "Ihr Token wird nur auf diesem Gerät und Ihrem eigenen Backend gespeichert – niemals auf den Servern der App."
+  },
+  "login": {
+    "api-secret": "API-Geheimnis"
   }
 }

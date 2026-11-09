@@ -28,7 +28,6 @@ const mocks = vi.hoisted(() => {
     similarView: null,
     exitSimilarCategory: undefined,
     exitSimilarView: vi.fn(),
-    starredGists: [],
     customCategories: [],
     hiddenDefaultCategoryIds: [],
     defaultCategoryOverrides: {},
@@ -47,39 +46,19 @@ const mocks = vi.hoisted(() => {
     assetFilters: [],
   };
 
-  const gistActions = {
-    user: { login: 'tamina' },
-    gists: [],
-    starredGists: [],
-    gistSearchFilters: { query: '', sortBy: 'updated', sortOrder: 'desc' },
-    gistSearchResults: [],
-    selectedGistCategory: 'all',
-    setGistSearchFilters: vi.fn(),
-    setGistSearchResults: vi.fn(),
-    setSelectedGistCategory: vi.fn(),
-    setStarredGists: vi.fn(),
-    refreshGists: vi.fn(),
-    aiSearch: vi.fn(),
-    analyzeVisibleGists: vi.fn(),
-    fetchGistDetail: vi.fn(),
-    submitGist: vi.fn(),
-    isRefreshing: false,
-    isSearching: false,
-    isAnalyzingAll: false,
-  };
 
   const discoveryActions = {
     githubToken: 'test-token',
     language: 'zh',
     discoveryChannels: [
-      { id: 'trending', name: '趋势', nameEn: 'Trending', icon: 'trending', description: '', enabled: true },
+      { id: 'hot-release', name: '热门发布', nameEn: 'Hot Release', icon: 'rocket', description: '', enabled: true },
     ],
     discoveryRepos: {},
     discoveryLastRefresh: {},
     discoveryIsLoading: {},
     discoveryIsLoadingMore: {},
     discoveryLoadMoreError: {},
-    selectedDiscoveryChannel: 'trending',
+    selectedDiscoveryChannel: 'hot-release',
     setSelectedDiscoveryChannel: vi.fn(),
     setDiscoveryScrollPosition: vi.fn(),
     analysisProgress: { total: 0, processed: 0 },
@@ -108,12 +87,6 @@ const mocks = vi.hoisted(() => {
     weeklyOnlyCollected: false,
     setWeeklyOnlyCollected: vi.fn(),
     weeklySyncStatus: null,
-    xTweetFollows: [],
-    xTweetAuth: null,
-    xTweetAuthRevision: null,
-    xTweetSyncStatus: null,
-    telegramFollows: [],
-    telegramSyncStatus: null,
     t: (key: string) => key,
     isAnalyzing: false,
     refreshChannel: vi.fn(),
@@ -127,7 +100,6 @@ const mocks = vi.hoisted(() => {
     useAppStore: vi.fn((selector?: (state: typeof storeState) => unknown) =>
       selector ? selector(storeState) : storeState,
     ),
-    gistActions,
     discoveryActions,
   };
 });
@@ -230,38 +202,6 @@ vi.mock('./features/releases/hooks/useReleaseTimelineActions', async () => {
   };
 });
 
-vi.mock('./features/forks/hooks/useForkTimelineActions', () => ({
-  useForkTimelineActions: () => ({
-    readForks: new Set<number>(),
-    language: 'zh',
-    markForkAsRead: vi.fn(),
-    forkSearchQuery: '',
-    forkIsRefreshing: false,
-    setForkSearchQuery: vi.fn(),
-    isLoadingOrganizations: false,
-    personalOwnerLogin: 'tamina',
-    activeForkOwner: 'tamina',
-    ownerForks: [],
-    forkOwnerOptions: [],
-    lastRefreshTime: null,
-    expandedWorkflows: new Set<number>(),
-    workflowsMap: {},
-    loadingWorkflows: {},
-    syncingForks: new Set<number>(),
-    runningWorkflows: new Set<number>(),
-    needsSyncMap: {},
-    syncModal: { isOpen: false, fork: null },
-    setSyncModal: vi.fn(),
-    syncModalBranches: [],
-    isFetchingBranches: false,
-    handleRefresh: vi.fn(),
-    handleForkOwnerChange: vi.fn(),
-    toggleWorkflows: vi.fn(),
-    handleSyncUpstream: vi.fn(),
-    confirmSyncUpstream: vi.fn(),
-    handleRunWorkflow: vi.fn(),
-  }),
-}));
 
 vi.mock('./features/settings/hooks/useBackendAvailability', () => ({
   useBackendAvailability: () => false,
@@ -273,7 +213,6 @@ vi.mock('./components/ReleaseSourceSettingsModal', () => ({
   ReleaseSourceSettingsModal: () => null,
 }));
 vi.mock('./components/ReleaseCard', () => ({ default: () => null }));
-vi.mock('./components/ForkCard', () => ({ default: () => null }));
 vi.mock('./components/settings', () => ({
   AppearancePanel: () => <div data-testid="AppearancePanel-content" />,
   GeneralPanel: () => <div data-testid="GeneralPanel-content" />,
@@ -292,10 +231,6 @@ vi.mock('./components/settings', () => ({
   PluginSettingsPanel: () => <div data-testid="PluginSettingsPanel-content" />,
 }));
 
-vi.mock('./components/GistCard', () => ({ GistCard: () => null }));
-vi.mock('./components/GistDetailModal', () => ({ GistDetailModal: () => null }));
-vi.mock('./components/GistEditorModal', () => ({ GistEditorModal: () => null }));
-vi.mock('./features/gists/hooks/useGistActions', () => ({ useGistActions: () => mocks.gistActions }));
 
 vi.mock('./hooks/useWebScrapeSupport', () => ({
   useWebScrapeSupport: () => ({ supported: true, settled: true }),
@@ -326,9 +261,6 @@ vi.mock('./components/TelegramSettingsModal', () => ({ TelegramSettingsModal: ()
 vi.mock('./components/DebugModeIndicator', () => ({ DebugModeIndicator: () => null }));
 vi.mock('./components/BackToTop', () => ({ BackToTop: () => null }));
 vi.mock('./components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }: { children: unknown }) => children }));
-vi.mock('./components/SyncModeChoiceModal', () => ({ SyncModeChoiceModal: () => null }));
-vi.mock('./components/UpdateNotificationBanner', () => ({ UpdateNotificationBanner: () => null }));
-vi.mock('./components/ListsPushIndicator', () => ({ ListsPushIndicator: () => null }));
 
 import App from './App';
 
@@ -377,19 +309,6 @@ describe('App route-aware context sidebars', () => {
     expect(screen.queryByText('拥有者:')).not.toBeInTheDocument();
   });
 
-  it('gists 路由：唯一 gists 侧栏，含 All/Starred/Mine，不串台仓库分类与其他路由控件', async () => {
-    const { rerender } = render(<App />);
-    await screen.findByLabelText('仓库分类');
-    await switchView(rerender, 'gists');
-
-    const sidebar = await screen.findByLabelText('Gist 上下文侧栏', {}, { timeout: 5000 });
-    expect(sidebar.getAttribute('data-context-sidebar')).toBe('gists');
-    expect(document.querySelectorAll('[data-context-sidebar]')).toHaveLength(1);
-    expect(within(sidebar).getByRole('button', { name: /^全部 gist/ })).toBeInTheDocument();
-    expect(within(sidebar).getByRole('button', { name: /^星标 gist/ })).toBeInTheDocument();
-    expect(within(sidebar).getByRole('button', { name: /^我的 gist/ })).toBeInTheDocument();
-    expectNoForeignControls();
-  });
 
   it('subscription 路由：唯一 discovery 侧栏，含发现频道，不串台仓库分类与其他路由控件', async () => {
     const { rerender } = render(<App />);
@@ -399,7 +318,7 @@ describe('App route-aware context sidebars', () => {
     const sidebar = await screen.findByLabelText('发现频道', {}, { timeout: 5000 });
     expect(sidebar.getAttribute('data-context-sidebar')).toBe('discovery');
     expect(document.querySelectorAll('[data-context-sidebar]')).toHaveLength(1);
-    expect(within(sidebar).getByRole('button', { name: /^趋势/ })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: /^热门发布/ })).toBeInTheDocument();
     expectNoForeignControls();
   });
 
@@ -413,22 +332,6 @@ describe('App route-aware context sidebars', () => {
     expect(document.querySelectorAll('[data-context-sidebar]')).toHaveLength(1);
     expect(within(sidebar).getByText('收件箱')).toBeInTheDocument();
     expect(within(sidebar).getByRole('button', { name: 'Release 来源设置' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('仓库分类')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '添加分类' })).not.toBeInTheDocument();
-  });
-
-  it('forks 路由：唯一 forks 侧栏，拥有者属于页面作用域且不串台仓库分类', async () => {
-    const { rerender } = render(<App />);
-    await screen.findByLabelText('仓库分类');
-    await switchView(rerender, 'forks');
-
-    const sidebar = await screen.findByLabelText('复刻', {}, { timeout: 5000 });
-    expect(sidebar.getAttribute('data-context-sidebar')).toBe('forks');
-    expect(document.querySelectorAll('[data-context-sidebar]')).toHaveLength(1);
-    expect(within(sidebar).getByRole('button', { name: /^全部复刻/ })).toBeInTheDocument();
-    expect(within(sidebar).queryByText('上游仓库')).not.toBeInTheDocument();
-    expect(sidebar.querySelector('[role="combobox"]')).toBeNull();
-    expect(screen.getAllByRole('combobox', { name: '拥有者:' })[0].closest('[data-context-sidebar]')).toBeNull();
     expect(screen.queryByLabelText('仓库分类')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '添加分类' })).not.toBeInTheDocument();
   });
@@ -451,11 +354,11 @@ describe('App route-aware context sidebars', () => {
     await screen.findByLabelText('仓库分类');
     expect(document.querySelectorAll('[data-context-sidebar]')).toHaveLength(1);
 
-    await switchView(rerender, 'gists');
+    await switchView(rerender, 'subscription');
     await waitFor(() => {
       expect(document.querySelectorAll('[data-context-sidebar]')).toHaveLength(1);
     });
-    expect(document.querySelector('[data-context-sidebar]')?.getAttribute('data-context-sidebar')).toBe('gists');
+    expect(document.querySelector('[data-context-sidebar]')?.getAttribute('data-context-sidebar')).toBe('discovery');
 
     await switchView(rerender, 'repositories');
     await waitFor(() => {

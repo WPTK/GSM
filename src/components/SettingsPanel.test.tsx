@@ -30,18 +30,12 @@ vi.mock('./settings', () => ({
   AppearancePanel: () => <div data-testid="AppearancePanel-content" />,
   GeneralPanel: () => <div data-testid="GeneralPanel-content" />,
   AIConfigPanel: () => <div data-testid="AIConfigPanel-content" />,
-  WebDAVPanel: () => <div data-testid="WebDAVPanel-content" />,
-  BackupPanel: () => <div data-testid="BackupPanel-content" />,
   BackendPanel: () => <div data-testid="BackendPanel-content" />,
   CategoryPanel: () => <div data-testid="CategoryPanel-content" />,
   DataManagementPanel: () => <div data-testid="DataManagementPanel-content" />,
-  NetworkPanel: () => <div data-testid="NetworkPanel-content" />,
   DiagnosticLogsPanel: () => <div data-testid="DiagnosticLogsPanel-content" />,
   MenuManagementPanel: () => <div data-testid="MenuManagementPanel-content" />,
-  StarSyncPanel: () => <div data-testid="StarSyncPanel-content" />,
-  VectorSearchSettings: () => <div data-testid="VectorSearchSettings-content" />,
   McpSettingsPanel: () => <div data-testid="McpSettingsPanel-content" />,
-  PluginSettingsPanel: () => <div data-testid="PluginSettingsPanel-content" />,
 }));
 
 vi.mock('./ui/dialog', () => ({
@@ -98,14 +92,14 @@ afterEach(() => {
 });
 
 describe('SettingsPanel context sidebar ownership', () => {
-  it('独立页面模式：唯一 settings 上下文侧栏，纯 SPA 不含 network/plugins/mcp，无仓库分类', () => {
+  it('独立页面模式：唯一 settings 上下文侧栏，纯 SPA 不含 mcp，无仓库分类', () => {
     render(<SettingsPanel isOpen />);
 
     expect(document.querySelectorAll('[data-context-sidebar="settings"]')).toHaveLength(1);
 
     const sidebar = getSidebar() as HTMLElement;
     const tablist = within(sidebar).getByRole('tablist', { name: '设置标签页' });
-    expect(within(tablist).getAllByRole('tab')).toHaveLength(12);
+    expect(within(tablist).getAllByRole('tab')).toHaveLength(8);
     expectSidebarTabs(['通用', '外观', '分类管理']);
     expectSidebarTabs([], ['网络设置', '插件管理', 'MCP服务']);
 
@@ -154,21 +148,21 @@ describe('SettingsPanel context sidebar ownership', () => {
 });
 
 describe('SettingsPanel conditional tabs matrix (7.7)', () => {
-  it('纯 SPA：network/plugins/mcp 全部隐藏', () => {
+  it('纯 SPA：mcp 隐藏，network/plugins 已移除', () => {
     render(<SettingsPanel isOpen />);
     expectSidebarTabs([], ['网络设置', '插件管理', 'MCP服务']);
   });
 
-  it('backend-only：network/mcp 显示，plugins 隐藏', () => {
+  it('backend-only：mcp 显示', () => {
     hookState.backendAvailable = true;
     render(<SettingsPanel isOpen />);
-    expectSidebarTabs(['网络设置', 'MCP服务'], ['插件管理']);
+    expectSidebarTabs(['MCP服务'], ['网络设置', '插件管理']);
   });
 
-  it('Electron：network/plugins/mcp 全部显示', () => {
+  it('Electron：mcp 显示，network/plugins 已移除', () => {
     mockIsElectron.mockReturnValue(true);
     render(<SettingsPanel isOpen />);
-    expectSidebarTabs(['网络设置', '插件管理', 'MCP服务']);
+    expectSidebarTabs(['MCP服务'], ['网络设置', '插件管理']);
   });
 });
 
@@ -188,13 +182,13 @@ describe('SettingsPanel pending tab and event navigation', () => {
     act(() => {
       window.dispatchEvent(
         new CustomEvent('gsm:navigate-to-settings-tab', {
-          detail: { tab: 'vectorSearch' },
+          detail: { tab: 'data' },
         })
       );
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('VectorSearchSettings-content')).toBeTruthy();
+      expect(screen.getByTestId('DataManagementPanel-content')).toBeTruthy();
     });
   });
 });

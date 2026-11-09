@@ -21,8 +21,6 @@ export type { ThemeTokens } from './themeTokens';
 
 /** 显示模式偏好：system = 跟随操作系统深浅设置 */
 export type ThemeMode = 'light' | 'dark' | 'system';
-import type { TrendingSnapshot } from './trendingSnapshot';
-export type { TrendingSnapshot } from './trendingSnapshot';
 export type {
   RepositoryHealthEnrichment,
   RepositoryHealthFact,
@@ -155,70 +153,6 @@ export const defaultReleaseSourceSettings: ReleaseSourceSettings = {
   customReleaseRepos: [],
 };
 
-// Fork types
-export interface GitHubOrganization {
-  id: number;
-  login: string;
-  avatar_url: string;
-  description: string | null;
-  html_url: string;
-}
-
-export interface ForkRepo {
-  id: number;
-  name: string;
-  fork: boolean;
-  full_name: string;
-  description: string | null;
-  html_url: string;
-  stargazers_count: number;
-  forks_count: number;
-  forks: number;
-  language: string | null;
-  created_at: string;
-  updated_at: string;
-  pushed_at: string;
-  default_branch: string;
-  owner: {
-    login: string;
-    avatar_url: string;
-  };
-  source: {
-    id: number;
-    full_name: string;
-    name: string;
-    description: string | null;
-    html_url: string;
-    stargazers_count: number;
-    forks_count: number;
-    updated_at: string;
-    owner: {
-      login: string;
-      avatar_url: string;
-    };
-  };
-  parent?: {
-    id: number;
-    full_name: string;
-    name: string;
-    html_url: string;
-  };
-  has_unread?: boolean;
-  upstream_updated_at?: string; // last time we checked/fetched upstream updates
-}
-
-export interface WorkflowDefinition {
-  id: number;
-  name: string;
-  path: string; // workflow file path, e.g. ".github/workflows/ci.yml"
-  state: string; // "active" | "disabled" | "warning"
-  created_at: string;
-  updated_at: string;
-  url: string;
-  html_url: string;
-  badge_url: string;
-}
-
 export interface GitHubUser {
   id: number;
   login: string;
@@ -227,53 +161,12 @@ export interface GitHubUser {
   email: string | null;
 }
 
-export interface GistFile {
-  filename: string;
-  type: string | null;
-  language: string | null;
-  raw_url?: string;
-  size: number;
-  truncated?: boolean;
-  content?: string;
-}
-
-export interface Gist {
-  id: string;
-  description: string | null;
-  public: boolean;
-  html_url: string;
-  created_at: string;
-  updated_at: string;
-  comments: number;
-  owner: {
-    login: string;
-    avatar_url: string;
-    html_url?: string;
-  } | null;
-  files: Record<string, GistFile>;
-  starred?: boolean;
-  ai_summary?: string;
-  analyzed_at?: string;
-  analysis_failed?: boolean;
-  analysis_error?: string;
-  last_edited?: string;
-}
-
-export type GistCategoryId = 'all' | 'starred' | 'mine';
-
-export interface GistSearchFilters {
-  query: string;
-  sortBy: 'updated' | 'created' | 'name' | 'files';
-  sortOrder: 'desc' | 'asc';
-  isAnalyzed?: boolean;
-}
-
 export type AIApiType = 'openai' | 'openai-responses' | 'claude' | 'gemini' | 'deepseek' | 'mimo' | 'openai-compatible';
 
 // Embedding 提供商类型
 export type EmbeddingApiType = 'openai' | 'openai-compatible' | 'gemini' | 'cohere' | 'ollama' | 'siliconflow';
 
-// Embedding 配置（结构与 AIConfig/WebDAVConfig 平行）
+// Embedding 配置（结构与 AIConfig 平行）
 export interface EmbeddingConfig {
   id: string;
   name: string;
@@ -370,19 +263,6 @@ export interface AIConfig {
   apiKeyStatus?: SecretStatus;
 }
 
-export interface WebDAVConfig {
-  id: string;
-  name: string;
-  url: string;
-  username: string;
-  password: string;
-  path: string;
-  isActive: boolean;
-  /** 部分服务（如 CSTCloud 数据胶囊）按 User-Agent 校验客户端，空值保持默认行为 */
-  customUserAgent?: string;
-  passwordStatus?: SecretStatus;
-}
-
 export type ProxyType = 'http' | 'socks5';
 
 /** GitHub/Release 数据面请求出口偏好；仅影响本设备，不参与后端/autoSync 同步。 */
@@ -468,7 +348,7 @@ export interface AssetFilter {
   icon?: string;
 }
 
-export type HeaderMenuId = 'repositories' | 'gists' | 'releases' | 'forks' | 'subscription' | 'settings';
+export type HeaderMenuId = 'repositories' | 'releases' | 'subscription' | 'settings';
 
 export interface HeaderMenuItem {
   id: HeaderMenuId;
@@ -478,32 +358,22 @@ export interface HeaderMenuItem {
 
 export const defaultHeaderMenuConfig: HeaderMenuItem[] = [
   { id: 'repositories', visible: true, order: 0 },
-  { id: 'gists', visible: true, order: 1 },
-  { id: 'releases', visible: true, order: 2 },
-  { id: 'forks', visible: true, order: 3 },
-  { id: 'subscription', visible: true, order: 4 },
-  { id: 'settings', visible: true, order: 5 },
+  { id: 'releases', visible: true, order: 1 },
+  { id: 'subscription', visible: true, order: 2 },
+  { id: 'settings', visible: true, order: 3 },
 ];
 
 export interface AccountWorkspace {
   repositories: Repository[];
   lastSync: string | null;
-  gists: Gist[];
-  starredGists: Gist[];
-  selectedGistCategory: GistCategoryId;
   releases: Release[];
   releaseSubscriptions: number[];
   releaseSourceSettings: ReleaseSourceSettings;
   readReleases: number[];
-  forks: ForkRepo[];
-  readForks: number[];
   customCategories: Category[];
   hiddenDefaultCategoryIds: string[];
   categoryOrder: string[];
   defaultCategoryOverrides: Record<string, Partial<Category>>;
-  categoryListIdMap: Record<string, string>;
-  syncMode: SyncMode;
-  syncModeConfigured: boolean;
 }
 
 export interface AppState {
@@ -531,14 +401,6 @@ export interface AppState {
   // Theme tokens（开发守则 §14）：声明式外观偏好，落到 <html> 的 CSS 变量上
   themeTokens: ThemeTokens;
 
-  // Gists
-  gists: Gist[];
-  starredGists: Gist[];
-  gistSearchFilters: GistSearchFilters;
-  gistSearchResults: Gist[];
-  selectedGistCategory: GistCategoryId;
-  analyzingGistIds: Set<string>;
-  
   // AI
   aiConfigs: AIConfig[];
   activeAIConfig: string | null;
@@ -556,11 +418,6 @@ export interface AppState {
   // Similar repositories view (triggered by "查找相似仓库")
   similarView: SimilarViewState | null;
 
-  // WebDAV
-  webdavConfigs: WebDAVConfig[];
-  activeWebDAVConfig: string | null;
-  lastBackup: string | null;
-  
   // Search
   searchFilters: SearchFilters;
   searchResults: Repository[];
@@ -590,7 +447,7 @@ export interface AppState {
   /** 主题配色预设（默认 + 内置精选），见 constants/themePresets */
   themePresetLight: ThemePresetId;
   themePresetDark: ThemePresetId;
-  currentView: 'repositories' | 'gists' | 'releases' | 'forks' | 'settings' | 'subscription';
+  currentView: 'repositories' | 'releases' | 'settings' | 'subscription';
   selectedCategory: string;
   language: AppLanguage;
   /** README 文档翻译引擎（微软 / Google / AI），见 TranslationEngine */
@@ -601,9 +458,6 @@ export interface AppState {
   readmeModalOpen: boolean;
   headerMenuConfig: HeaderMenuItem[];
   
-  // Update
-  updateNotification: UpdateNotification | null;
-
   // Analysis Progress
   analysisProgress: AnalysisProgress
 
@@ -618,17 +472,6 @@ export interface AppState {
   rpcDownloadConfig: RpcDownloadConfig;
   /** 本地路由偏好；不参与后端/autoSync 同步 */
   routeMode: RouteMode;
-
-  // Fork Timeline View
-  forks: ForkRepo[];
-  readForks: Set<number>;
-
-  // Fork Timeline View State
-  forkViewMode: 'timeline' | 'repository';
-  forkSelectedFilters: string[];
-  forkSearchQuery: string;
-  forkExpandedRepositories: Set<number>;
-  forkIsRefreshing: boolean;
 
   // Release Timeline View
   releaseViewMode: 'timeline' | 'repository';
@@ -669,67 +512,16 @@ export interface AppState {
   discoveryNextPage: Record<DiscoveryChannelId, number>;
   discoveryTotalCount: Record<DiscoveryChannelId, number>;
   discoveryScrollPositions: Record<DiscoveryChannelId, number>;
-  trendingTimeRange: TrendingTimeRange;
-  /**
-   * Trending 快照历史（开发守则 §7）：本地记录每次看到的榜单，用于算排名变化、首次上榜与
-   * 连续上榜。按「周期 × 语言 × 自然日」去重，条数与天数都有上限。
-   */
-  trendingSnapshots: TrendingSnapshot[];
   /** 周刊频道过滤器：仅显示已被周刊收录（issue labels 含 'weekly'）的条目 */
   weeklyOnlyCollected: boolean;
   /** 周刊频道同步进度（会话级，不持久化） */
   weeklySyncStatus: WeeklySyncStatus | null;
-  /** X 推文频道：关注博主列表（handle 不含 @，初始化含 geekbb） */
-  xTweetFollows: XTweetFollow[];
-  /**
-   * X 推文频道：可选登录鉴权 Cookie（配置后走 GraphQL 抓取 + 历史翻页）。
-   * 仅内存态，不持久化到 IndexedDB/localStorage（明文 Cookie 防同源脚本读取）。
-   */
-  xTweetAuth: XTweetAuth | null;
-  /** X 鉴权修订号：每次 set/clear 递增的非敏感计数器，用于请求失效判定与列表刷新 */
-  xTweetAuthRevision: number;
-  /** X 推文频道同步/详情补全进度（会话级，不持久化） */
-  xTweetSyncStatus: WeeklySyncStatus | null;
-  /** Telegram 频道：关注频道列表（channel 不含 @，初始化含 geekhub23） */
-  telegramFollows: TelegramFollow[];
-  /** Telegram 频道同步/详情补全进度（会话级，不持久化） */
-  telegramSyncStatus: WeeklySyncStatus | null;
 
   // Subscription
   subscriptionRepos: Record<string, SubscriptionRepo[]>;
   subscriptionLastRefresh: Record<string, string | null>;
   subscriptionIsLoading: Record<string, boolean>;
   subscriptionChannels: SubscriptionChannel[];
-
-  // GitHub Lists 同步模式：仅星标 / 星标及 list
-  syncMode: SyncMode;
-  /** 用户是否已明确选择过同步模式（首次登录弹窗后置为 true） */
-  syncModeConfigured: boolean;
-
-  // GitHub Lists 回写进度（会话级，不持久化）
-  listsPush: ListsPushState;
-  /** 分类 id → GitHub List id 的稳定映射（跨语言持久化，避免切换语言时重复建 list） */
-  categoryListIdMap: Record<string, string>;
-}
-
-export interface ListsPushState {
-  isRunning: boolean;
-  total: number;
-  done: number;
-  currentLabel: string | null;
-  message: string | null;
-  error: string | null;
-}
-
-/** GitHub 同步范围：'stars' = 仅星标仓库（现状）；'stars-and-lists' = 星标仓库及 Lists */
-export type SyncMode = 'stars' | 'stars-and-lists';
-
-export interface UpdateNotification {
-  version: string;
-  releaseDate: string;
-  changelog: string[];
-  downloadUrl: string;
-  dismissed: boolean;
 }
 
 export interface AnalysisProgress {
@@ -760,9 +552,9 @@ export type SortBy = 'BestMatch' | 'MostStars' | 'MostForks';
 
 export type SortOrder = 'Descending' | 'Ascending';
 
-export type DiscoveryChannelId = 'trending' | 'hot-release' | 'most-popular' | 'topic' | 'x-tweet' | 'telegram' | 'weekly' | 'search' | 'code-search' | `external:${string}`;
+export type DiscoveryChannelId = 'hot-release' | 'most-popular' | 'topic' | 'weekly' | 'search' | 'code-search';
 
-export type DiscoveryChannelIcon = 'trending' | 'rocket' | 'star' | 'tag' | 'tweet' | 'telegram' | 'weekly' | 'search';
+export type DiscoveryChannelIcon = 'rocket' | 'star' | 'tag' | 'weekly' | 'search';
 
 /** 阮一峰周刊频道：来源 issue 的引用信息（周刊收录 = labels 含 'weekly'） */
 export interface WeeklyIssueRef {
@@ -780,59 +572,6 @@ export interface WeeklySyncStatus {
   total: number;
 }
 
-/** X 推文频道：一条关注配置（handle 不含 @） */
-export interface XTweetFollow {
-  handle: string;
-  addedAt: string;
-}
-
-/**
- * X 推文频道：可选的登录态鉴权 Cookie（用户在设置中自行填写）。
- * 配置后改走 x.com GraphQL 接口：每位博主每页约 20 条推文且支持游标回溯
- * 历史翻页；留空则退回未登录抓取（每次仅最新一小批、无历史翻页）。
- */
-export interface XTweetAuth {
-  authToken: string;
-  ct0: string;
-}
-
-/** X 推文频道：仓库来源推文的引用信息（正文缓存供"查看原贴"离线渲染） */
-export interface XTweetRef {
-  tweetId: string;
-  /** 博主 handle（不含 @） */
-  handle: string;
-  displayName: string;
-  /** 推文正文（RSS 输出的 HTML 片段） */
-  content: string;
-  /** 推文链接（https://x.com/<handle>/status/<id>） */
-  html_url: string;
-  createdAt: string;
-}
-
-/** Telegram 频道：一条关注配置（channel 不含 @） */
-export interface TelegramFollow {
-  channel: string;
-  addedAt: string;
-}
-
-/** Telegram 频道：仓库来源消息的引用信息（正文缓存供"查看消息原文"离线渲染） */
-export interface TelegramRef {
-  /** 复合 ID `<channel>/<messageId>` */
-  messageId: string;
-  /** 频道名（不含 @） */
-  channel: string;
-  /** 频道显示名 */
-  displayName: string;
-  /** 消息正文（t.me 公开预览输出的 HTML 片段） */
-  content: string;
-  /** 消息链接（https://t.me/<channel>/<id>） */
-  html_url: string;
-  createdAt: string;
-}
-
-/** User-configured external discovery source formats. */
-export type ExternalFeedKind = 'json' | 'rss';
-
 export interface DiscoveryChannel {
   id: DiscoveryChannelId;
   name: string;
@@ -840,10 +579,6 @@ export interface DiscoveryChannel {
   icon: DiscoveryChannelIcon;
   description: string;
   enabled: boolean;
-  /** User-configured, public feed; only present for external channels. */
-  sourceUrl?: string;
-  /** Feed format of `sourceUrl`; omitted means the default JSON format. */
-  sourceKind?: ExternalFeedKind;
 }
 
 export interface PaginatedDiscoveryRepositories {
@@ -859,13 +594,7 @@ export interface DiscoveryRepo extends Repository {
   platform: DiscoveryPlatform;
   /** 仅 weekly 频道：该仓库对应的周刊投稿 issue */
   weeklyIssue?: WeeklyIssueRef;
-  /** 仅 x-tweet 频道：该仓库来源的推文 */
-  xTweet?: XTweetRef;
-  /** 仅 telegram 频道：该仓库来源的频道消息 */
-  telegram?: TelegramRef;
 }
-
-export type TrendingTimeRange = 'daily' | 'weekly' | 'monthly';
 
 export type TopicCategory = 
   | 'ai' 
@@ -887,7 +616,7 @@ export interface TopicInfo {
 // Subscription related types
 export interface SubscriptionRepo extends Repository {
   rank: number;
-  channel: 'most-stars' | 'most-forks' | 'most-dev' | 'trending';
+  channel: 'most-stars' | 'most-forks' | 'most-dev';
 }
 
 export interface SubscriptionDev {
@@ -954,14 +683,6 @@ export const defaultSubscriptionChannels: SubscriptionChannel[] = [
     nameEn: 'Top Developers',
     icon: '👤',
     description: 'GitHub 上最受关注的开发者 Top 10',
-    enabled: true,
-  },
-  {
-    id: 'trending',
-    name: '热门趋势',
-    nameEn: 'Trending',
-    icon: '🔥',
-    description: 'GitHub 上近期最受关注的项目 Top 10',
     enabled: true,
   },
 ];

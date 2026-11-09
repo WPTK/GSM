@@ -18,7 +18,7 @@ const repo: DiscoveryRepo = {
   owner: { login: 'owner', avatar_url: 'https://example.com/avatar.png' },
   topics: ['test'],
   rank: 3,
-  channel: 'trending',
+  channel: 'hot-release',
   platform: 'Macos',
 };
 
@@ -54,7 +54,7 @@ describe('applyDiscoveryAnalysisSuccess', () => {
       analysisFailed: false,
     });
     expect(patched.rank).toBe(3);
-    expect(patched.channel).toBe('trending');
+    expect(patched.channel).toBe('hot-release');
     expect(patched.platform).toBe('Macos');
   });
 

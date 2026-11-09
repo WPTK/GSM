@@ -16,13 +16,6 @@ vi.mock('./githubApi', () => ({
   },
 }));
 
-vi.mock('./githubListsApi', () => ({
-  GitHubListsApiService: class {
-    setBackendUrl = mocks.setBackendUrl;
-    setBackendAuthToken = mocks.setBackendAuthToken;
-  },
-}));
-
 vi.mock('./backendAdapter', () => ({
   backend: {
     get backendUrl() { return mocks.backendUrlGet(); },
@@ -36,7 +29,7 @@ vi.mock('../store/useAppStore', () => ({
   },
 }));
 
-import { createGitHubApiService, createGitHubListsApiService } from './githubApiFactory';
+import { createGitHubApiService } from './githubApiFactory';
 
 describe('githubApiFactory routeMode', () => {
   beforeEach(() => {
@@ -74,18 +67,5 @@ describe('githubApiFactory routeMode', () => {
     createGitHubApiService('token', { direct: true });
     expect(mocks.setBackendUrl).not.toHaveBeenCalled();
     expect(mocks.setBackendAuthToken).not.toHaveBeenCalled();
-  });
-
-  it('keeps backend routing for the lists factory in auto mode', () => {
-    mocks.backendUrlGet.mockReturnValue('http://backend/api');
-    createGitHubListsApiService('token');
-    expect(mocks.setBackendUrl).toHaveBeenCalledWith('http://backend/api');
-  });
-
-  it('skips backend URL for the lists factory in browser mode', () => {
-    mocks.routeMode = 'browser';
-    mocks.backendUrlGet.mockReturnValue('http://backend/api');
-    createGitHubListsApiService('token');
-    expect(mocks.setBackendUrl).not.toHaveBeenCalled();
   });
 });

@@ -12,14 +12,12 @@ vi.mock('./backendAdapter', () => ({
     fetchRepositories: vi.fn(),
     fetchReleases: vi.fn(),
     fetchAIConfigs: vi.fn(),
-    fetchWebDAVConfigs: vi.fn(),
     fetchEmbeddingConfigs: vi.fn(),
     fetchVectorSearchConfig: vi.fn(),
     fetchSettings: vi.fn(),
     syncRepositories: vi.fn().mockResolvedValue(undefined),
     syncReleases: vi.fn().mockResolvedValue(undefined),
     syncAIConfigs: vi.fn().mockResolvedValue(undefined),
-    syncWebDAVConfigs: vi.fn().mockResolvedValue(undefined),
     syncEmbeddingConfigs: vi.fn().mockResolvedValue(undefined),
     syncVectorSearchConfig: vi.fn().mockResolvedValue(undefined),
     syncSettings: vi.fn().mockResolvedValue(undefined),
@@ -184,7 +182,6 @@ describe('syncFromBackend two-pull loop (Issue #304 end-to-end)', () => {
     vi.mocked(backend.fetchRepositories).mockResolvedValue({ repositories: backendPayload, total: 1 });
     vi.mocked(backend.fetchReleases).mockResolvedValue({ releases: [], total: 0 });
     vi.mocked(backend.fetchAIConfigs).mockResolvedValue([]);
-    vi.mocked(backend.fetchWebDAVConfigs).mockResolvedValue([]);
     vi.mocked(backend.fetchEmbeddingConfigs).mockResolvedValue([]);
     vi.mocked(backend.fetchVectorSearchConfig).mockResolvedValue({
       enabled: false,
@@ -286,7 +283,6 @@ describe('sync defaultCategoryOverrides with backend settings', () => {
     vi.mocked(backend.fetchRepositories).mockResolvedValue({ repositories: [], total: 0 });
     vi.mocked(backend.fetchReleases).mockResolvedValue({ releases: [], total: 0 });
     vi.mocked(backend.fetchAIConfigs).mockResolvedValue([]);
-    vi.mocked(backend.fetchWebDAVConfigs).mockResolvedValue([]);
     vi.mocked(backend.fetchEmbeddingConfigs).mockResolvedValue([]);
     vi.mocked(backend.fetchVectorSearchConfig).mockResolvedValue({
       enabled: false, workerUrl: '', authToken: '', embeddingConfigId: '', indexMode: 'readme', readmeMaxChars: 6000,
@@ -429,7 +425,6 @@ describe('backend pushes requested during another sync', () => {
     vi.mocked(backend.fetchRepositories).mockResolvedValue({ repositories: [], total: 0 });
     vi.mocked(backend.fetchReleases).mockResolvedValue({ releases: [], total: 0 });
     vi.mocked(backend.fetchAIConfigs).mockResolvedValue([]);
-    vi.mocked(backend.fetchWebDAVConfigs).mockResolvedValue([]);
     vi.mocked(backend.fetchEmbeddingConfigs).mockResolvedValue([]);
     vi.mocked(backend.fetchSettings).mockResolvedValue({});
     resetSyncHashes();

@@ -41,7 +41,6 @@ const storeState = {
   repositories: [],
   releases: [],
   aiConfigs: [],
-  webdavConfigs: [],
   activeAIConfig: null,
   activeWebDAVConfig: null,
   hiddenDefaultCategoryIds: [] as string[],

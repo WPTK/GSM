@@ -24,7 +24,6 @@ import {
   metaKeyFor,
   shardKeyFor,
 } from './shards';
-import { normalizeTrendingSnapshots } from '../../utils/trendingSnapshots';
 
 // 提交点屏障：在真实存储提交入口（setStorageEntries）拦停写入，用于让并发
 // 测试确定性地与「写入 A 仍在提交中」重叠——setTimeout 等待无法保证这一点。
@@ -85,42 +84,22 @@ const buildState = (): Record<string, unknown> => ({
   language: 'zh',
   repositories: [{ id: 1, name: 'repo-one' }],
   lastSync: '2026-01-01T00:00:00.000Z',
-  gists: [{ id: 'gist-1' }],
-  starredGists: [],
   releases: [{ id: 101 }],
-  forks: [],
   // 规整化后的工作区包含全部 18 个字段：键数量不同的工作区会被判脏守卫拦下
   accountWorkspaces: {
     '1': {
       repositories: [{ id: 1, name: 'repo-one' }],
       lastSync: '2026-01-01T00:00:00.000Z',
-      gists: [],
-      starredGists: [],
       releases: [],
-      forks: [],
       customCategories: [],
       categoryOrder: ['cat-a'],
       readReleases: [1, 2],
-      readForks: [],
       releaseSubscriptions: [1],
       hiddenDefaultCategoryIds: ['cat-b'],
-      selectedGistCategory: 'all',
       releaseSourceSettings: { enabledSourceIds: ['starred-release-subscription'], watchCustomReleaseRepos: [], customReleaseRepos: [] },
       defaultCategoryOverrides: {},
-      categoryListIdMap: {},
-      syncMode: 'stars',
-      syncModeConfigured: false,
     },
   },
-  // 快照必须至少含一条 entry（空 entries 的快照会被规整化丢弃）
-  trendingSnapshots: [
-    {
-      period: 'daily',
-      platform: 'All',
-      capturedAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-      entries: [{ repositoryFullName: 'a/b', rank: 1, stars: 9 }],
-    },
-  ],
   customCategories: [{ id: 'cat-1', name: 'Work' }],
 });
 
@@ -168,22 +147,15 @@ describe('persistence shard layout', () => {
       themeMode: 'dark',
       repositories: [{ id: 1 }],
       lastSync: '2026-01-01T00:00:00.000Z',
-      gists: [],
-      starredGists: [],
       releases: [],
-      forks: [],
       accountWorkspaces: {},
-      trendingSnapshots: [],
       someFutureField: 'kept-in-core',
     });
 
     expect(Object.keys(views.core)).toEqual(['themeMode', 'lastSync', 'someFutureField']);
     expect(views.repositories).toEqual({ repositories: [{ id: 1 }] });
-    expect(Object.keys(views.gists)).toEqual(['gists', 'starredGists']);
     expect(Object.keys(views.releases)).toEqual(['releases']);
-    expect(Object.keys(views.forks)).toEqual(['forks']);
     expect(Object.keys(views.accountWorkspaces)).toEqual(['accountWorkspaces']);
-    expect(Object.keys(views.trendingSnapshots)).toEqual(['trendingSnapshots']);
   });
 
   it('covers every persisted partialize key with exactly one shard', () => {
@@ -252,16 +224,6 @@ describe('persistence shard dirty detection', () => {
       .toEqual(['accountWorkspaces']);
   });
 
-  it('keeps trendingSnapshots reference when normalization is content-equal', () => {
-    const state = buildState();
-    const snapshots = state.trendingSnapshots as unknown as Array<Record<string, unknown>>;
-    expect(normalizeTrendingSnapshots(snapshots as never)).toBe(snapshots as never);
-
-    // 内容真正过期/非法时仍然重建
-    const stale = [{ ...snapshots[0], capturedAt: '2000-01-01T00:00:00.000Z' }];
-    expect(normalizeTrendingSnapshots(stale)).toEqual([]);
-  });
-
   it('compares core shard fields by content because partialize rebuilds small objects', () => {
     // 真实 partialize 每次都会重建 searchFilters/proxyConfig/派生数组等 core 字段；
     // core 按内容判脏才能让「无变化的写入」真正跳过。
@@ -326,7 +288,7 @@ describe('sharded persist storage', () => {
     debouncedPersistStorage.setItem(KEY, { state, version: 16 });
     await flushPendingPersistSnapshot();
     const repositoriesShardBefore = await readRaw(shardKeyFor(KEY, 'repositories'));
-    const gistsShardBefore = await readRaw(shardKeyFor(KEY, 'gists'));
+    const workspacesShardBefore = await readRaw(shardKeyFor(KEY, 'accountWorkspaces'));
 
     // 展开保留重数据字段引用，模拟真实 partialize 行为
     const nextState = { ...state, language: 'en' };
@@ -337,14 +299,14 @@ describe('sharded persist storage', () => {
     expect(coreShard.language).toBe('en');
     // 重数据字段引用未变：分片内容保持原样
     expect(await readRaw(shardKeyFor(KEY, 'repositories'))).toBe(repositoriesShardBefore);
-    expect(await readRaw(shardKeyFor(KEY, 'gists'))).toBe(gistsShardBefore);
+    expect(await readRaw(shardKeyFor(KEY, 'accountWorkspaces'))).toBe(workspacesShardBefore);
   });
 
   it('rewrites the repositories shard when its array reference changes but leaves other heavy shards', async () => {
     const state = buildState();
     debouncedPersistStorage.setItem(KEY, { state, version: 16 });
     await flushPendingPersistSnapshot();
-    const gistsShardBefore = await readRaw(shardKeyFor(KEY, 'gists'));
+    const workspacesShardBefore = await readRaw(shardKeyFor(KEY, 'accountWorkspaces'));
 
     const nextState = { ...state, repositories: [{ id: 1, name: 'repo-one', ai_summary: 'new' }] };
     debouncedPersistStorage.setItem(KEY, { state: nextState, version: 16 });
@@ -353,12 +315,12 @@ describe('sharded persist storage', () => {
     expect((await readShardState('repositories')).repositories).toEqual([
       { id: 1, name: 'repo-one', ai_summary: 'new' },
     ]);
-    expect(await readRaw(shardKeyFor(KEY, 'gists'))).toBe(gistsShardBefore);
+    expect(await readRaw(shardKeyFor(KEY, 'accountWorkspaces'))).toBe(workspacesShardBefore);
   });
 
   it('does not rewrite heavy shards on a plain boot after data has converged', async () => {
     // 契约：水合 → merge → partialize 的启动序列不得重写任何重数据分片
-    //（accountWorkspaces/trendingSnapshots 的规整化引用保留 + lastSync 归 core）。
+    //（accountWorkspaces 的规整化引用保留 + lastSync 归 core）。
     const seedState = appPersistenceOptions.partialize!(buildState() as never);
     debouncedPersistStorage.setItem(KEY, { state: seedState as Record<string, unknown>, version: 16 });
     await flushPendingPersistSnapshot();
@@ -414,7 +376,7 @@ describe('sharded persist storage', () => {
     const rehydrated = await debouncedPersistStorage.getItem(KEY);
     expect(rehydrated?.state).toMatchObject({ themeMode: 'dark', language: 'en' });
     expect(await readMeta()).not.toBeNull();
-    expect(await readShardState('gists')).toMatchObject({ gists: [{ id: 'gist-1' }] });
+    expect(await readShardState('releases')).toMatchObject({ releases: [{ id: 101 }] });
     expect(await readShardState('repositories')).toMatchObject({
       repositories: [{ id: 1, name: 'repo-one' }],
     });
@@ -422,7 +384,7 @@ describe('sharded persist storage', () => {
 
   it('merges persisted shards with the legacy snapshot when some shards are missing, then converges', async () => {
     // 模拟迁移中途崩溃：meta + 部分分片已提交，旧单键快照仍在
-    const legacyState = { ...buildState(), gists: [{ id: 'legacy-gist' }], themeMode: 'light' };
+    const legacyState = { ...buildState(), releases: [{ id: 999 }], themeMode: 'light' };
     await indexedDBStorage.setItem(KEY, JSON.stringify({ state: legacyState, version: 16 }));
     await setStorageEntries(KEY, [
       [metaKeyFor(KEY), JSON.stringify({ format: 1, version: 16, shards: [...PERSISTENCE_SHARD_NAMES], savedAt: 't0' })],
@@ -431,16 +393,16 @@ describe('sharded persist storage', () => {
 
     const hydrated = await debouncedPersistStorage.getItem(KEY);
     // 存在的分片内容（更新）覆盖旧快照，缺失分片回退旧快照
-    expect(hydrated?.state).toMatchObject({ themeMode: 'dark', language: 'zh', gists: [{ id: 'legacy-gist' }] });
+    expect(hydrated?.state).toMatchObject({ themeMode: 'dark', language: 'zh', releases: [{ id: 999 }] });
 
     // 下一次写入强制提交全部分片并退役旧键（收敛迁移）
     debouncedPersistStorage.setItem(KEY, { state: buildState(), version: 16 });
     await flushPendingPersistSnapshot();
 
     expect(await readRaw(KEY)).toBeNull();
-    expect(await readShardState('gists')).toMatchObject({ gists: [{ id: 'gist-1' }] });
+    expect(await readShardState('releases')).toMatchObject({ releases: [{ id: 101 }] });
     const rehydrated = await debouncedPersistStorage.getItem(KEY);
-    expect(rehydrated?.state).toMatchObject({ themeMode: 'dark', gists: [{ id: 'gist-1' }] });
+    expect(rehydrated?.state).toMatchObject({ themeMode: 'dark', releases: [{ id: 101 }] });
   });
 
   it('assembles a full shard set and retires a leftover legacy key on read', async () => {
@@ -471,7 +433,7 @@ describe('sharded persist storage', () => {
     // H2 回归：格式合法但只列出部分分片的 meta 不得绕过恢复路径，
     // 也不得退役唯一可兜底的 legacy 单键快照。
     const legacyValue: StorageValue<unknown> = {
-      state: { themeMode: 'light', repositories: [{ id: 1 }], gists: [{ id: 'keep' }] },
+      state: { themeMode: 'light', repositories: [{ id: 1 }], releases: [{ id: 999 }] },
       version: 16,
     };
     await indexedDBStorage.setItem(KEY, JSON.stringify(legacyValue));
@@ -483,7 +445,7 @@ describe('sharded persist storage', () => {
       await indexedDBStorage.setItem(KEY, JSON.stringify(legacyValue));
 
       const hydrated = await debouncedPersistStorage.getItem(KEY);
-      expect(hydrated?.state).toMatchObject({ themeMode: 'light', gists: [{ id: 'keep' }] });
+      expect(hydrated?.state).toMatchObject({ themeMode: 'light', releases: [{ id: 999 }] });
       await tick();
       expect(await readRaw(KEY), `legacy must survive invalid meta ${JSON.stringify(shards)}`).not.toBeNull();
     }
@@ -502,7 +464,7 @@ describe('sharded persist storage', () => {
     debouncedPersistStorage.setItem(KEY, { state: buildState(), version: 16 });
     await flushPendingPersistSnapshot();
     expect(await readMeta()).not.toBeNull();
-    expect(await readShardState('gists')).toMatchObject({ gists: [{ id: 'gist-1' }] });
+    expect(await readShardState('releases')).toMatchObject({ releases: [{ id: 101 }] });
   });
 
   it('treats corrupt shard payloads as missing and recovers from the legacy snapshot', async () => {
@@ -563,7 +525,6 @@ describe('sharded persist storage', () => {
       themeMode: 'light',
       language: 'en',
       releases: [{ id: 202 }],
-      gists: [{ id: 'gist-1' }],
     });
 
     // 自愈：当批写入覆盖 core 且经 IDB 成功后，LS 镜像被清、不再有派生键残留，
@@ -581,7 +542,7 @@ describe('sharded persist storage', () => {
     debouncedPersistStorage.setItem(KEY, { state, version: 16 });
     await flushPendingPersistSnapshot();
     const savedAtBefore = (await readMeta())?.savedAt;
-    const gistsBefore = await readRaw(shardKeyFor(KEY, 'gists'));
+    const workspacesBefore = await readRaw(shardKeyFor(KEY, 'accountWorkspaces'));
 
     const originalGet = IDBObjectStore.prototype.get;
     IDBObjectStore.prototype.get = function () { throw new Error('simulated transient IDB failure'); };
@@ -597,7 +558,7 @@ describe('sharded persist storage', () => {
 
     // 写入被拒绝：磁盘保持原样
     expect((await readMeta())?.savedAt).toBe(savedAtBefore);
-    expect(await readRaw(shardKeyFor(KEY, 'gists'))).toBe(gistsBefore);
+    expect(await readRaw(shardKeyFor(KEY, 'accountWorkspaces'))).toBe(workspacesBefore);
 
     // 读取恢复后写入重新可用
     const recovered = await debouncedPersistStorage.getItem(KEY);

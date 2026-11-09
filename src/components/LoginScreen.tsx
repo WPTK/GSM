@@ -99,9 +99,9 @@ export const LoginScreen: React.FC = () => {
   const conflictResolveRef = useRef<((overwrite: boolean) => void) | null>(null);
   const {
     setUser, setGitHubToken, setBackendApiSecret, backendApiSecret,
-    repositories, gists, starredGists, releases, forks,
+    repositories, releases,
     customCategories, categoryOrder, hiddenDefaultCategoryIds,
-    defaultCategoryOverrides, categoryListIdMap,
+    defaultCategoryOverrides,
     lastSync, accountWorkspaces, language, setLanguage, themeMode, systemTheme, setThemeMode,
   } = useAppStore(useShallow((state) => ({
     setUser: state.setUser,
@@ -109,15 +109,11 @@ export const LoginScreen: React.FC = () => {
     setBackendApiSecret: state.setBackendApiSecret,
     backendApiSecret: state.backendApiSecret,
     repositories: state.repositories,
-    gists: state.gists,
-    starredGists: state.starredGists,
     releases: state.releases,
-    forks: state.forks,
     customCategories: state.customCategories,
     categoryOrder: state.categoryOrder,
     hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
     defaultCategoryOverrides: state.defaultCategoryOverrides,
-    categoryListIdMap: state.categoryListIdMap,
     lastSync: state.lastSync,
     accountWorkspaces: state.accountWorkspaces,
     language: state.language,
@@ -227,15 +223,11 @@ export const LoginScreen: React.FC = () => {
       const parkedWorkspace = nextAccountId ? accountWorkspaces[nextAccountId] : undefined;
       const currentWorkspace = {
         repositories,
-        gists,
-        starredGists,
         releases,
-        forks,
         customCategories,
         categoryOrder,
         hiddenDefaultCategoryIds,
         defaultCategoryOverrides,
-        categoryListIdMap,
       };
       const localHasData = workspaceHasData(currentWorkspace) || workspaceHasData(parkedWorkspace);
 

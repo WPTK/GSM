@@ -22,19 +22,6 @@ export const createTimelineSlice: AppStoreSlice<Pick<import('../types').AppActio
   | 'addReleaseSourceRepository'
   | 'removeReleaseSourceRepository'
   | 'updateReleaseSourceRepository'
-  | 'setForks'
-  | 'addForks'
-  | 'updateFork'
-  | 'markForkAsRead'
-  | 'markAllForksAsRead'
-  | 'setForkViewMode'
-  | 'setForkSelectedFilters'
-  | 'toggleForkSelectedFilter'
-  | 'clearForkSelectedFilters'
-  | 'setForkSearchQuery'
-  | 'toggleForkExpandedRepository'
-  | 'setForkExpandedRepositories'
-  | 'setForkIsRefreshing'
 >> = (set, get) => ({
       // Release actions
       setReleases: (releases, options) => set((state) => {
@@ -255,52 +242,4 @@ export const createTimelineSlice: AppStoreSlice<Pick<import('../types').AppActio
         });
         return { readReleases: allReleaseIds, releases };
       }),
-
-      // Fork actions
-      setForks: (forks, options) => set((state) => {
-        if (shouldPreserveExisting(forks, state.forks, options?.allowEmpty)) {
-          logger.warn('store.setForks', 'Refusing empty overwrite of local forks');
-          return state;
-        }
-        return { forks };
-      }),
-      addForks: (newForks) => set((state) => {
-        const existingIds = new Set(state.forks.map(f => f.id));
-        const uniqueForks = newForks.filter(f => !existingIds.has(f.id));
-        return { forks: [...state.forks, ...uniqueForks] };
-      }),
-      updateFork: (fork) => set((state) => ({
-        forks: state.forks.map(f => f.id === fork.id ? fork : f),
-      })),
-      markForkAsRead: (forkId) => set((state) => {
-        const newReadForks = new Set(state.readForks);
-        newReadForks.add(forkId);
-        return { readForks: newReadForks };
-      }),
-      markAllForksAsRead: () => set((state) => {
-        const allForkIds = new Set(state.forks.map(f => f.id));
-        return { readForks: allForkIds };
-      }),
-
-      // Fork Timeline View actions
-      setForkViewMode: (forkViewMode) => set({ forkViewMode }),
-      setForkSelectedFilters: (forkSelectedFilters) => set({ forkSelectedFilters }),
-      toggleForkSelectedFilter: (filterId) => set((state) => ({
-        forkSelectedFilters: state.forkSelectedFilters.includes(filterId)
-          ? state.forkSelectedFilters.filter(id => id !== filterId)
-          : [...state.forkSelectedFilters, filterId]
-      })),
-      clearForkSelectedFilters: () => set({ forkSelectedFilters: [] }),
-      setForkSearchQuery: (forkSearchQuery) => set({ forkSearchQuery }),
-      toggleForkExpandedRepository: (repoId) => set((state) => {
-        const newSet = new Set(state.forkExpandedRepositories);
-        if (newSet.has(repoId)) {
-          newSet.delete(repoId);
-        } else {
-          newSet.add(repoId);
-        }
-        return { forkExpandedRepositories: newSet };
-      }),
-      setForkExpandedRepositories: (forkExpandedRepositories) => set({ forkExpandedRepositories }),
-      setForkIsRefreshing: (forkIsRefreshing) => set({ forkIsRefreshing }),
 });

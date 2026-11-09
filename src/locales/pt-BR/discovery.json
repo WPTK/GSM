@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "Feeds externos de descoberta",
-    "manageRss": "Canal de descoberta RSS",
-    "name": "Nome do canal",
-    "url": "URL HTTPS do feed",
-    "add": "Adicionar feed",
-    "checking": "Verificando feed…",
-    "copy": "Copiar",
-    "copied": "Copiado",
-    "rssFormat": "Cole uma URL pública de feed RSS ou Atom — o app extrai os links de repositórios do GitHub mencionados (primeiros 30 por atualização).",
-    "rss-invalid": "Nenhum link de repositório do GitHub foi encontrado no feed.",
-    "remove": "Remover {{name}}",
-    "format": "Cole um link HTTPS público cuja resposta JSON liste repositórios do GitHub no campo repositories, até 30 repositórios públicos.",
-    "cors-note": "O site deve permitir requisições do navegador (CORS). O token do GitHub não é enviado ao feed.",
-    "invalid": "Informe um nome e uma URL HTTPS válida.",
-    "duplicate": "Esse feed já foi adicionado ou o limite de dez feeds foi atingido.",
-    "invalid-format": "O JSON não contém uma lista válida de repositórios.",
-    "cors": "Não foi possível ler o feed. Verifique a URL e as configurações de CORS.",
-    "unreadable": "Não foi possível ler o feed. Verifique a URL, a disponibilidade e o formato JSON."
+    "copied": "Copiado"
   },
   "discoverySidebar": {
     "just-now": "apenas",
@@ -41,18 +24,12 @@
     "items-2": "individual)",
     "syncing-weekly-submissions-v1-scanned": "Sincronizando envios semanais... {{v1}} itens verificados",
     "fetching-repo-details-v1-v2": "Detalhes completos do armazém... {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "Recuperando a linha do tempo dos blogueiros que você segue... {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "Buscando mensagens dos seguintes canais... {{v1}}/{{v2}}",
     "just-now": "apenas",
     "diffmin-m-ago": "{{diffMin}} minutos atrás",
     "diffhours-h-ago": "{{diffHours}} horas atrás",
     "updated": "atualizado em",
     "refresh": "atualizar",
     "each-refresh-shows-different-content": "Você pode ver conteúdos diferentes sempre que atualizar",
-    "time-range": "intervalo de tempo",
-    "today": "hoje",
-    "this-week": "essa semana",
-    "this-month": "este mês",
     "topic-filter": "Filtro de tópico",
     "topic": "tema",
     "ai": "IA",
@@ -65,10 +42,6 @@
     "game": "jogo",
     "only-show-submissions-included-in-the-weekly-iss": "Mostrar apenas envios que foram incluídos na revista semanal",
     "in-weekly": "Semanalmente incluído",
-    "manage-the-follow-list": "Gerenciar lista de blogueiros para seguir",
-    "follow-list": "lista de observação",
-    "manage-the-channel-list": "Gerenciar a seguinte lista de canais",
-    "channel-list": "Lista de canais",
     "stop-analysis": "Parar análise",
     "stop": "parar",
     "analyze-with-ai": "Análise de IA",
@@ -89,11 +62,7 @@
     "waiting-for-github-api-response": "Resposta da API GitHub",
     "repo-search": "Pesquisa de armazém",
     "enter-keywords-to-search-github-repositories": "Insira palavras-chave para pesquisar repositórios GitHub",
-    "x-tweets": "X tweet",
-    "fetches-github-projects-from-followed-accounts-l": "Conecte-se diretamente ao x.com para obter os projetos do GitHub nos últimos tweets dos blogueiros que você segue. Versão desktop ou modo servidor é necessária.",
     "start-sync": "Comece a sincronizar",
-    "telegram-channels": "Canal de telegrama",
-    "fetches-github-projects-from-followed-channels-m": "Conecte-se diretamente à visualização pública do t.me para capturar projetos do GitHub em mensagens do canal a seguir. Versão desktop ou modo servidor é necessária.",
     "ruanyifeng-weekly": "Ruan Yifeng semanalmente",
     "sync-open-source-submissions-from-the-weekly-ear": "Sincronize os envios de projetos de código aberto do Technology Enthusiasts Weekly e obtenha automaticamente envios anteriores ao carregar mais",
     "no-data-yet": "Ainda não há dados",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "Token GitHub não encontrado, faça login novamente.",
     "failed-to-load-more-please-retry": "Falha ao carregar mais, tente novamente",
-    "failed-to-fetch-x-tweets": "Falha ao obter X tweets",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "Falha ao obter X tweets, verifique a conexão de rede ou verifique o cookie de autenticação X nas configurações.",
-    "failed-to-fetch-telegram-messages": "Falha na recuperação de mensagem do telegrama",
-    "failed-to-fetch-telegram-messages-please-check-y": "Falha ao receber mensagens do Telegram, verifique a conexão de rede ou siga o canal.",
     "failed-to-fetch-data-please-check-your-network-c": "Falha ao obter dados, verifique a conexão de rede ou o token GitHub.",
     "please-configure-ai-service-in-settings-first": "Configure primeiro o serviço de IA nas configurações.",
     "ai-service-configuration-is-incomplete-please-ch": "A configuração do serviço de IA está incompleta, verifique o endpoint da API, a chave e o nome do modelo.",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "Falha na análise da IA. Verifique a configuração da IA ​​e a conexão de rede",
     "ai-analysis-failed-please-check-your-ai-configur": "A análise de IA falhou, verifique a configuração de IA."
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "Conexão bem-sucedida: {{messageCount}} mensagens do canal foram analisadas, incluindo {{repoCount}} links de repositório GitHub.",
-    "failed-error": "Falha na conexão: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "O carregamento do texto falhou, verifique a rede e tente novamente"
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "Conexão bem-sucedida: {{tweetCount}} tweets analisados, incluindo {{repoCount}} links de repositório GitHub.",
-    "failed-error": "Falha na conexão: {{error}}"
   },
   "discoveryChannel": {
     "trending": "tendência",
@@ -171,21 +128,10 @@
     "most-popular": "mais popular",
     "topic": "Exploração de tópico",
     "x-tweet": "X tweet",
-    "telegram": "Canal de telegrama",
     "weekly": "Ruan Yifeng semanalmente",
     "search": "Pesquisa de armazém"
   },
   "discoveryPlatform": {
     "All": "Todas as plataformas"
-  },
-  "trendingHistoryPanel": {
-    "title": "Mudanças de ranking",
-    "hint": "Comparado com o último dia registrado",
-    "new-entry": "Novo na lista",
-    "rising": "Subiu",
-    "falling": "Caiu",
-    "streak-days": "{{v1}} dias seguidos",
-    "stars-gained": "+{{v1}} stars desde o primeiro registro",
-    "first-seen": "O primeiro foi registrado {{v1}}"
   }
 }

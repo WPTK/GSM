@@ -2,20 +2,16 @@ import { discoveryChannelName } from '../i18n/discoveryNames';
 import { useT } from "../i18n/useT";
 import type { AppLanguage } from '../i18n/languages';
 import React from 'react';
-import { RefreshCw, Loader2, TrendingUp, Rocket, Crown, Tag, Search, Newspaper } from 'lucide-react';
-import { SiX, SiTelegram } from '@icons-pack/react-simple-icons';
+import { RefreshCw, Loader2, Rocket, Crown, Tag, Search, Newspaper } from 'lucide-react';
 import type { DiscoveryChannel, DiscoveryChannelId, DiscoveryChannelIcon } from '../types';
 import { Button } from './ui/button';
 import { DiscoveryChannelMenu } from './DiscoveryChannelMenu';
 import { ContextSidebarBody } from './ContextSidebarBody';
 
 const discoveryChannelIconMap: Record<DiscoveryChannelIcon, React.ComponentType<{ className?: string }>> = {
-  trending: TrendingUp,
   rocket: Rocket,
   star: Crown,
   tag: Tag,
-  tweet: SiX,
-  telegram: SiTelegram,
   weekly: Newspaper,
   search: Search,
 };
@@ -61,9 +57,9 @@ export const DiscoverySidebar: React.FC<DiscoverySidebarProps> = ({
   };
 
   const enabledChannels = (channels || []).filter(ch => ch.enabled);
-  const sourceChannelIds = new Set<DiscoveryChannelId>(['x-tweet', 'telegram', 'weekly']);
+  const sourceChannelIds = new Set<DiscoveryChannelId>(['weekly']);
   const isSourceChannel = (channel: DiscoveryChannel) =>
-    sourceChannelIds.has(channel.id) || channel.id.startsWith('external:');
+    sourceChannelIds.has(channel.id);
   const primaryChannels = enabledChannels.filter(channel => !isSourceChannel(channel));
   const sourceChannels = enabledChannels.filter(isSourceChannel);
   const selectedChannelDefinition = channels.find(channel => channel.id === selectedChannel);

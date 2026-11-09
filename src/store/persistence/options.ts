@@ -5,9 +5,6 @@ import { defaultHeaderMenuConfig, defaultReleaseSourceSettings, defaultSubscript
 import { defaultRepositoryChatSettings } from '../../types/repositoryChat';
 import { logger } from '../../services/logger';
 import { normalizeReleaseSourceSettings } from '../../utils/releaseSources';
-import { normalizeXTweetFollows } from '../../utils/xTweetFollows';
-import { normalizeTelegramFollows } from '../../utils/telegramFollows';
-import { normalizeExternalDiscoveryChannels } from '../../utils/discoveryFeeds';
 import type { AppStoreState } from '../types';
 import {
   defaultDiscoveryChannels,
@@ -39,15 +36,6 @@ partialize: (state) => ({
   // Theme token（开发守则 §14）：声明式外观偏好
   themeTokens: state.themeTokens,
 
-  // 持久化 Gist 数据
-  gists: state.gists,
-  starredGists: state.starredGists,
-  gistSearchFilters: {
-sortBy: state.gistSearchFilters.sortBy,
-sortOrder: state.gistSearchFilters.sortOrder,
-  },
-  selectedGistCategory: state.selectedGistCategory,
-  analyzingGistIds: Array.from(state.analyzingGistIds),
 
   // 持久化AI配置
   aiConfigs: state.aiConfigs,
@@ -66,20 +54,11 @@ sortOrder: state.gistSearchFilters.sortOrder,
   // MCP prefs + bearer token (stable across restarts; only changes on user reset)
   mcpConfig: state.mcpConfig,
 
-  // 持久化WebDAV配置
-  webdavConfigs: state.webdavConfigs,
-  activeWebDAVConfig: state.activeWebDAVConfig,
-  lastBackup: state.lastBackup,
-
   // 持久化Release订阅、来源和已读状态
   releaseSubscriptions: Array.from(state.releaseSubscriptions),
   releaseSourceSettings: state.releaseSourceSettings,
   readReleases: Array.from(state.readReleases),
   releases: state.releases,
-
-  // 持久化Fork数据
-  forks: state.forks,
-  readForks: Array.from(state.readForks),
 
   // 持久化自定义分类
   customCategories: state.customCategories,
@@ -96,8 +75,6 @@ sortOrder: state.gistSearchFilters.sortOrder,
   repositoryCardActions: state.repositoryCardActions,
   pluginCustomIcons: state.pluginCustomIcons,
 
-  // Trending 快照（开发守则 §7）：本地榜单历史，不参与任何远端同步
-  trendingSnapshots: state.trendingSnapshots,
 
   // 持久化UI设置
   themeMode: state.themeMode,
@@ -114,12 +91,6 @@ sortOrder: state.gistSearchFilters.sortOrder,
   // 持久化后端 API Secret（跨会话/跨标签保留，配合修复 #259）。同时保留
   // localStorage 镜像（AUTH_MIRROR_KEY）作为异步 IndexedDB 写入失败时的兜底。
   backendApiSecret: state.backendApiSecret,
-
-  // 持久化同步范围配置（GitHub Lists 同步）
-  syncMode: state.syncMode,
-  syncModeConfigured: state.syncModeConfigured,
-  // 持久化分类 → GitHub List 映射（跨语言稳定身份）
-  categoryListIdMap: state.categoryListIdMap,
 
   // 持久化搜索排序设置
   searchFilters: {
@@ -138,12 +109,6 @@ sortOrder: state.searchFilters.sortOrder,
   releaseExpandedRepositories: Array.from(state.releaseExpandedRepositories),
   includePreRelease: state.includePreRelease,
   includeKeysInBackup: state.includeKeysInBackup,
-
-  // 持久化Fork页面视图设置
-  forkViewMode: state.forkViewMode,
-  forkSelectedFilters: state.forkSelectedFilters,
-  forkSearchQuery: state.forkSearchQuery,
-  forkExpandedRepositories: Array.from(state.forkExpandedRepositories),
 
 // 持久化发现设置
 discoveryChannels: state.discoveryChannels,
@@ -166,11 +131,6 @@ discoverySortOrder: state.discoverySortOrder,
 discoverySearchMode: state.discoverySearchMode,
 discoverySelectedTopic: state.discoverySelectedTopic,
   weeklyOnlyCollected: state.weeklyOnlyCollected,
-  xTweetFollows: state.xTweetFollows,
-  // xTweetAuth 仅由桌面端 safeStorage 安全加密存储（Web 模式仅在内存），避免明文 Cookie 写入 IndexedDB/localStorage（CWE-922）。
-  // 仅持久化非敏感的 xTweetAuthRevision 用于跨会话请求签名稳定性。
-  xTweetAuthRevision: state.xTweetAuthRevision,
-  telegramFollows: state.telegramFollows,
 // 持久化完整代理配置，包含认证密码，确保重启后无需重新输入。
 proxyConfig: {
   enabled: state.proxyConfig.enabled,
@@ -246,7 +206,7 @@ if (migratedCount > 0) {
   }
 
   if (state && !state.selectedDiscoveryChannel) {
-state.selectedDiscoveryChannel = 'trending';
+state.selectedDiscoveryChannel = 'hot-release';
   }
   if (state && (!state.discoveryChannels || !Array.isArray(state.discoveryChannels))) {
 state.discoveryChannels = defaultDiscoveryChannels;
@@ -265,9 +225,9 @@ return {
 ...defaultChannel,
 enabled: persistedChannel.enabled !== false,
 };
-}), ...normalizeExternalDiscoveryChannels(persistedChannels)];
+})];
   }
-  // 迁移订阅频道（版本 4→5：daily-dev → most-dev，新增 trending，补全 nameEn）
+  // 迁移订阅频道（版本 4→5：daily-dev → most-dev，补全 nameEn；trending 频道已在加固分支移除）
   const defaultChannelsMap = new Map(defaultSubscriptionChannels.map(ch => [ch.id, ch]));
   if (state && !Array.isArray(state.subscriptionChannels)) {
 console.log('Migrating: initializing subscription channels');
@@ -290,19 +250,6 @@ description: (chRecord.description as string) || defaultCh.description,
 }
 return chRecord as unknown as SubscriptionChannel;
 });
-// 确保 trending 频道存在（如果缺失则添加）
-const hasTrending = state.subscriptionChannels.some((ch: SubscriptionChannel) => ch.id === 'trending');
-if (!hasTrending) {
-console.log('Migrating: adding trending channel');
-state.subscriptionChannels.push({
-  id: 'trending',
-  name: '热门趋势',
-  nameEn: 'Trending',
-  icon: 'trending',
-  description: 'GitHub 上近期最受关注的项目 Top 10',
-  enabled: true,
-} as SubscriptionChannel);
-}
   }
   if (state && !state.discoveryPlatform) {
 state.discoveryPlatform = 'All';
@@ -324,32 +271,17 @@ state.discoverySortOrder = 'Descending';
   // discoveryIsLoading 不应持久化，migrate 时始终重置防止旧数据格式异常导致 spread 崩溃
   if (state) {
 (state as Record<string, unknown>).discoveryIsLoading = {
-'trending': false, 'hot-release': false, 'most-popular': false, 'topic': false, 'x-tweet': false, 'telegram': false, 'weekly': false, 'search': false, 'code-search': false,
+'hot-release': false, 'most-popular': false, 'topic': false, 'weekly': false, 'search': false, 'code-search': false,
 };
 // discoveryScrollPositions 同样不应持久化，重置以避免 stale 滚动位置
 (state as Record<string, unknown>).discoveryScrollPositions = {
-'trending': 0, 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'x-tweet': 0, 'telegram': 0, 'weekly': 0, 'search': 0, 'code-search': 0,
+'hot-release': 0, 'most-popular': 0, 'topic': 0, 'weekly': 0, 'search': 0, 'code-search': 0,
 };
   }
 
   // v14: 周刊频道过滤器偏好兜底
   if (state && typeof (state as Record<string, unknown>).weeklyOnlyCollected !== 'boolean') {
     (state as Record<string, unknown>).weeklyOnlyCollected = false;
-  }
-
-  // v14→v15: X 推文频道选项兜底（关注列表默认含 geekbb）
-  if (state) {
-    const stateRecord = state as Record<string, unknown>;
-    stateRecord.xTweetFollows = normalizeXTweetFollows(stateRecord.xTweetFollows);
-    // 旧快照可能含明文 xTweetAuth：直接删除（不删除整个快照），内存态置 null；
-    // 清理后的快照随下次持久化写回 IndexedDB/localStorage。
-    if ('xTweetAuth' in stateRecord) delete stateRecord.xTweetAuth;
-    if (typeof stateRecord.xTweetAuthRevision !== 'number' || !Number.isFinite(stateRecord.xTweetAuthRevision)) {
-      stateRecord.xTweetAuthRevision = 0;
-    }
-    (state as Record<string, unknown>).telegramFollows = normalizeTelegramFollows(
-      (state as Record<string, unknown>).telegramFollows,
-    );
   }
 
   // v5→v6: 初始化 proxyConfig
@@ -427,10 +359,8 @@ currentState as AppStoreState
   logger.info('store.hydrate', 'Store rehydrated', {
 isAuthenticated: normalized.isAuthenticated,
 repositoriesCount: normalized.repositories?.length || 0,
-gistsCount: normalized.gists?.length || 0,
 lastSync: normalized.lastSync,
 language: normalized.language,
-webdavConfigsCount: normalized.webdavConfigs?.length || 0,
 customCategoriesCount: normalized.customCategories?.length || 0,
   });
 

@@ -13,7 +13,6 @@ import { useAppStore, getAllCategories } from '../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSearchShortcuts } from '../hooks/useSearchShortcuts';
 import { useSearchActions } from '../features/repositories/hooks/useSearchActions';
-import { useDialog } from '../hooks/useDialog';
 import { isRepoCustomized } from '../utils/repoUtils';
 import { applyRepoFilters, performBasicTextSearch as basicTextSearch, sortRepositories } from '../utils/repoSearch';
 import { NO_LICENSE_SENTINEL, normalizeLicense } from '../utils/licenseFilter';
@@ -98,7 +97,6 @@ export const SearchBar: React.FC = () => {
     isSyncingStars: state.isSyncingStars,
   })));
 
-  const { confirm } = useDialog();
   // 搜索动作（向量/关键词/AI 搜索、星标同步）由 hook 承担；
   // 两 ref 实体挂 hook、以 RefObject 暴露，View 的过滤 effect 原样读写。
   const {
@@ -605,19 +603,6 @@ export const SearchBar: React.FC = () => {
 
   const t = useT('app');
 
-  // 同步星标仓库及 list：先确认（警告会覆盖未锁定仓库的分类并加锁），再执行。
-  // 'auto'/'stars-only' 入口原无确认，勿加（B8）。
-  const handleStarAndListSync = async () => {
-
-    const confirmed = await confirm(
-      t('searchBar.sync-starred-repos-lists'),
-      t('searchBar.sync-lists-confirm-body'),
-      { type: 'warning' }
-    );
-    if (!confirmed) return;
-    await syncStars('stars-and-lists');
-  };
-
   const formatLastSync = (timestamp: string | null) => {
     if (!timestamp) return t('searchBar.never');
     const date = new Date(timestamp);
@@ -928,17 +913,10 @@ export const SearchBar: React.FC = () => {
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem
                   disabled={isSyncingStars}
-                  onSelect={() => { void syncStars('stars-only'); }}
+                  onSelect={() => { void syncStars(); }}
                   className="justify-start text-sm"
                 >
                   <span className="whitespace-nowrap">{t('searchBar.sync-starred-repos-only')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={isSyncingStars}
-                  onSelect={() => { void handleStarAndListSync(); }}
-                  className="justify-start text-sm"
-                >
-                  <span className="whitespace-nowrap">{t('searchBar.sync-starred-repos-lists')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

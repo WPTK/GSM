@@ -2,15 +2,10 @@ import type { StoreApi } from 'zustand';
 import type { AppLanguage } from '../i18n/languages';
 import type {
   AppState,
-  Gist,
-  GistCategoryId,
-  GistSearchFilters,
   ThemeMode,
   Repository,
   Release,
-  ForkRepo,
   AIConfig,
-  WebDAVConfig,
   EmbeddingConfig,
   VectorSearchConfig,
   VectorSearchStatus,
@@ -22,33 +17,26 @@ import type {
   GitHubUser,
   Category,
   AssetFilter,
-  UpdateNotification,
   AnalysisProgress,
   DiscoveryChannelId,
   DiscoveryRepo,
   DiscoveryPlatform,
-  ExternalFeedKind,
   ProgrammingLanguage,
   SortBy,
   SortOrder,
-  TrendingTimeRange,
   WeeklySyncStatus,
-  XTweetAuth,
   TopicCategory,
   CustomReleaseRepository,
   ReleaseSourceId,
   ReleaseSourceSettings,
   HeaderMenuItem,
-  SyncMode,
   TranslationEngine,
   RepositoryCardFieldId,
   RepositoryCardActionPreference,
   RepositoryChatSettings,
   ThemeTokens,
-  TrendingSnapshot,
 } from '../types';
 import type { ThemePresetId } from '../constants/themePresets';
-import type { GitHubListsApiService } from '../services/githubListsApi';
 
 export interface AppActions {
   // Auth actions
@@ -65,24 +53,8 @@ export interface AppActions {
   setLoading: (loading: boolean) => void;
   setSyncingStars: (syncing: boolean) => void;
   setLastSync: (timestamp: string) => void;
-  setSyncMode: (mode: SyncMode) => void;
-  setSyncModeConfigured: (configured: boolean) => void;
-  pushCategoriesToLists: (api: GitHubListsApiService, categoryIds?: string[]) => Promise<void>;
-  resetListsPush: () => void;
-  setListsPushError: (error: string | null) => void;
-  setCategoryListIdMap: (categoryId: string, listId: string) => void;
   deleteRepository: (repoId: number) => void;
   setAnalyzingRepository: (repoId: number, isAnalyzing: boolean) => void;
-
-  // Gist actions
-  setGists: (gists: Gist[], options?: { allowEmpty?: boolean }) => void;
-  setStarredGists: (gists: Gist[], options?: { allowEmpty?: boolean }) => void;
-  updateGist: (gist: Gist) => void;
-  deleteGist: (gistId: string) => void;
-  setGistSearchFilters: (filters: Partial<GistSearchFilters>) => void;
-  setGistSearchResults: (results: Gist[]) => void;
-  setSelectedGistCategory: (category: GistCategoryId) => void;
-  setAnalyzingGist: (gistId: string, isAnalyzing: boolean) => void;
 
   // AI actions
   addAIConfig: (config: AIConfig) => void;
@@ -91,14 +63,6 @@ export interface AppActions {
   setActiveAIConfig: (id: string | null) => void;
   setAIConfigs: (configs: AIConfig[]) => void;
   setRepositoryChatSettings: (settings: Partial<RepositoryChatSettings>) => void;
-
-  // WebDAV actions
-  addWebDAVConfig: (config: WebDAVConfig) => void;
-  updateWebDAVConfig: (id: string, updates: Partial<WebDAVConfig>) => void;
-  deleteWebDAVConfig: (id: string) => void;
-  setActiveWebDAVConfig: (id: string | null) => void;
-  setWebDAVConfigs: (configs: WebDAVConfig[]) => void;
-  setLastBackup: (timestamp: string) => void;
 
   // Embedding actions
   addEmbeddingConfig: (config: EmbeddingConfig) => void;
@@ -146,13 +110,6 @@ export interface AppActions {
   removeReleaseSourceRepository: (sourceId: ReleaseSourceId, fullName: string) => void;
   updateReleaseSourceRepository: (sourceId: ReleaseSourceId, fullName: string, updates: Partial<CustomReleaseRepository>) => void;
 
-  // Fork actions
-  setForks: (forks: ForkRepo[], options?: { allowEmpty?: boolean }) => void;
-  addForks: (forks: ForkRepo[]) => void;
-  updateFork: (fork: ForkRepo) => void;
-  markForkAsRead: (forkId: number) => void;
-  markAllForksAsRead: () => void;
-
   // Category actions
   addCustomCategory: (category: Category) => void;
   updateCustomCategory: (id: string, updates: Partial<Category>) => void;
@@ -178,7 +135,7 @@ export interface AppActions {
   setSystemTheme: (systemTheme: 'light' | 'dark') => void;
   setThemePresetLight: (preset: ThemePresetId) => void;
   setThemePresetDark: (preset: ThemePresetId) => void;
-  setCurrentView: (view: 'repositories' | 'gists' | 'releases' | 'forks' | 'settings' | 'subscription') => void;
+  setCurrentView: (view: 'repositories' | 'releases' | 'settings' | 'subscription') => void;
   setSelectedCategory: (category: string) => void;
   setLanguage: (language: AppLanguage) => void;
   setTranslationEngine: (engine: TranslationEngine) => void;
@@ -189,10 +146,6 @@ export interface AppActions {
 
   // Hydration state
   setHasHydrated: (hydrated: boolean) => void;
-
-  // Update actions
-  setUpdateNotification: (notification: UpdateNotification | null) => void;
-  dismissUpdateNotification: () => void;
 
   // Update Analysis Progress
   setAnalysisProgress: (newProgress: AnalysisProgress) => void;
@@ -226,16 +179,6 @@ export interface AppActions {
   // Backup/Export key inclusion preference
   setIncludeKeysInBackup: (include: boolean) => void;
 
-  // Fork Timeline View actions
-  setForkViewMode: (mode: 'timeline' | 'repository') => void;
-  setForkSelectedFilters: (filters: string[]) => void;
-  toggleForkSelectedFilter: (filterId: string) => void;
-  clearForkSelectedFilters: () => void;
-  setForkSearchQuery: (query: string) => void;
-  toggleForkExpandedRepository: (repoId: number) => void;
-  setForkExpandedRepositories: (repoIds: Set<number>) => void;
-  setForkIsRefreshing: (refreshing: boolean) => void;
-
   // Discovery actions
   setSelectedDiscoveryChannel: (channel: DiscoveryChannelId) => void;
   setDiscoveryLoading: (channel: DiscoveryChannelId, loading: boolean) => void;
@@ -245,8 +188,6 @@ export interface AppActions {
   setDiscoveryLastRefresh: (channel: DiscoveryChannelId, timestamp: string) => void;
   updateDiscoveryRepo: (repo: DiscoveryRepo) => void;
   toggleDiscoveryChannel: (channelId: DiscoveryChannelId) => void;
-  addExternalDiscoveryChannel: (name: string, sourceUrl: string, kind?: ExternalFeedKind) => DiscoveryChannelId | null;
-  removeExternalDiscoveryChannel: (channelId: DiscoveryChannelId) => void;
   setDiscoveryPlatform: (platform: DiscoveryPlatform) => void;
   setDiscoveryLanguage: (language: ProgrammingLanguage) => void;
   setDiscoverySortBy: (sortBy: SortBy) => void;
@@ -261,27 +202,13 @@ export interface AppActions {
   setDiscoveryNextPage: (channel: DiscoveryChannelId, page: number) => void;
   setDiscoveryTotalCount: (channel: DiscoveryChannelId, count: number) => void;
   setDiscoveryScrollPosition: (channel: DiscoveryChannelId, position: number) => void;
-  setTrendingTimeRange: (range: TrendingTimeRange) => void;
   setWeeklyOnlyCollected: (only: boolean) => void;
   setWeeklySyncStatus: (status: WeeklySyncStatus | null) => void;
-  setXTweetSyncStatus: (status: WeeklySyncStatus | null) => void;
-  /** 添加 X 推文频道关注（接受 @handle / handle / x.com 链接，重复添加忽略） */
-  addXTweetFollow: (handle: string) => void;
-  removeXTweetFollow: (handle: string) => void;
-  /** 保存 X 推文频道登录鉴权 Cookie（覆盖旧值） */
-  setXTweetAuth: (auth: XTweetAuth) => void;
-  clearXTweetAuth: () => void;
-  setTelegramSyncStatus: (status: WeeklySyncStatus | null) => void;
-  /** 添加 Telegram 频道关注（接受 @channel / channel / t.me 链接，重复添加忽略） */
-  addTelegramFollow: (channel: string) => void;
-  removeTelegramFollow: (channel: string) => void;
   appendDiscoveryRepos: (channel: DiscoveryChannelId, repos: DiscoveryRepo[]) => void;
 
   // Theme tokens（开发守则 §14）
   /** 局部更新：内部与当前值合并，调用方不必自己展开（避免拿到过期的渲染值）。 */
   updateThemeTokens: (patch: Partial<ThemeTokens>) => void;
-  /** Trending 快照（开发守则 §7）：记一份榜单快照，去重与上限在 utils 里处理。 */
-  recordTrendingSnapshot: (snapshot: TrendingSnapshot) => void;
   // 仓库卡片可见字段（开发守则 §14）
   /** 切换某个字段的显示；未提供的字段沿用当前值。 */
   setRepositoryCardField: (id: RepositoryCardFieldId, visible: boolean) => void;

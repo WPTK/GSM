@@ -1,13 +1,11 @@
 
-import type { AppState, TrendingTimeRange } from '../types';
+import type { AppState } from '../types';
 import { defaultHeaderMenuConfig, defaultReleaseSourceSettings, defaultSubscriptionChannels } from '../types';
 import { defaultRepositoryChatSettings } from '../types/repositoryChat';
 import { DEFAULT_THEME_PRESET_ID } from '../constants/themePresets';
 import { DEFAULT_THEME_TOKENS } from '../utils/themeTokens';
 import { DEFAULT_REPOSITORY_CARD_FIELDS } from '../types/repositoryCardFields';
 import { DEFAULT_REPOSITORY_CARD_ACTIONS } from '../types/repositoryCardActions';
-import { DEFAULT_XTWEET_FOLLOWS } from '../utils/xTweetFollows';
-import { DEFAULT_TELEGRAM_FOLLOWS } from '../utils/telegramFollows';
 import { readSessionBackendSecret } from './persistence/authStorage';
 import { detectInitialLanguage } from '../i18n/languages';
 import {
@@ -16,12 +14,10 @@ import {
   defaultPresetFilters,
   defaultVectorSearchConfig,
   defaultVectorSearchStatus,
-  initialGistSearchFilters,
   initialSearchFilters,
 } from './schema';
 
 export const createInitialState = (): AppState => ({
-      // Initial state
       user: null,
       githubToken: null,
       isAuthenticated: false,
@@ -29,21 +25,9 @@ export const createInitialState = (): AppState => ({
       repositories: [],
       // Theme token 默认全部"跟随预设"（开发守则 §14）
       themeTokens: { ...DEFAULT_THEME_TOKENS },
-      // Trending 快照（开发守则 §7）：本地榜单历史，默认空
-      trendingSnapshots: [],
-      gists: [],
-      starredGists: [],
-      gistSearchFilters: initialGistSearchFilters,
-      gistSearchResults: [],
-      selectedGistCategory: 'all',
-      analyzingGistIds: new Set<string>(),
       isLoading: false,
       isSyncingStars: false,
       lastSync: null,
-      syncMode: 'stars',
-      syncModeConfigured: false,
-      listsPush: { isRunning: false, total: 0, done: 0, currentLabel: null, message: null, error: null },
-      categoryListIdMap: {},
       analyzingRepositoryIds: new Set<number>(),
       aiConfigs: [],
       activeAIConfig: null,
@@ -55,9 +39,6 @@ export const createInitialState = (): AppState => ({
       vectorIndexingState: { isIndexing: false, phase: null, phaseDone: 0, phaseTotal: 0, result: null },
       mcpConfig: { ...defaultMcpConfig },
       similarView: null,
-      webdavConfigs: [],
-      activeWebDAVConfig: null,
-      lastBackup: null,
       searchFilters: initialSearchFilters,
       searchResults: [],
       releases: [],
@@ -85,7 +66,6 @@ export const createInitialState = (): AppState => ({
       language: detectInitialLanguage(),
       translationEngine: 'microsoft',
       autoTranslateRepoDescription: false,
-      updateNotification: null,
       analysisProgress: { current: 0, total: 0 },
       backendApiSecret: readSessionBackendSecret(),
       proxyConfig: { enabled: false, type: 'http', host: '', port: 7890 },
@@ -108,21 +88,14 @@ export const createInitialState = (): AppState => ({
       includePreRelease: true,
       includeKeysInBackup: false,
 
-      forks: [],
-      readForks: new Set<number>(),
-      forkViewMode: 'timeline',
-      forkSelectedFilters: [],
-      forkSearchQuery: '',
-      forkExpandedRepositories: new Set<number>(),
-      forkIsRefreshing: false,
 
       discoveryChannels: defaultDiscoveryChannels,
-      discoveryRepos: { 'trending': [], 'hot-release': [], 'most-popular': [], 'topic': [], 'x-tweet': [], 'telegram': [], 'weekly': [], 'search': [], 'code-search': [] },
-      discoveryLastRefresh: { 'trending': null, 'hot-release': null, 'most-popular': null, 'topic': null, 'x-tweet': null, 'telegram': null, 'weekly': null, 'search': null, 'code-search': null },
-      discoveryIsLoading: { 'trending': false, 'hot-release': false, 'most-popular': false, 'topic': false, 'x-tweet': false, 'telegram': false, 'weekly': false, 'search': false, 'code-search': false },
-      discoveryIsLoadingMore: { 'trending': false, 'hot-release': false, 'most-popular': false, 'topic': false, 'x-tweet': false, 'telegram': false, 'weekly': false, 'search': false, 'code-search': false },
-      discoveryLoadMoreError: { 'trending': null, 'hot-release': null, 'most-popular': null, 'topic': null, 'x-tweet': null, 'telegram': null, 'weekly': null, 'search': null, 'code-search': null },
-      selectedDiscoveryChannel: 'trending',
+      discoveryRepos: { 'hot-release': [], 'most-popular': [], 'topic': [], 'weekly': [], 'search': [], 'code-search': [] },
+      discoveryLastRefresh: { 'hot-release': null, 'most-popular': null, 'topic': null, 'weekly': null, 'search': null, 'code-search': null },
+      discoveryIsLoading: { 'hot-release': false, 'most-popular': false, 'topic': false, 'weekly': false, 'search': false, 'code-search': false },
+      discoveryIsLoadingMore: { 'hot-release': false, 'most-popular': false, 'topic': false, 'weekly': false, 'search': false, 'code-search': false },
+      discoveryLoadMoreError: { 'hot-release': null, 'most-popular': null, 'topic': null, 'weekly': null, 'search': null, 'code-search': null },
+      selectedDiscoveryChannel: 'hot-release',
       discoveryPlatform: 'All',
       discoveryLanguage: 'All',
       discoverySortBy: 'BestMatch',
@@ -134,24 +107,17 @@ export const createInitialState = (): AppState => ({
       discoverySearchPhaseDetail: null,
       discoverySearchEmptyReason: null,
       discoverySelectedTopic: null,
-      discoveryHasMore: { 'trending': false, 'hot-release': false, 'most-popular': false, 'topic': false, 'x-tweet': false, 'telegram': false, 'weekly': false, 'search': false, 'code-search': false },
-      discoveryNextPage: { 'trending': 1, 'hot-release': 1, 'most-popular': 1, 'topic': 1, 'x-tweet': 1, 'telegram': 1, 'weekly': 1, 'search': 1, 'code-search': 1 },
-      discoveryTotalCount: { 'trending': 0, 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'x-tweet': 0, 'telegram': 0, 'weekly': 0, 'search': 0, 'code-search': 0 },
-      discoveryScrollPositions: { 'trending': 0, 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'x-tweet': 0, 'telegram': 0, 'weekly': 0, 'search': 0, 'code-search': 0 },
-  trendingTimeRange: 'weekly' as TrendingTimeRange,
+      discoveryHasMore: { 'hot-release': false, 'most-popular': false, 'topic': false, 'weekly': false, 'search': false, 'code-search': false },
+      discoveryNextPage: { 'hot-release': 1, 'most-popular': 1, 'topic': 1, 'weekly': 1, 'search': 1, 'code-search': 1 },
+      discoveryTotalCount: { 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'weekly': 0, 'search': 0, 'code-search': 0 },
+      discoveryScrollPositions: { 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'weekly': 0, 'search': 0, 'code-search': 0 },
       weeklyOnlyCollected: false,
       weeklySyncStatus: null,
-      xTweetFollows: DEFAULT_XTWEET_FOLLOWS.map((follow) => ({ ...follow })),
-      xTweetAuth: null,
-      xTweetAuthRevision: 0,
-      xTweetSyncStatus: null,
-      telegramFollows: DEFAULT_TELEGRAM_FOLLOWS.map((follow) => ({ ...follow })),
-      telegramSyncStatus: null,
 
       // Subscription
-      subscriptionRepos: { 'most-stars': [], 'most-forks': [], 'most-dev': [], 'trending': [] },
-      subscriptionLastRefresh: { 'most-stars': null, 'most-forks': null, 'most-dev': null, 'trending': null },
-      subscriptionIsLoading: { 'most-stars': false, 'most-forks': false, 'most-dev': false, 'trending': false },
+      subscriptionRepos: { 'most-stars': [], 'most-forks': [], 'most-dev': [] },
+      subscriptionLastRefresh: { 'most-stars': null, 'most-forks': null, 'most-dev': null },
+      subscriptionIsLoading: { 'most-stars': false, 'most-forks': false, 'most-dev': false },
       subscriptionChannels: defaultSubscriptionChannels,
       headerMenuConfig: defaultHeaderMenuConfig,
 });

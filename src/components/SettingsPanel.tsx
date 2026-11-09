@@ -8,20 +8,14 @@ import {
   Settings,
   Globe,
   Bot,
-  Cloud,
-  Database,
   Server,
   Package,
   Palette,
   X,
   Trash2,
-  Wifi,
   ScrollText,
   Layout,
-  Search,
   Cable,
-  Star,
-  Plug,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -32,26 +26,19 @@ import { WorkspacePageHeader } from './WorkspacePageHeader';
 import { ContextSidebarBody } from './ContextSidebarBody';
 import { isElectron } from '../services/electronProxy';
 import { useBackendAvailability } from '../features/settings/hooks/useBackendAvailability';
-import { useVectorSearchActions } from '../features/settings/hooks/useVectorSearchActions';
 import {
   AppearancePanel,
   GeneralPanel,
   AIConfigPanel,
-  WebDAVPanel,
-  BackupPanel,
   BackendPanel,
   CategoryPanel,
   DataManagementPanel,
-  NetworkPanel,
   DiagnosticLogsPanel,
   MenuManagementPanel,
-  StarSyncPanel,
-  VectorSearchSettings,
   McpSettingsPanel,
-  PluginSettingsPanel,
 } from './settings';
 
-type SettingsTab = 'general' | 'appearance' | 'starSync' | 'ai' | 'webdav' | 'backup' | 'backend' | 'category' | 'menu' | 'data' | 'logs' | 'network' | 'vectorSearch' | 'mcp' | 'plugins';
+type SettingsTab = 'general' | 'appearance' | 'ai' | 'backend' | 'category' | 'menu' | 'data' | 'logs' | 'mcp';
 
 interface SettingsTabItem {
   id: SettingsTab;
@@ -293,7 +280,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   // Valid SettingsTab values for runtime validation
   const VALID_TABS: ReadonlySet<string> = useMemo(
-    () => new Set(['general', 'appearance', 'starSync', 'ai', 'webdav', 'backup', 'backend', 'category', 'menu', 'data', 'logs', 'network', 'vectorSearch', 'mcp', 'plugins']),
+    () => new Set(['general', 'appearance', 'ai', 'backend', 'category', 'menu', 'data', 'logs', 'mcp']),
     []
   );
 
@@ -343,8 +330,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   }, [handleTabChange, isTransitioning]);
 
-  const { unindexedRepoCount } = useVectorSearchActions();
-
   const tabs: SettingsTabItem[] = [
     {
       id: 'general',
@@ -359,28 +344,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       icon: <Palette className="w-5 h-5" />,
     },
     {
-      id: 'starSync',
-      section: 'app',
-      label: t('settingsPanel.star-sync'),
-      icon: <Star className="w-5 h-5" />,
-    },
-    {
       id: 'ai',
       section: 'ai-data',
       label: t('settingsPanel.ai-config'),
       icon: <Bot className="w-5 h-5" />,
-    },
-    {
-      id: 'webdav',
-      section: 'ai-data',
-      label: t('settingsPanel.webdav'),
-      icon: <Cloud className="w-5 h-5" />,
-    },
-    {
-      id: 'backup',
-      section: 'ai-data',
-      label: t('settingsPanel.backup'),
-      icon: <Database className="w-5 h-5" />,
     },
     {
       id: 'backend',
@@ -413,26 +380,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       icon: <ScrollText className="w-5 h-5" />,
     },
     ...((isElectron() || backendAvailable) ? [{
-      id: 'network' as SettingsTab,
-      section: 'connection' as const,
-      label: t('settingsPanel.network'),
-      icon: <Wifi className="w-5 h-5" />,
-    }] : []),
-    ...(isElectron() ? [{
-      id: 'plugins' as SettingsTab,
-      section: 'connection' as const,
-      label: t('settingsPanel.plugins'),
-      icon: <Plug className="w-5 h-5" />,
-    }] : []),
-    {
-      id: 'vectorSearch' as SettingsTab,
-      section: 'connection' as const,
-      label: t('settingsPanel.vector-search'),
-      icon: <Search className="w-5 h-5" />,
-      badge: unindexedRepoCount > 0 ? unindexedRepoCount : undefined,
-    },
-    // MCP requires a long-lived process: backend or Electron main. Hide for pure SPA.
-    ...((isElectron() || backendAvailable) ? [{
       id: 'mcp' as SettingsTab,
       section: 'connection' as const,
       label: t('settingsPanel.mcp-server'),
@@ -447,14 +394,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           return <GeneralPanel t={t} />;
         case 'appearance':
           return <AppearancePanel t={t} />;
-        case 'starSync':
-          return <StarSyncPanel t={t} />;
         case 'ai':
           return <AIConfigPanel t={t} />;
-        case 'webdav':
-          return <WebDAVPanel t={t} />;
-        case 'backup':
-          return <BackupPanel t={t} />;
         case 'backend':
           return <BackendPanel t={t} />;
         case 'category':
@@ -465,14 +406,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           return <DataManagementPanel t={t} />;
         case 'logs':
           return <DiagnosticLogsPanel t={t} />;
-        case 'network':
-          return <NetworkPanel t={t} />;
-        case 'vectorSearch':
-          return <VectorSearchSettings t={t} />;
         case 'mcp':
           return <McpSettingsPanel t={t} />;
-        case 'plugins':
-          return <PluginSettingsPanel t={t} />;
         default:
           return null;
       }

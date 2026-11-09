@@ -36,9 +36,7 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
     repositories: store.repositories,
     releases: store.releases,
     aiConfigs: store.aiConfigs,
-    webdavConfigs: store.webdavConfigs,
     activeAIConfig: store.activeAIConfig,
-    activeWebDAVConfig: store.activeWebDAVConfig,
     hiddenDefaultCategoryIds: store.hiddenDefaultCategoryIds,
     categoryOrder: store.categoryOrder,
     customCategories: store.customCategories,
@@ -50,7 +48,6 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
     setRepositories: store.setRepositories,
     setReleases: store.setReleases,
     setAIConfigs: store.setAIConfigs,
-    setWebDAVConfigs: store.setWebDAVConfigs,
     showDefaultCategory: store.showDefaultCategory,
     hideDefaultCategory: store.hideDefaultCategory,
   })));
@@ -130,10 +127,8 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
         backend.syncRepositories(state.repositories),
         backend.syncReleases(state.releases),
         backend.syncAIConfigs(state.aiConfigs),
-        backend.syncWebDAVConfigs(state.webdavConfigs),
         backend.syncSettings({
           activeAIConfig: state.activeAIConfig,
-          activeWebDAVConfig: state.activeWebDAVConfig,
           hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
           categoryOrder: state.categoryOrder,
           customCategories: state.customCategories,
@@ -148,7 +143,7 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
         console.warn('Some syncs failed:', failures.map((failure) => (failure as PromiseRejectedResult).reason));
         toast(t('useBackendSettingsActions.partial-sync-failure-v1-failed-v2-succeeded', { v1: failures.length, v2: successes.length }), 'error');
       } else {
-        toast(t('useBackendSettingsActions.synced-to-backend-repos-v1-releases-v2-ai-config', { v1: state.repositories.length, v2: state.releases.length, v3: state.aiConfigs.length, v4: state.webdavConfigs.length }), 'success');
+        toast(t('useBackendSettingsActions.synced-to-backend-repos-v1-releases-v2-ai-config', { v1: state.repositories.length, v2: state.releases.length, v3: state.aiConfigs.length }), 'success');
       }
     } catch (error) {
       console.error('Sync to backend failed:', error);
@@ -171,17 +166,15 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
     if (!confirmed) return;
     setIsSyncingFromBackend(true);
     try {
-      const [repoData, releaseData, aiConfigData, webdavConfigData, settingsData] = await Promise.all([
+      const [repoData, releaseData, aiConfigData, settingsData] = await Promise.all([
         backend.fetchRepositories(),
         backend.fetchReleases(),
         backend.fetchAIConfigs(),
-        backend.fetchWebDAVConfigs(),
         backend.fetchSettings(),
       ]);
       state.setRepositories(repoData.repositories, { allowEmpty: true });
       state.setReleases(releaseData.releases, { allowEmpty: true });
       state.setAIConfigs(aiConfigData);
-      state.setWebDAVConfigs(webdavConfigData);
       const serverHidden = Array.isArray(settingsData.hiddenDefaultCategoryIds) ? settingsData.hiddenDefaultCategoryIds : [];
       for (const categoryId of serverHidden) if (typeof categoryId === 'string') state.hideDefaultCategory(categoryId);
       for (const categoryId of state.hiddenDefaultCategoryIds) {
@@ -196,7 +189,7 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
           defaultCategoryOverrides: settingsData.defaultCategoryOverrides as Record<string, Partial<Category>>,
         });
       }
-      toast(t('useBackendSettingsActions.synced-from-backend-repos-v1-releases-v2-ai-conf', { v1: repoData.repositories.length, v2: releaseData.releases.length, v3: aiConfigData.length, v4: webdavConfigData.length }), 'success');
+      toast(t('useBackendSettingsActions.synced-from-backend-repos-v1-releases-v2-ai-conf', { v1: repoData.repositories.length, v2: releaseData.releases.length, v3: aiConfigData.length }), 'success');
     } catch (error) {
       console.error('Sync from backend failed:', error);
       toast(`${t('useBackendSettingsActions.sync-failed')}: ${(error as Error).message}`, 'error');

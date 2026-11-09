@@ -1,23 +1,6 @@
 {
   "externalFeeds": {
-    "manage": "External discovery feeds",
-    "manageRss": "Add RSS discovery feed",
-    "name": "Channel name",
-    "url": "HTTPS feed URL",
-    "add": "Add feed",
-    "checking": "Checking feed…",
-    "copy": "Copy",
-    "copied": "Copied",
-    "rssFormat": "Paste a public RSS or Atom feed URL — the app extracts GitHub repository links mentioned in it (first 30 per refresh).",
-    "rss-invalid": "No GitHub repository links were found in the feed.",
-    "remove": "Remove {{name}}",
-    "format": "Paste a public HTTPS link whose JSON response lists GitHub repositories in its repositories array — up to 30 public repositories.",
-    "cors-note": "The site must allow browser requests (CORS). No GitHub token is sent to the feed.",
-    "invalid": "Enter a name and a valid HTTPS feed URL.",
-    "duplicate": "This feed is already added, or the ten-feed limit was reached.",
-    "invalid-format": "The feed JSON does not contain a valid repository list.",
-    "cors": "The feed could not be read. Check its URL and CORS settings.",
-    "unreadable": "The feed could not be read. Check its URL, availability, and JSON format."
+    "copied": "Copied"
   },
   "discoverySidebar": {
     "just-now": "Just now",
@@ -42,18 +25,12 @@
     "items-2": "items)",
     "syncing-weekly-submissions-v1-scanned": "Syncing weekly submissions… {{v1}} scanned",
     "fetching-repo-details-v1-v2": "Fetching repo details… {{v1}}/{{v2}}",
-    "fetching-timelines-v1-v2": "Fetching timelines… {{v1}}/{{v2}}",
-    "fetching-channel-messages-v1-v2": "Fetching channel messages… {{v1}}/{{v2}}",
     "just-now": "Just now",
     "diffmin-m-ago": "{{diffMin}}m ago",
     "diffhours-h-ago": "{{diffHours}}h ago",
     "updated": "Updated",
     "refresh": "Refresh",
     "each-refresh-shows-different-content": "Each refresh shows different content",
-    "time-range": "Time range",
-    "today": "Today",
-    "this-week": "This Week",
-    "this-month": "This Month",
     "topic-filter": "Topic filter",
     "topic": "Topic",
     "ai": "AI",
@@ -66,10 +43,6 @@
     "game": "Game",
     "only-show-submissions-included-in-the-weekly-iss": "Only show submissions included in the weekly issue",
     "in-weekly": "In Weekly",
-    "manage-the-follow-list": "Manage the follow list",
-    "follow-list": "Follow List",
-    "manage-the-channel-list": "Manage the channel list",
-    "channel-list": "Channel List",
     "stop-analysis": "Stop analysis",
     "stop": "Stop",
     "analyze-with-ai": "Analyze with AI",
@@ -90,11 +63,7 @@
     "waiting-for-github-api-response": "Waiting for GitHub API response",
     "repo-search": "Repo Search",
     "enter-keywords-to-search-github-repositories": "Enter keywords to search GitHub repositories",
-    "x-tweets": "X Tweets",
-    "fetches-github-projects-from-followed-accounts-l": "Fetches GitHub projects from followed accounts' latest tweets on x.com; requires the desktop or server build",
     "start-sync": "Start Sync",
-    "telegram-channels": "Telegram Channels",
-    "fetches-github-projects-from-followed-channels-m": "Fetches GitHub projects from followed channels' messages via the t.me public preview; requires the desktop or server build",
     "ruanyifeng-weekly": "Ruanyifeng Weekly",
     "sync-open-source-submissions-from-the-weekly-ear": "Sync open-source submissions from the weekly. Earlier submissions are fetched as you load more",
     "no-data-yet": "No data yet",
@@ -130,10 +99,6 @@
   "useDiscoveryActions": {
     "github-token-not-found-please-login-again": "GitHub token not found. Please login again.",
     "failed-to-load-more-please-retry": "Failed to load more, please retry",
-    "failed-to-fetch-x-tweets": "Failed to fetch X tweets",
-    "failed-to-fetch-x-tweets-please-check-your-netwo": "Failed to fetch X tweets. Please check your network connection or X auth cookies in settings.",
-    "failed-to-fetch-telegram-messages": "Failed to fetch Telegram messages",
-    "failed-to-fetch-telegram-messages-please-check-y": "Failed to fetch Telegram messages. Please check your network connection or followed channels.",
     "failed-to-fetch-data-please-check-your-network-c": "Failed to fetch data. Please check your network connection or GitHub Token.",
     "please-configure-ai-service-in-settings-first": "Please configure AI service in settings first.",
     "ai-service-configuration-is-incomplete-please-ch": "AI service configuration is incomplete. Please check the API endpoint, key, and model name.",
@@ -154,16 +119,8 @@
     "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed, please check AI configuration and network connection",
     "ai-analysis-failed-please-check-your-ai-configur": "AI analysis failed. Please check your AI configuration."
   },
-  "useTelegramProbe": {
-    "connected-parsed-messagecount-channel-messages-w": "Connected: parsed {{messageCount}} channel messages with {{repoCount}} GitHub repo links.",
-    "failed-error": "Failed: {{error}}"
-  },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "Failed to load content. Please check your network and retry."
-  },
-  "useXTweetProbe": {
-    "connected-parsed-tweetcount-tweets-with-repocoun": "Connected: parsed {{tweetCount}} tweets with {{repoCount}} GitHub repo links.",
-    "failed-error": "Failed: {{error}}"
   },
   "discoveryChannel": {
     "trending": "Trending",
@@ -171,21 +128,10 @@
     "most-popular": "Most Popular",
     "topic": "Topic",
     "x-tweet": "X Tweets",
-    "telegram": "Telegram Channels",
     "weekly": "Ruanyifeng Weekly",
     "search": "Repo Search"
   },
   "discoveryPlatform": {
     "All": "All Platforms"
-  },
-  "trendingHistoryPanel": {
-    "title": "Ranking changes",
-    "hint": "Compared with the previous recorded day",
-    "new-entry": "New entry",
-    "rising": "Up",
-    "falling": "Down",
-    "streak-days": "{{v1}} days in a row",
-    "stars-gained": "+{{v1}} stars since we first recorded it",
-    "first-seen": "Top entry first recorded {{v1}}"
   }
 }

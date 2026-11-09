@@ -33,18 +33,6 @@
           }
         ]
       ],
-      "analyzeGist": [
-        [
-          {
-            "role": "system",
-            "content": "你是一个专业的 GitHub Gist 分析助手。请用中文简洁总结 gist 的用途、关键内容和可能的使用场景。只输出摘要文本，不要 Markdown 标题。"
-          },
-          {
-            "role": "user",
-            "content": "请分析以下 GitHub Gist，输出不超过 80 字的中文摘要。\n\n描述：A sample gist with a small script\n创建者：acme\n文件：\nhello.js (JavaScript), 42 bytes\n\n内容预览：\nconsole.log(\"hello\");"
-          }
-        ]
-      ],
       "analyzeReleaseSummary": [
         [
           {
@@ -129,18 +117,6 @@
           }
         ]
       ],
-      "searchGistsWithReranking": [
-        [
-          {
-            "role": "system",
-            "content": "你是 GitHub Gist 搜索排序助手。根据用户查询返回最相关 gist 的 id 数组 JSON，不要输出额外文字。"
-          },
-          {
-            "role": "user",
-            "content": "Query: state management\n\nGists:\n1. ID: gist-1\nDescription: A sample gist with a small script\nOwner: acme\nFiles: hello.js\nAI Summary: None"
-          }
-        ]
-      ],
       "searchRepositoriesWithSelection": [
         [
           {
@@ -207,18 +183,6 @@
           {
             "role": "user",
             "content": "The previous AI output did not meet the requirements. Reason: No valid JSON object returned\n\nRegenerate the result for the same repository information. Output exactly one valid JSON object. Do not output Markdown, code fences, explanations, or any extra text.\n\nMandatory requirements:\n- summary must describe the repository functionality and purpose in no more than 50 words.\n- summary must not restate the prompt, output format, field names, or JSON-only requirements.\n- tags must be a string array.\n- platforms must only use [\"mac\",\"windows\",\"linux\",\"ios\",\"android\",\"docker\",\"web\",\"cli\"].\n\nOriginal analysis task:\nPlease analyze the following GitHub repository information and only output a valid JSON object. Do not output thinking process, Markdown, code block markers, explanations, or any extra text.\n\nRequirements:\n- summary: A concise English overview explaining the main functionality and purpose, no more than 50 words.\n  Do not include prompt restatements such as \"asked to\", \"only output JSON\", \"based on repository information\", or \"summary/tags/platforms\".\n- tags: 3-5 English application type tags, please prioritize from the available categories above.\nAvailable categories (tags should prioritize these): Custom\n\nCustom category hint: The following are user-defined custom categories with their keywords. When the repository keywords, description, Topics, or README clearly relate to these keywords, include the custom category name as-is in tags (3-5 tags total).\nCustom (custom,customized)\n- platforms: Must only choose from [\"mac\",\"windows\",\"linux\",\"ios\",\"android\",\"docker\",\"web\",\"cli\"]; use [] if unable to determine.\n\nOutput format:\n{\n  \"summary\": \"English overview\",\n  \"tags\": [\"tag1\", \"tag2\", \"tag3\"],\n  \"platforms\": [\"web\", \"cli\"]\n}\n\nPlatform hints:\nDockerfile/docker-compose=docker; CLI/command-line/terminal=cli; browser/frontend/API=web; iOS/Swift/Xcode=ios; Android/Kotlin/Gradle=android; macOS/Homebrew=mac; Windows/.exe/MSI=windows; Linux/systemd/apt=linux.\n\nRepository information:\nRepository Name: acme/sample-app\nDescription: A sample repository for fixture snapshots\nProgramming Language: TypeScript\nStars: 120\nTopics: react, typescript\nObjective facts (neutral, not a quality verdict):\nStatus: archived=unknown, disabled=unknown, fork=unknown, template=unknown\nCreated: 2024-01-01 | Last push: 2024-06-01\nLicense: none | Open issues: unknown\nObservations: no-recent-activity\n\nREADME Content (first 2000 characters):\n# Sample App\n\nA demo repository used by the i18n fixture guard.\n\n## Install\n\nnpm install sample-app\n\nPrevious invalid output for correction only. Do not restate it:\nok"
-          }
-        ]
-      ],
-      "analyzeGist": [
-        [
-          {
-            "role": "system",
-            "content": "You are a professional GitHub Gist analysis assistant. Summarize the gist purpose, key content, and likely use case concisely in English. Output summary text only, no Markdown heading."
-          },
-          {
-            "role": "user",
-            "content": "Analyze this GitHub Gist and output an English summary under 80 words.\n\nDescription: A sample gist with a small script\nOwner: acme\nFiles:\nhello.js (JavaScript), 42 bytes\n\nContent preview:\nconsole.log(\"hello\");"
           }
         ]
       ],
@@ -303,18 +267,6 @@
           {
             "role": "user",
             "content": "Query: state management\n\nRepositories:\n1. ID: 42 | acme/sample-app\n   A sample repository for fixture snapshots\n   TypeScript | ★120\n\n2. ID: 43 | acme/sample-cli\n   A sample repository for fixture snapshots\n   TypeScript | ★120"
-          }
-        ]
-      ],
-      "searchGistsWithReranking": [
-        [
-          {
-            "role": "system",
-            "content": "You are a GitHub Gist search reranking assistant. Return a JSON array of the most relevant gist ids for the user query. Do not output extra text."
-          },
-          {
-            "role": "user",
-            "content": "Query: state management\n\nGists:\n1. ID: gist-1\nDescription: A sample gist with a small script\nOwner: acme\nFiles: hello.js\nAI Summary: None"
           }
         ]
       ],

@@ -5,11 +5,6 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { weeklyIssuesStorage } from '../../services/weeklyIssuesStorage';
-import { xTweetStorage } from '../../services/xTweetStorage';
-import { telegramStorage } from '../../services/telegramStorage';
-import { abortXTweetSync } from '../../services/xTweetService';
-import { abortTelegramSync } from '../../services/telegramService';
-import { clearEncryptedXAuthViaDesktop } from '../../services/electronProxy';
 import { normalizeAssetFilters } from '../../utils/assetFilters';
 import {
   AlertDialog,
@@ -37,7 +32,6 @@ import {
   Database,
   Tag,
   Bot,
-  Cloud,
   FolderTree,
   CheckCircle,
   XCircle,
@@ -65,7 +59,6 @@ import type {
   Repository, 
   Release, 
   AIConfig, 
-  WebDAVConfig, 
   Category, 
   AssetFilter,
   DiscoveryRepo,
@@ -89,7 +82,6 @@ type DeleteOperation =
   | 'repositories'
   | 'releases'
   | 'aiConfigs'
-  | 'webdavConfigs'
   | 'categorySettings'
   | 'assetFilters'
   | 'discoveryData'
@@ -120,7 +112,6 @@ interface ExportData {
     repositories?: Repository[];
     releases?: Release[];
     aiConfigs?: AIConfig[];
-    webdavConfigs?: WebDAVConfig[];
     customCategories?: Category[];
     assetFilters?: AssetFilter[];
     discoveryRepos?: Record<string, DiscoveryRepo[]>;
@@ -177,7 +168,6 @@ const isRealSecret = (value: unknown): value is string => (
 const hasMaskedSecrets = (data: ExportData['data']): boolean => {
   return !!(
     data.aiConfigs?.some(config => config.apiKey === MASKED_SECRET) ||
-    data.webdavConfigs?.some(config => config.password === MASKED_SECRET) ||
     data.proxyConfig?.password === MASKED_SECRET ||
     data.rpcDownloadConfig?.secret === MASKED_SECRET ||
     data.backendApiSecret === MASKED_SECRET
@@ -206,7 +196,6 @@ const IMPORT_DATA_KEYS = [
   'repositories',
   'releases',
   'aiConfigs',
-  'webdavConfigs',
   'customCategories',
   'assetFilters',
   'discoveryRepos',
@@ -256,7 +245,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     repositories,
     releases,
     aiConfigs,
-    webdavConfigs,
     customCategories,
     defaultCategoryOverrides,
     hiddenDefaultCategoryIds,
@@ -275,7 +263,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     repositories: state.repositories,
     releases: state.releases,
     aiConfigs: state.aiConfigs,
-    webdavConfigs: state.webdavConfigs,
     customCategories: state.customCategories,
     defaultCategoryOverrides: state.defaultCategoryOverrides,
     hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
@@ -312,7 +299,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     { key: 'repositories', label: t('dataManagementPanel.repositories') },
     { key: 'releases', label: t('dataManagementPanel.releases') },
     { key: 'aiConfigs', label: t('dataManagementPanel.ai-configs') },
-    { key: 'webdavConfigs', label: t('dataManagementPanel.webdav-configs') },
     { key: 'customCategories', label: t('dataManagementPanel.categories') },
     { key: 'assetFilters', label: t('dataManagementPanel.asset-filters') },
     { key: 'discoveryRepos', label: t('dataManagementPanel.discovery-data') },
@@ -440,24 +426,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     }
   };
 
-  const deleteWebDAVConfigs = async () => {
-    try {
-      const store = useAppStore.getState();
-      store.setWebDAVConfigs([]);
-      store.setActiveWebDAVConfig(null);
-      addLog(t('dataManagementPanel.delete-webdav-sync-configs'), true);
-      showSuccess(t('dataManagementPanel.webdav-sync-configs-deleted'));
-    } catch (error) {
-      addLog(
-        t('dataManagementPanel.delete-webdav-sync-configs'),
-        false,
-        String(error)
-      );
-      showError(t('dataManagementPanel.delete-failed-please-try-again'));
-      throw error;
-    }
-  };
-
   const deleteCategorySettings = async () => {
     try {
       const store = useAppStore.getState();
@@ -506,20 +474,13 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
 
   const deleteDiscoveryData = useCallback(async () => {
     try {
-      // 在清理前先中止并等待进行中的推文与 Telegram 同步，防止并发写入导致清理后脏数据写回
-      await abortXTweetSync();
-      await abortTelegramSync();
-      // 周刊/推文/Telegram 频道数据在独立 IndexedDB，一并清空
+      // 清理发现数据
+      // 周刊频道数据在独立 IndexedDB，一并清空
       await weeklyIssuesStorage.clearAll();
-      await xTweetStorage.clearAll();
-      await telegramStorage.clearAll();
       const emptyDiscoveryRepos = {
-        'trending': [],
         'hot-release': [],
         'most-popular': [],
         'topic': [],
-        'x-tweet': [],
-        'telegram': [],
         'weekly': [],
         'search': [],
         'code-search': []
@@ -527,21 +488,18 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
       useAppStore.setState({
         discoveryRepos: emptyDiscoveryRepos,
         discoveryLastRefresh: {
-          'trending': null,
           'hot-release': null,
           'most-popular': null,
           'topic': null,
-          'x-tweet': null,
-          'telegram': null,
           'weekly': null,
           'search': null,
           'code-search': null
         },
-        discoveryNextPage: { 'trending': 1, 'hot-release': 1, 'most-popular': 1, 'topic': 1, 'x-tweet': 1, 'telegram': 1, 'weekly': 1, 'search': 1, 'code-search': 1 },
-        discoveryTotalCount: { 'trending': 0, 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'x-tweet': 0, 'telegram': 0, 'weekly': 0, 'search': 0, 'code-search': 0 },
-        discoveryHasMore: { 'trending': false, 'hot-release': false, 'most-popular': false, 'topic': false, 'x-tweet': false, 'telegram': false, 'weekly': false, 'search': false, 'code-search': false },
-        discoveryIsLoadingMore: { 'trending': false, 'hot-release': false, 'most-popular': false, 'topic': false, 'x-tweet': false, 'telegram': false, 'weekly': false, 'search': false, 'code-search': false },
-        discoveryLoadMoreError: { 'trending': null, 'hot-release': null, 'most-popular': null, 'topic': null, 'x-tweet': null, 'telegram': null, 'weekly': null, 'search': null, 'code-search': null },
+        discoveryNextPage: { 'hot-release': 1, 'most-popular': 1, 'topic': 1, 'weekly': 1, 'search': 1, 'code-search': 1 },
+        discoveryTotalCount: { 'hot-release': 0, 'most-popular': 0, 'topic': 0, 'weekly': 0, 'search': 0, 'code-search': 0 },
+        discoveryHasMore: { 'hot-release': false, 'most-popular': false, 'topic': false, 'weekly': false, 'search': false, 'code-search': false },
+        discoveryIsLoadingMore: { 'hot-release': false, 'most-popular': false, 'topic': false, 'weekly': false, 'search': false, 'code-search': false },
+        discoveryLoadMoreError: { 'hot-release': null, 'most-popular': null, 'topic': null, 'weekly': null, 'search': null, 'code-search': null },
       });
       addLog(t('dataManagementPanel.delete-discovery-cache-data'), true);
       showSuccess(t('dataManagementPanel.discovery-cache-data-deleted'));
@@ -563,7 +521,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
           'most-stars': [],
           'most-forks': [],
           'most-dev': [],
-          'trending': [],
         },
       });
       addLog(t('dataManagementPanel.delete-subscription-feed-cache'), true);
@@ -653,11 +610,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         exportDataObj.data.aiConfigs = includeKeys
           ? store.aiConfigs
           : store.aiConfigs.map(cfg => ({ ...cfg, apiKey: cfg.apiKey ? MASKED_SECRET : '' }));
-      }
-      if (selectedTypes.includes('webdavConfigs')) {
-        exportDataObj.data.webdavConfigs = includeKeys
-          ? store.webdavConfigs
-          : store.webdavConfigs.map(cfg => ({ ...cfg, password: cfg.password ? MASKED_SECRET : '' }));
       }
       if (selectedTypes.includes('customCategories')) {
         exportDataObj.data.customCategories = store.customCategories;
@@ -782,13 +734,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
             apiKey: wasIncluded && isRealSecret(cfg.apiKey) ? cfg.apiKey : store.aiConfigs.find(c => c.id === cfg.id)?.apiKey || ''
           }));
           store.setAIConfigs(restoredConfigs);
-        }
-        if (selectedTypes.includes('webdavConfigs') && importedData.webdavConfigs) {
-          const restoredConfigs = importedData.webdavConfigs.map(cfg => ({
-            ...cfg,
-            password: wasIncluded && isRealSecret(cfg.password) ? cfg.password : store.webdavConfigs.find(c => c.id === cfg.id)?.password || ''
-          }));
-          store.setWebDAVConfigs(restoredConfigs);
         }
         if (selectedTypes.includes('customCategories')) {
           if (importedData.customCategories) {
@@ -941,16 +886,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
               apiKey: wasIncluded && isRealSecret(cfg.apiKey) ? cfg.apiKey : ''
             }));
           store.setAIConfigs([...store.aiConfigs, ...newConfigs]);
-        }
-        if (selectedTypes.includes('webdavConfigs') && importedData.webdavConfigs) {
-          const existingIds = new Set(store.webdavConfigs.map(c => c.id));
-          const newConfigs = importedData.webdavConfigs
-            .filter(c => !existingIds.has(c.id))
-            .map(cfg => ({
-              ...cfg,
-              password: wasIncluded && isRealSecret(cfg.password) ? cfg.password : ''
-            }));
-          store.setWebDAVConfigs([...store.webdavConfigs, ...newConfigs]);
         }
         if (selectedTypes.includes('customCategories')) {
           if (importedData.customCategories) {
@@ -1302,27 +1237,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         pendingStorages.push(t('dataManagementPanel.weekly-data'));
         throw e;
       }
-      try {
-        await abortXTweetSync();
-        await xTweetStorage.clearAll();
-      } catch (e) {
-        pendingStorages.push(t('dataManagementPanel.x-tweet-data'));
-        throw e;
-      }
-      try {
-        await abortTelegramSync();
-        await telegramStorage.clearAll();
-      } catch (e) {
-        pendingStorages.push(t('dataManagementPanel.telegram-channel-data'));
-        throw e;
-      }
-
-      // 清除 Electron 桌面端独立保存的加密凭据文件（x-auth.enc）
-      try {
-        await clearEncryptedXAuthViaDesktop();
-      } catch {
-        // 忽略桌面端清理失败
-      }
 
       // 存储清除成功后，重置所有状态到初始值
       useAppStore.setState({
@@ -1331,8 +1245,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         githubToken: null,
         isAuthenticated: false,
         accountWorkspaces: {},
-        xTweetAuth: null,
-        xTweetAuthRevision: 0,
 
         // 仓库数据
         repositories: [],
@@ -1347,11 +1259,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         // AI 配置
         aiConfigs: [],
         activeAIConfig: null,
-
-        // WebDAV 配置
-        webdavConfigs: [],
-        activeWebDAVConfig: null,
-        lastBackup: null,
 
         // 分类设置
         customCategories: [],
@@ -1422,9 +1329,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         case 'aiConfigs':
           await deleteAIConfigs();
           break;
-        case 'webdavConfigs':
-          await deleteWebDAVConfigs();
-          break;
         case 'categorySettings':
           await deleteCategorySettings();
           break;
@@ -1475,8 +1379,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         return t('dataManagementPanel.this-will-delete-all-release-records-including-r');
       case 'aiConfigs':
         return t('dataManagementPanel.this-will-delete-all-ai-service-configs-includin');
-      case 'webdavConfigs':
-        return t('dataManagementPanel.this-will-delete-all-webdav-sync-configs-includi');
       case 'categorySettings':
         return t('dataManagementPanel.this-will-delete-all-category-display-settings-i');
       case 'assetFilters':
@@ -1504,8 +1406,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         return t('dataManagementPanel.delete-release-records-2');
       case 'aiConfigs':
         return t('dataManagementPanel.delete-ai-service-configs-2');
-      case 'webdavConfigs':
-        return t('dataManagementPanel.delete-webdav-sync-configs-2');
       case 'categorySettings':
         return t('dataManagementPanel.delete-category-display-settings-2');
       case 'assetFilters':
@@ -1569,15 +1469,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
       description: t('dataManagementPanel.ai-analysis-service-configs-including-api-keys-m'),
       count: aiConfigs.length,
       icon: <Bot className="w-5 h-5" />,
-      color: 'text-muted-foreground dark:text-muted-foreground',
-      bgColor: 'bg-muted dark:bg-muted/40',
-    },
-    {
-      key: 'webdavConfigs',
-      label: t('dataManagementPanel.webdav-sync-configs'),
-      description: t('dataManagementPanel.webdav-server-addresses-and-credentials-cloud-ba'),
-      count: webdavConfigs.length,
-      icon: <Cloud className="w-5 h-5" />,
       color: 'text-muted-foreground dark:text-muted-foreground',
       bgColor: 'bg-muted dark:bg-muted/40',
     },
@@ -2085,11 +1976,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
                   {importPreview.data.data.aiConfigs && (
                     <p className="text-muted-foreground dark:text-muted-foreground">
                       • {t('dataManagementPanel.ai-configs')}: {importPreview.data.data.aiConfigs.length} {t('dataManagementPanel.items')}
-                    </p>
-                  )}
-                  {importPreview.data.data.webdavConfigs && (
-                    <p className="text-muted-foreground dark:text-muted-foreground">
-                      • {t('dataManagementPanel.webdav-configs')}: {importPreview.data.data.webdavConfigs.length} {t('dataManagementPanel.items')}
                     </p>
                   )}
                   {importPreview.data.data.customCategories && (

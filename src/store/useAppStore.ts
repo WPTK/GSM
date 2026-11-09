@@ -7,7 +7,6 @@ import { createAuthSlice } from './slices/authSlice';
 import { createCategorySlice } from './slices/categorySlice';
 import { createConfigurationSlice } from './slices/configurationSlice';
 import { createDiscoverySlice } from './slices/discoverySlice';
-import { createGistSlice } from './slices/gistSlice';
 import { createPreferenceSlice } from './slices/preferenceSlice';
 import { createRepositorySlice } from './slices/repositorySlice';
 import { createTimelineSlice } from './slices/timelineSlice';
@@ -33,7 +32,6 @@ export const useAppStore = create<AppStoreState>()(
       ...createInitialState(),
       ...createAuthSlice(set, get),
       ...createRepositorySlice(set, get),
-      ...createGistSlice(set, get),
       ...createConfigurationSlice(set, get),
       ...createTimelineSlice(set, get),
       ...createCategorySlice(set, get),

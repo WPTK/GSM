@@ -1,15 +1,9 @@
 export { AIConfigPanel } from './AIConfigPanel';
-export { WebDAVPanel } from './WebDAVPanel';
-export { BackupPanel } from './BackupPanel';
 export { BackendPanel } from './BackendPanel';
 export { CategoryPanel } from './CategoryPanel';
 export { GeneralPanel } from './GeneralPanel';
 export { AppearancePanel } from './AppearancePanel';
 export { DataManagementPanel } from './DataManagementPanel';
-export { NetworkPanel } from './NetworkPanel';
 export { DiagnosticLogsPanel } from './DiagnosticLogsPanel';
 export { MenuManagementPanel } from './MenuManagementPanel';
-export { StarSyncPanel } from './StarSyncPanel';
-export { VectorSearchSettings } from './VectorSearchSettings';
 export { McpSettingsPanel } from './McpSettingsPanel';
-export { PluginSettingsPanel } from './PluginSettingsPanel';
