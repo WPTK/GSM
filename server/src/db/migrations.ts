@@ -1,4 +1,4 @@
-import { LEGACY_SETTING_KEYS } from './settingsKeys.js';
+import { LEGACY_SETTING_KEYS, CUSTOM_ANALYSIS_PROMPT_KEY } from './settingsKeys.js';
 import type Database from 'better-sqlite3';
 import { initializeSchema, addColumnIfMissing } from './schema.js';
 import { logger } from '../services/logger.js';
@@ -19,12 +19,10 @@ const migrations: Record<number, (db: Database.Database) => void> = {
     const del = db.prepare('DELETE FROM settings WHERE key = ?');
     for (const key of LEGACY_SETTING_KEYS) del.run(key);
   },
-  // Phase 3: Claude runs from the server's own key. Saved provider keys are gone, and
+  // Phase 3: Claude runs from the server's own key. Saved provider configs are no longer used, and
   // analysis jobs (direct and Message Batches) are tracked in SQLite so a restart resumes them.
   5: (db) => {
     db.exec(`
-      DROP TABLE IF EXISTS ai_configs;
-
       CREATE TABLE IF NOT EXISTS ai_jobs (
         id TEXT PRIMARY KEY,
         status TEXT NOT NULL,
@@ -51,7 +49,22 @@ const migrations: Record<number, (db: Database.Database) => void> = {
         PRIMARY KEY (job_id, repo_id)
       );
     `);
-    db.prepare('DELETE FROM settings WHERE key = ?').run('activeAIConfig');
+    // The saved provider configs stay on disk untouched (owner decision): the server just no
+    // longer reads or serves them. Only the active config's custom analysis prompt is copied
+    // (read-only) into the new server setting.
+    const hasConfigs = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_configs'").get();
+    if (hasConfigs) {
+      const activeId = (db.prepare('SELECT value FROM settings WHERE key = ?').get('activeAIConfig') as { value: string | null } | undefined)?.value;
+      const row = (activeId
+        ? db.prepare('SELECT custom_prompt, use_custom_prompt FROM ai_configs WHERE id = ?').get(activeId)
+        : db.prepare('SELECT custom_prompt, use_custom_prompt FROM ai_configs WHERE is_active = 1 LIMIT 1').get()) as
+        | { custom_prompt: string | null; use_custom_prompt: number }
+        | undefined;
+      const prompt = row?.use_custom_prompt && row.custom_prompt ? row.custom_prompt.trim() : '';
+      if (prompt) {
+        db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(CUSTOM_ANALYSIS_PROMPT_KEY, prompt.slice(0, 4000));
+      }
+    }
   },
 };
 

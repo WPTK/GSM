@@ -465,3 +465,15 @@ export async function proxyRequest(options: ProxyRequestOptions): Promise<ProxyR
     return { status: 502, headers: {}, data: { error: 'Bad Gateway', code: 'BAD_GATEWAY' } };
   }
 }
+
+/**
+ * fetch() for SDK clients that need streaming bodies (the Anthropic SDK). The host
+ * is checked against the allowlist first, then the request goes out with redirects
+ * refused, so a redirect can never leave the list. This stays in this file so the
+ * "only proxyService makes outbound calls" rule holds.
+ */
+export async function guardedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  assertOutboundAllowed(url);
+  return fetch(input, { ...init, redirect: 'error' });
+}
