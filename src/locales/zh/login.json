@@ -57,6 +57,7 @@
     "token-permissions-local-storage": "Token 仅保存在本机与你配置的后端，不会上传到应用方服务器。"
   },
   "login": {
-    "api-secret": "API 密钥"
+    "api-secret": "API 密钥",
+    "session-expired": "登录已过期，请重新登录"
   }
 }

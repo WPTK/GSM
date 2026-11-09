@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { weeklyIssuesStorage } from '../../services/weeklyIssuesStorage';
+import { logoutSession } from '../../services/session';
 import { normalizeAssetFilters } from '../../utils/assetFilters';
 import {
   AlertDialog,
@@ -1132,6 +1133,8 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     try {
       // 先清除存储，确保存储清除成功后再重置状态
       // 这样可以避免状态已重置但存储清除失败导致的数据不一致
+      // End the server session first, otherwise the cookie signs the user straight back in.
+      await logoutSession();
       try {
         await clearAllStorage();
       } catch (e) {

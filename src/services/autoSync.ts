@@ -1,3 +1,4 @@
+import { logoutSession } from './session';
 import { backend } from './backendAdapter';
 import { useAppStore } from '../store/useAppStore';
 import { mergeRepositoriesPreservingLocalMetadata, stripLocalRepositoryFields } from '../utils/repositoryMerge';
@@ -169,19 +170,27 @@ let _isRestoringAuth = false;
 /**
  * Session recovery on bootstrap. The browser holds no credentials: if the
  * HttpOnly session cookie is still valid and the server has a GitHub token
- * configured, adopt the server-held identity. Never overwrites an existing
- * local session.
+ * configured, adopt the server-held identity. A stored user whose cookie is
+ * gone (first load after upgrading, or after the 30-day expiry) is signed out so
+ * the login screen appears instead of a UI whose every call fails. An
+ * unreachable status endpoint changes nothing (offline use stays possible).
  */
 export async function tryRestoreAuthFromBackend(): Promise<boolean> {
   if (!backend.isAvailable || _isRestoringAuth) return false;
 
-  // Never clobber an existing session (single-account safety guard).
   const state = useAppStore.getState();
-  if (state.user && state.githubToken) return false;
 
   _isRestoringAuth = true;
   try {
     const status = await backend.authStatus();
+    if (state.user) {
+      // Never clobber an existing session, but do not trust it without a live cookie.
+      if (status && !status.authenticated) {
+        logger.info('sync.restoreAuth', 'Stored user has no valid session cookie; signing out');
+        await logoutSession({ expired: true });
+      }
+      return false;
+    }
     if (!status?.authenticated || !status.githubConfigured) return false;
 
     // Re-check right before applying: the user may have logged in meanwhile.

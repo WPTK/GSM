@@ -57,6 +57,7 @@
     "token-permissions-local-storage": "Token 僅儲存在本機與你設定的後端，不會上傳到應用方伺服器。"
   },
   "login": {
-    "api-secret": "API 金鑰"
+    "api-secret": "API 金鑰",
+    "session-expired": "登入已過期，請重新登入"
   }
 }

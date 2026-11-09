@@ -57,6 +57,7 @@
     "token-permissions-local-storage": "토큰은 이 기기와 직접 구성한 백엔드에만 저장되며 앱 서버로 전송되지 않습니다."
   },
   "login": {
-    "api-secret": "API 시크릿"
+    "api-secret": "API 시크릿",
+    "session-expired": "세션이 만료되었습니다. 다시 로그인해 주세요."
   }
 }

@@ -57,6 +57,7 @@
     "token-permissions-local-storage": "Ihr Token wird nur auf diesem Gerät und Ihrem eigenen Backend gespeichert – niemals auf den Servern der App."
   },
   "login": {
-    "api-secret": "API-Geheimnis"
+    "api-secret": "API-Geheimnis",
+    "session-expired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an."
   }
 }

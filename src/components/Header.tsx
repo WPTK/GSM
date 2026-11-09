@@ -13,6 +13,7 @@ import { useAppStore } from '../store/useAppStore';
 import { resolveTheme } from '../store/selectors';
 import { useShallow } from 'zustand/react/shallow';
 import { useDialog } from '../hooks/useDialog';
+import { useLogout } from '../features/lifecycle/hooks/useSession';
 import { HeaderMenuId, AppState } from '../types';
 
 const MENU_META: Record<HeaderMenuId, {
@@ -35,8 +36,6 @@ export const Header: React.FC = () => {
     headerMenuConfig,
     setThemeMode,
     setCurrentView,
-    logout,
-
   } = useAppStore(useShallow((state) => ({
     user: state.user,
     themeMode: state.themeMode,
@@ -45,9 +44,9 @@ export const Header: React.FC = () => {
     headerMenuConfig: state.headerMenuConfig,
     setThemeMode: state.setThemeMode,
     setCurrentView: state.setCurrentView,
-    logout: state.logout,
     language: state.language,
   })));
+  const logout = useLogout();
   const theme = resolveTheme(themeMode, systemTheme);
 
   const { confirm } = useDialog();
@@ -197,7 +196,7 @@ export const Header: React.FC = () => {
                           { type: 'warning' }
                         );
                         if (confirmed) {
-                          logout();
+                          void logout();
                         }
                       }}
                       aria-label={t('header.logout')}

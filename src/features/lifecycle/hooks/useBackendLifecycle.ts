@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { SESSION_EXPIRED_EVENT } from '../../../services/sessionEvents';
+import { handleSessionExpired } from '../../../services/session';
 import { backend } from '../../../services/backendAdapter';
 import {
   startAutoSync,
@@ -22,6 +24,13 @@ export const useBackendLifecycle = (hasHydrated: boolean): void => {
     return () => {
       stopMcpElectronBridge();
     };
+  }, []);
+
+  // Any proxy call answered 401 UNAUTHORIZED means the cookie is gone: back to the login screen.
+  useEffect(() => {
+    const onExpired = () => { void handleSessionExpired(); };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
 
   useEffect(() => {

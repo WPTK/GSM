@@ -7,6 +7,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useDialog } from '../../../hooks/useDialog';
 import { backend } from '../../../services/backendAdapter';
 import { tryRestoreAuthFromBackend } from '../../../services/autoSync';
+import { logoutSession } from '../../../services/session';
 
 type BackendStatus = 'connected' | 'disconnected' | 'checking';
 
@@ -90,15 +91,8 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
     void tryRestoreAuthFromBackend();
   }, [checkConnection, t, toast]);
 
-  const logout = useCallback(async () => {
-    try {
-      await backend.logout();
-    } catch (error) {
-      console.warn('Logout request failed:', error);
-    }
-    // Clearing the local identity returns the app to the login screen.
-    useAppStore.getState().logout();
-  }, []);
+
+  const logout = useCallback(() => logoutSession(), []);
 
   const syncToBackend = useCallback(async () => {
     if (!backend.isAvailable) {

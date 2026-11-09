@@ -1,9 +1,13 @@
 /**
- * Older builds kept the GitHub token and backend API secret in browser storage.
+ * Older builds kept the GitHub token, backend API secret and backend URL in browser storage.
  * The browser now authenticates with an HttpOnly session cookie only, so these
  * keys are erased on hydration and on logout. Nothing here ever writes them.
  */
-const LEGACY_KEYS = ['github-stars-manager-auth', 'github-stars-manager-backend-secret'] as const;
+const LEGACY_KEYS = [
+  'github-stars-manager-auth',
+  'github-stars-manager-backend-secret',
+  'github-stars-manager-backend-url',
+] as const;
 
 export const purgeLegacyAuthStorage = (): void => {
   if (typeof window === 'undefined') return;

@@ -16,6 +16,7 @@ import {
 } from '../types';
 import { logger } from './logger';
 import { redactInline } from '../utils/logSanitizer';
+import { notifySessionExpired } from './sessionEvents';
 import { isReadmeCandidateItem, type GitHubReadmeCandidateItem } from '../utils/readmeVariants';
 import { createCombinedAbortController } from '../utils/abortUtils';
 
@@ -345,7 +346,7 @@ export class GitHubTokenPermissionError extends Error {
 // Sentinel for 401s produced by the backend proxy's own auth middleware (its
 // body carries code: 'UNAUTHORIZED'). Kept distinct from the GitHub sentinel
 // so callers can tell a stale backend API key from a dead GitHub token.
-export const BACKEND_PROXY_UNAUTHORIZED_ERROR = 'Backend API key was rejected. Please check your backend settings';
+export const BACKEND_PROXY_UNAUTHORIZED_ERROR = 'Session expired. Please log in again.';
 const REPOSITORY_CHAT_MAX_FILE_BYTES = 96 * 1024;
 // Larger Markdown files are common repository documentation. This bounded exception is
 // deliberately narrower than the normal chat-file reader: only non-sensitive Markdown
@@ -577,6 +578,7 @@ export class GitHubApiService {
             if (isTimeoutAbort(bodyError, signal)) throw new Error(TIMEOUT_ERROR_MESSAGE);
           }
           if (body?.code === 'UNAUTHORIZED') {
+            notifySessionExpired();
             throw new Error(BACKEND_PROXY_UNAUTHORIZED_ERROR);
           }
         }

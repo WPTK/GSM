@@ -57,6 +57,7 @@
     "token-permissions-local-storage": "トークンはこのデバイスと自分のバックエンドにのみ保存され、アプリのサーバーには送信されません。"
   },
   "login": {
-    "api-secret": "API シークレット"
+    "api-secret": "API シークレット",
+    "session-expired": "セッションの有効期限が切れました。もう一度ログインしてください。"
   }
 }

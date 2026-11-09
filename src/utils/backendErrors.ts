@@ -2,7 +2,7 @@ import { isAppLanguage, type AppLanguage } from '../i18n/languages';
 
 const ERROR_MESSAGES: Record<string, { zh: string; en: string }> = {
   // Auth
-  UNAUTHORIZED: { zh: '未授权，请检查 API Secret', en: 'Unauthorized, please check API Secret' },
+  UNAUTHORIZED: { zh: '登录已过期，请重新登录', en: 'Session expired, please log in again' },
   // Proxy
   GITHUB_TOKEN_NOT_CONFIGURED: { zh: 'GitHub Token 未配置', en: 'GitHub token not configured' },
   GITHUB_TOKEN_DECRYPT_FAILED: { zh: 'GitHub Token 解密失败', en: 'Failed to decrypt GitHub token' },

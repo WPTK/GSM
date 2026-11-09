@@ -417,6 +417,17 @@ describe('GitHubApiService 401 来源区分', () => {
     expect(window.fetch).toHaveBeenCalledWith('http://localhost:3000/api/proxy/github/user', expect.anything());
   });
 
+  it('代理凭据 401 同时通知会话过期（回到登录页）', async () => {
+    const service = new GitHubApiService('token');
+    setBackendProxy(service);
+    vi.mocked(window.fetch).mockResolvedValue(makeJsonResponse(401, { error: 'Unauthorized', code: 'UNAUTHORIZED' }));
+    const expired = vi.fn();
+    window.addEventListener('gsm:session-expired', expired);
+    await expect(service.getCurrentUser()).rejects.toThrow(BACKEND_PROXY_UNAUTHORIZED_ERROR);
+    window.removeEventListener('gsm:session-expired', expired);
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
   it('代理转发的 GitHub 401（无 code 标记）仍映射为 GITHUB_TOKEN_INVALID_ERROR', async () => {
     const service = new GitHubApiService('token');
     setBackendProxy(service);

@@ -1,3 +1,4 @@
+import { useSessionExpiredNotice } from '../features/lifecycle/hooks/useSession';
 import { useT } from "../i18n/useT";
 import React, { useState, useCallback, useRef } from 'react';
 import { AlertCircle, ArrowRight, Database, Key, Loader2, Moon, Sun } from 'lucide-react';
@@ -108,6 +109,7 @@ export const LoginScreen: React.FC = () => {
   const theme = resolveTheme(themeMode, systemTheme);
   const tApp = useT('app');
   const t = useT('login');
+  const { expired: sessionExpired, dismiss: dismissSessionExpired } = useSessionExpiredNotice();
   const parkedWorkspaces = Object.values(accountWorkspaces ?? {});
   const cachedRepoCount = repositories.length > 0
     ? repositories.length
@@ -296,6 +298,7 @@ export const LoginScreen: React.FC = () => {
                       value={apiSecret}
                       onChange={(e) => {
                         setApiSecret(e.target.value);
+                        dismissSessionExpired();
                         setError('');
                       }}
                       onKeyDown={handleKeyPress}
@@ -304,6 +307,13 @@ export const LoginScreen: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {sessionExpired && !error && (
+                  <div role="status" className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-3 text-muted-foreground">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <p className="text-sm">{t('login.session-expired')}</p>
+                  </div>
+                )}
 
                 {error && (
                   <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive">

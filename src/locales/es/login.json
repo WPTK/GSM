@@ -57,6 +57,7 @@
     "token-permissions-local-storage": "Tu token se guarda solo en este dispositivo y en tu propio backend; nunca en los servidores de la app."
   },
   "login": {
-    "api-secret": "Secreto de API"
+    "api-secret": "Secreto de API",
+    "session-expired": "Tu sesión ha caducado. Vuelve a iniciar sesión."
   }
 }

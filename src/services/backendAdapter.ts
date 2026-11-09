@@ -1,5 +1,6 @@
 import { translateBackendError } from '../utils/backendErrors';
 import { logger } from './logger';
+import { notifySessionExpired } from './sessionEvents';
 
 import { Repository, Release, AIConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
 import { isReadmeCandidateItem, type GitHubReadmeCandidateItem } from '../utils/readmeVariants';
@@ -321,6 +322,7 @@ class BackendAdapter {
     const translated = translateBackendError(code, `${fallbackPrefix}: ${res.status}`);
     const error = new Error(detail ? `${translated} - ${detail}` : translated) as Error & { statusCode?: number; code?: string; retryAfterMs?: number };
     error.statusCode = res.status;
+    if (res.status === 401 && code === 'UNAUTHORIZED') notifySessionExpired();
     if (code) error.code = code;
     // 后端透传上游 Retry-After 头后，这里解析成毫秒供限流器使用（retry-after-ms 为毫秒，retry-after 为秒）
     if (res.status === 429) {
