@@ -6,10 +6,6 @@ import { useAppStore } from '../../../store/useAppStore';
 import { selectDiscoveryViewState } from '../../../store/selectors';
 import { createGitHubApiService } from '../../../services/githubApiFactory';
 import { syncWeeklyChannel } from '../../../services/weeklyIssuesService';
-import { syncXTweetChannel } from '../../../services/xTweetService';
-import { syncTelegramChannel } from '../../../services/telegramService';
-import { loadExternalDiscoveryFeed } from '../../../services/externalDiscoveryFeed';
-import { isExternalDiscoveryChannelId } from '../../../utils/discoveryFeeds';
 import { AIService, isAbortError } from '../../../services/aiService';
 import { isGrepRateLimitError } from '../../../services/grepAppService';
 import { searchRepositoriesSemantically } from '../../../services/semanticRepoSearchService';
@@ -22,20 +18,12 @@ import { useAuthSessionGeneration } from '../../../hooks/useAuthSessionGeneratio
 
 const getChannelRequestSignature = (state: ReturnType<typeof selectDiscoveryViewState>, channelId: DiscoveryChannelId) => {
   const common = [state.githubToken, state.discoveryPlatform];
-  if (isExternalDiscoveryChannelId(channelId)) {
-    return JSON.stringify([...common, state.discoveryChannels.find(channel => channel.id === channelId)?.sourceUrl]);
-  }
   switch (channelId) {
-    case 'trending': return JSON.stringify([...common, state.trendingTimeRange]);
     case 'topic': return JSON.stringify([...common, state.discoverySelectedTopic]);
     // 搜索模式纳入签名：关键词 ↔ AI 语义切换时作废在途请求并触发重搜
     case 'search': return JSON.stringify([...common, state.discoverySearchQuery, state.discoverySearchMode, state.discoveryLanguage, state.discoverySortBy, state.discoverySortOrder]);
     // 周刊过滤为客户端行为，但签名纳入 weeklyOnlyCollected 以便切换过滤器时重跑入口重建切片
     case 'weekly': return JSON.stringify([...common, state.weeklyOnlyCollected]);
-    // 关注列表/鉴权变化会改变抓取范围，纳入签名作废旧请求
-    // （修订号区分"不同 Cookie 之间的切换"，布尔值做不到）
-    case 'x-tweet': return JSON.stringify([...common, state.xTweetFollows, state.xTweetAuth !== null, state.xTweetAuthRevision]);
-    case 'telegram': return JSON.stringify([...common, state.telegramFollows]);
     default: return JSON.stringify(common);
   }
 };
@@ -95,8 +83,6 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
     const versions = channelRequestVersionRef.current;
     // 账号切换后旧会话的周刊/推文/频道同步进度不再属于当前页面，直接清空
     useAppStore.getState().setWeeklySyncStatus(null);
-    useAppStore.getState().setXTweetSyncStatus(null);
-    useAppStore.getState().setTelegramSyncStatus(null);
     return () => {
       optimizerRef.current?.abort();
       optimizerRef.current = null;
@@ -143,23 +129,10 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
     } else {
       currentState.setDiscoveryLoading(channelId, true);
     }
-    let externalFeedController: AbortController | null = null;
     try {
       const api = createGitHubApiService(currentState.githubToken);
       let result: PaginatedDiscoveryRepositories;
-      if (isExternalDiscoveryChannelId(channelId)) {
-        // 新请求取代旧请求时中止旧请求仍在途的 GitHub 详情请求
-        channelRequestControllersRef.current[channelId]?.abort();
-        externalFeedController = new AbortController();
-        channelRequestControllersRef.current[channelId] = externalFeedController;
-        const channel = currentState.discoveryChannels.find(item => item.id === channelId);
-        const sourceUrl = channel?.sourceUrl;
-        if (!sourceUrl) throw new Error('External discovery feed is not configured');
-        result = await loadExternalDiscoveryFeed(sourceUrl, channelId, api, channel?.sourceKind ?? 'json', externalFeedController.signal);
-      } else switch (channelId) {
-        case 'trending':
-          result = await api.getTrendingRepositories(currentState.discoveryPlatform, page, 20, currentState.trendingTimeRange);
-          break;
+      switch (channelId) {
         case 'hot-release':
           result = await api.getHotReleaseRepositories(currentState.discoveryPlatform, page);
           break;
@@ -169,7 +142,7 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
         case 'topic':
           result = currentState.discoverySelectedTopic
             ? await api.getTopicRepositories(currentState.discoverySelectedTopic, currentState.discoveryPlatform, page)
-            : await api.getTrendingRepositories(currentState.discoveryPlatform, page);
+            : { repos: [], hasMore: false, nextPageIndex: page + 1, totalCount: 0 };
           break;
         case 'search': {
           const searchQuery = currentState.discoverySearchQuery.trim();
@@ -288,34 +261,6 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
             },
           );
           break;
-        case 'x-tweet':
-          useAppStore.getState().setXTweetSyncStatus(null);
-          result = await syncXTweetChannel(
-            api,
-            page,
-            currentState.xTweetFollows,
-            (status) => {
-              if (isCurrentRequest()) {
-                useAppStore.getState().setXTweetSyncStatus(status);
-              }
-            },
-            undefined,
-            currentState.xTweetAuth,
-          );
-          break;
-        case 'telegram':
-          useAppStore.getState().setTelegramSyncStatus(null);
-          result = await syncTelegramChannel(
-            api,
-            page,
-            currentState.telegramFollows,
-            (status) => {
-              if (isCurrentRequest()) {
-                useAppStore.getState().setTelegramSyncStatus(status);
-              }
-            },
-          );
-          break;
         default:
           result = { repos: [], hasMore: false, nextPageIndex: page + 1, totalCount: 0 };
       }
@@ -338,10 +283,7 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
           analysis_error: analysis.analysis_error,
         } : newRepo;
       });
-      // x-tweet/telegram 每页返回累积前缀切片（服务按页整体重建窗口），加载
-      // 更多时用替换语义写入，否则加深拉取新增的卡片落进已消费窗口内永远补不到
-      const replacesOnAppend = channelId === 'x-tweet' || channelId === 'telegram';
-      if (append && !replacesOnAppend) currentState.appendDiscoveryRepos(channelId, mergedRepos);
+      if (append) currentState.appendDiscoveryRepos(channelId, mergedRepos);
       else currentState.setDiscoveryRepos(channelId, mergedRepos);
       currentState.setDiscoveryHasMore(channelId, result.hasMore);
       currentState.setDiscoveryNextPage(channelId, result.nextPageIndex);
@@ -360,7 +302,7 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
           },
         );
       }
-      if (append && !replacesOnAppend && scrollContainerRef.current) {
+      if (append && scrollContainerRef.current) {
         requestAnimationFrame(() => {
           const cards = scrollContainerRef.current?.querySelectorAll('[data-repo-index]');
           const target = cards?.[previousCount] as HTMLElement | undefined;
@@ -374,30 +316,15 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
         currentState.setDiscoveryLoadMoreError(channelId, tRef.current('useDiscoveryActions.failed-to-load-more-please-retry'));
       } else {
         const errorMsg = error instanceof Error ? error.message : '';
-        if (channelId === 'x-tweet') {
-          toast(errorMsg ? `${tRef.current('useDiscoveryActions.failed-to-fetch-x-tweets')}: ${errorMsg}` : tRef.current('useDiscoveryActions.failed-to-fetch-x-tweets-please-check-your-netwo'), 'error');
-        } else if (channelId === 'telegram') {
-          toast(errorMsg ? `${tRef.current('useDiscoveryActions.failed-to-fetch-telegram-messages')}: ${errorMsg}` : tRef.current('useDiscoveryActions.failed-to-fetch-telegram-messages-please-check-y'), 'error');
-        } else {
-          toast(errorMsg || tRef.current('useDiscoveryActions.failed-to-fetch-data-please-check-your-network-c'), 'error');
-        }
+        toast(errorMsg || tRef.current('useDiscoveryActions.failed-to-fetch-data-please-check-your-network-c'), 'error');
       }
     } finally {
       if (channelId === 'weekly' && isCurrentRequest()) {
         useAppStore.getState().setWeeklySyncStatus(null);
       }
-      if (channelId === 'x-tweet' && isCurrentRequest()) {
-        useAppStore.getState().setXTweetSyncStatus(null);
-      }
-      if (channelId === 'telegram' && isCurrentRequest()) {
-        useAppStore.getState().setTelegramSyncStatus(null);
-      }
       if (ownsLoading()) {
         if (append) currentState.setDiscoveryLoadingMore(channelId, false);
         else currentState.setDiscoveryLoading(channelId, false);
-      }
-      if (externalFeedController && channelRequestControllersRef.current[channelId] === externalFeedController) {
-        delete channelRequestControllersRef.current[channelId];
       }
     }
   }, [captureSession, isCurrentSession, scrollContainerRef, toast]);

@@ -8,20 +8,14 @@ import {
   Settings,
   Globe,
   Bot,
-  Cloud,
-  Database,
   Server,
   Package,
   Palette,
   X,
   Trash2,
-  Wifi,
   ScrollText,
   Layout,
-  Search,
   Cable,
-  Star,
-  Plug,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
