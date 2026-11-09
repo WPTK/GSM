@@ -22,6 +22,19 @@ const MS_TRANSLATE_URL = '/api/translate/microsoft';
 
 const GOOGLE_TRANSLATE_URL = '/api/translate/google';
 
+/**
+ * Largest request body the same-origin relay accepts. Mirrors TRANSLATE_BODY_LIMIT_BYTES in
+ * server/src/routes/egress.ts; translateService.limit.test.ts fails if the two drift apart.
+ */
+export const TRANSLATE_REQUEST_LIMIT_BYTES = 64 * 1024;
+/** Headroom under the relay limit for the JSON array framing. */
+const MS_BODY_BUDGET_BYTES = TRANSLATE_REQUEST_LIMIT_BYTES - 1024;
+/** Raw UTF-8 bytes per text chunk sent to Microsoft: JSON escaping (quotes, newlines, entities) can roughly double it. */
+const MS_CHUNK_BYTES = 24 * 1024;
+
+const utf8Encoder = new TextEncoder();
+export const utf8ByteLength = (value: string): number => utf8Encoder.encode(value).length;
+
 /** 翻译请求超时：单批最多 50k 字符，慢网下放宽到 20s；超时同时覆盖响应体读取。 */
 const TRANSLATE_TIMEOUT_MS = 20_000;
 /** AI 翻译单次请求超时：LLM 生成较慢，给足余量。 */
@@ -218,27 +231,48 @@ const translateWithMicrosoft = async (
     isEnterpriseClient: 'false',
   })}`;
 
-  const data = await fetchWithTimeout<MsTranslateItem[]>(
-    url,
-    {
-      method: 'POST',
-      headers: { 'Content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    },
-    signal,
-    TRANSLATE_TIMEOUT_MS,
-    async (response) => {
-      if (!response.ok) {
-        throw new Error(`Translation failed: ${response.status}`);
-      }
-      return (await response.json()) as MsTranslateItem[];
+  // The relay caps the body in bytes (CJK is 3 bytes per UTF-16 unit), so group by encoded size.
+  const groups: unknown[][] = [];
+  let group: unknown[] = [];
+  let groupBytes = 2;
+  for (const item of payload) {
+    const itemBytes = utf8ByteLength(JSON.stringify(item)) + 1;
+    if (itemBytes + 2 > MS_BODY_BUDGET_BYTES) throw new Error('Translation text too large for one request');
+    if (group.length > 0 && groupBytes + itemBytes > MS_BODY_BUDGET_BYTES) {
+      groups.push(group);
+      group = [];
+      groupBytes = 2;
     }
-  );
-
-  if (!Array.isArray(data) || data.length !== payload.length) {
-    throw new Error('Invalid translation response');
+    group.push(item);
+    groupBytes += itemBytes;
   }
-  return restore(data.map((item) => item?.translations?.[0]?.text ?? ''));
+  if (group.length > 0) groups.push(group);
+
+  const translated: string[] = [];
+  for (const part of groups) {
+    const data = await fetchWithTimeout<MsTranslateItem[]>(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-type': 'application/json' },
+        body: JSON.stringify(part),
+      },
+      signal,
+      TRANSLATE_TIMEOUT_MS,
+      async (response) => {
+        if (!response.ok) {
+          throw new Error(`Translation failed: ${response.status}`);
+        }
+        return (await response.json()) as MsTranslateItem[];
+      }
+    );
+
+    if (!Array.isArray(data) || data.length !== part.length) {
+      throw new Error('Invalid translation response');
+    }
+    translated.push(...data.map((item) => item?.translations?.[0]?.text ?? ''));
+  }
+  return restore(translated);
 };
 
 /**
@@ -392,20 +426,32 @@ export const translateText = async (options: TranslateOptions): Promise<Translat
     return { translatedText: text, detectedLanguage: '' };
   }
 
-  const results = await translateBatchInternal([text], to, from, signal, textType);
-  return results[0];
+  return translateOne(text, to, from, signal, textType);
 };
 
-/** 按段落与字符上限把超长文本切成多条（仅用于超过引擎单条上限的文本）。 */
-function splitTextIntoChunks(text: string, maxChars: number): string[] {
-  if (text.length <= maxChars) return [text];
+/** Largest prefix of `text` whose measure fits `max` (never splits a surrogate pair); at least one code point. */
+function prefixWithin(text: string, max: number, measure: (value: string) => number): number {
+  let lo = 1;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (measure(text.slice(0, mid)) <= max) lo = mid; else hi = mid - 1;
+  }
+  const code = text.charCodeAt(lo - 1);
+  if (lo < text.length && code >= 0xd800 && code <= 0xdbff) lo = Math.max(1, lo - 1);
+  return lo;
+}
+
+/** 按段落与上限把超长文本切成多条（仅用于超过引擎单条上限的文本）；measure 默认按字符数，微软引擎按 UTF-8 字节数。 */
+function splitTextIntoChunks(text: string, max: number, measure: (value: string) => number = (v) => v.length): string[] {
+  if (measure(text) <= max) return [text];
 
   const chunks: string[] = [];
   const paragraphs = text.split('\n');
   let current = '';
 
   for (const para of paragraphs) {
-    if (current.length + para.length + 1 > maxChars && current.length > 0) {
+    if (current.length > 0 && measure(current) + measure(para) + 1 > max) {
       chunks.push(current);
       current = para;
     } else if (current.length > 0) {
@@ -414,11 +460,12 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
       current = para;
     }
 
-    while (current.length > maxChars) {
-      const splitPoint = current.lastIndexOf(' ', maxChars);
-      if (splitPoint <= 0) {
-        chunks.push(current.slice(0, maxChars));
-        current = current.slice(maxChars);
+    while (measure(current) > max) {
+      const limit = prefixWithin(current, max, measure);
+      const splitPoint = current.lastIndexOf(' ', limit);
+      if (splitPoint <= 0 || splitPoint >= current.length) {
+        chunks.push(current.slice(0, limit));
+        current = current.slice(limit);
       } else {
         chunks.push(current.slice(0, splitPoint));
         current = current.slice(splitPoint + 1);
@@ -429,6 +476,33 @@ function splitTextIntoChunks(text: string, maxChars: number): string[] {
   if (current) chunks.push(current);
   return chunks;
 }
+
+/** Chunk limits for the active engine: Microsoft is capped by request bytes, the others by characters. */
+const chunkLimits = (): { max: number; measure: (value: string) => number } =>
+  getTranslationEngine() === 'microsoft'
+    ? { max: MS_CHUNK_BYTES, measure: utf8ByteLength }
+    : { max: 50000, measure: (value) => value.length };
+
+/** Translate one text, splitting it first when it exceeds the engine's single-request limit. */
+const translateOne = async (
+  text: string,
+  to: string,
+  from: string | undefined,
+  signal: AbortSignal | undefined,
+  textType: 'html' | 'plain' | undefined
+): Promise<TranslateResult> => {
+  const { max, measure } = chunkLimits();
+  const chunks = splitTextIntoChunks(text, max, measure);
+  if (chunks.length === 1) {
+    return (await translateBatchInternal([text], to, from, signal, textType))[0];
+  }
+  const parts: string[] = [];
+  for (const chunk of chunks) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    parts.push((await translateBatchInternal([chunk], to, from, signal, textType))[0].translatedText);
+  }
+  return { translatedText: parts.join('\n'), detectedLanguage: '' };
+};
 
 /**
  * 批量翻译入口：多条文本合并为尽量少的请求（受引擎单请求上限约束），
@@ -444,13 +518,12 @@ export const translateBatch = async (
   if (texts.length === 0) return [];
 
   if (texts.length === 1) {
-    const result = await translateText({ text: texts[0], to, from, signal, textType });
-    return [result];
+    return [await translateOne(texts[0], to, from, signal, textType)];
   }
 
   const results: TranslateResult[] = [];
   const batchSize = 100;
-  const maxChars = 50000;
+  const { max: maxUnits, measure } = chunkLimits();
 
   for (let i = 0; i < texts.length; i += batchSize) {
     if (signal?.aborted) {
@@ -460,39 +533,29 @@ export const translateBatch = async (
     const batch = texts.slice(i, i + batchSize);
     let currentBatch: string[] = [];
     let currentLength = 0;
+    const flush = async () => {
+      if (currentBatch.length === 0) return;
+      results.push(...await translateBatchInternal(currentBatch, to, from, signal, textType));
+      currentBatch = [];
+      currentLength = 0;
+    };
 
     for (const text of batch) {
-      // Always flush accumulated batch before handling an oversized item.
-      if (text.length > maxChars) {
-        if (currentBatch.length > 0) {
-          const batchResults = await translateBatchInternal(currentBatch, to, from, signal, textType);
-          results.push(...batchResults);
-          currentBatch = [];
-          currentLength = 0;
-        }
-        const chunks = splitTextIntoChunks(text, maxChars);
-        for (const chunk of chunks) {
-          const batchResults = await translateBatchInternal([chunk], to, from, signal, textType);
-          results.push(...batchResults);
-        }
+      const size = measure(text);
+      // Always flush the accumulated batch before handling an oversized item.
+      if (size > maxUnits) {
+        await flush();
+        results.push(await translateOne(text, to, from, signal, textType));
         continue;
       }
-
-      if (currentLength + text.length > maxChars && currentBatch.length > 0) {
-        // (this branch is now only reached for non-oversized items)
-        const batchResults = await translateBatchInternal(currentBatch, to, from, signal, textType);
-        results.push(...batchResults);
-        currentBatch = [];
-        currentLength = 0;
+      if (currentLength + size > maxUnits && currentBatch.length > 0) {
+        await flush();
       }
       currentBatch.push(text);
-      currentLength += text.length;
+      currentLength += size;
     }
 
-    if (currentBatch.length > 0) {
-      const batchResults = await translateBatchInternal(currentBatch, to, from, signal, textType);
-      results.push(...batchResults);
-    }
+    await flush();
   }
 
   return results;
