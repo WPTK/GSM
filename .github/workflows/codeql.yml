@@ -2,7 +2,7 @@ name: CodeQL
 
 on:
   push:
-    branches: [main]
+    branches: [hardened]
   pull_request:
   schedule:
     # Weekly full sweep on Monday ~03:37 UTC, off the top of the hour to
