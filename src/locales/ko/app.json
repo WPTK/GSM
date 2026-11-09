@@ -229,7 +229,6 @@
     "logout": "로그아웃",
     "logout-only-clears-credentials-repositories-ai-a": "로그아웃 후에는 로그인 자격 증명만 지워집니다. 창고, AI 분석, 분류 등의 로컬 데이터는 유지됩니다. 토큰을 변경하고 동일한 GitHub 계정으로 다시 로그인하면 자동으로 상속됩니다. 모든 데이터를 완전히 삭제하려면 \"설정 → 데이터 관리\"로 이동하세요.",
     "menu-repositories": "창고",
-    "menu-gists": "Gist",
     "menu-releases": "풀어 주다",
     "menu-forks": "레플리카",
     "menu-subscription": "발견하다",
@@ -622,7 +621,6 @@
     "github-stars-repository-list": "GitHub Stars 저장소 목록",
     "release-information": "출시 정보",
     "ai-service-configurations": "AI 서비스 구성",
-    "webdav-configurations": "WebDAV 구성",
     "category-visibility-settings": "카테고리 표시 설정",
     "github-connected": "GitHub 연결됨",
     "github-not-configured": "서버에 GitHub가 설정되어 있지 않습니다"
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "백업/내보내기 시 키 포함",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "AI 구성, WebDAV, 프록시, 원격 다운로드 및 백엔드 서버에 대한 키가 포함되어 있습니다."
+    "includes-keys-for-ai-configs": "AI 설정과 백엔드 서버의 키를 포함합니다"
   },
   "mcpSettingsPanel": {
     "copied": "복사됨",

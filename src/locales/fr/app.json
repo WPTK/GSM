@@ -229,7 +229,6 @@
     "logout": "Se déconnecter",
     "logout-only-clears-credentials-repositories-ai-a": "Seules les informations de connexion sont effacées après la déconnexion. Les données locales telles que les entrepôts, l'analyse de l'IA et la classification seront conservées ; il sera automatiquement hérité si vous modifiez le jeton et vous reconnectez avec le même compte GitHub. Pour effacer complètement toutes les données, allez dans « Paramètres → Gestion des données ».",
     "menu-repositories": "entrepôt",
-    "menu-gists": "Gist",
     "menu-releases": "libérer",
     "menu-forks": "réplique",
     "menu-subscription": "Découvrir",
@@ -621,7 +620,6 @@
     "github-stars-repository-list": "Liste des référentiels GitHub Stars",
     "release-information": "Informations sur la version de publication",
     "ai-service-configurations": "Configuration du service IA",
-    "webdav-configurations": "Configuration WebDAV",
     "category-visibility-settings": "Paramètres d'affichage des catégories",
     "version": "Version",
     "github-connected": "GitHub connecté",
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Inclure les clés lors de la sauvegarde/exportation",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "Contient les clés pour la configuration de l'IA, WebDAV, le proxy, le téléchargement à distance et le serveur backend"
+    "includes-keys-for-ai-configs": "Inclut les clés des configurations IA et du serveur backend"
   },
   "mcpSettingsPanel": {
     "copied": "Copié",

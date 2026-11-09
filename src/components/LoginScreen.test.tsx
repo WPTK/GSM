@@ -37,7 +37,6 @@ vi.mock('../store/useAppStore', () => ({
       backendApiSecret: mocks.store.backendApiSecret,
       repositories: [],
       gists: [],
-      starredGists: [],
       releases: [],
       forks: [],
       customCategories: [],

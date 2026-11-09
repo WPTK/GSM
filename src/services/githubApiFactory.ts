@@ -18,7 +18,7 @@ export interface CreateGitHubApiServiceOptions {
    * 即使后端可用也直连 api.github.com。
    * 用于"身兼两职"的取数助手：在 browser 模式/无后端时是主路径，
    * 在后端请求失败后又是兜底路径——兜底再走刚失败的后端会失去意义
-   * （与 githubListsApi 的 sticky 直连回退惯例一致）。
+   * （sticky 直连回退）。
    */
   direct?: boolean;
 }

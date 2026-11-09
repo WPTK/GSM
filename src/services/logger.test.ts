@@ -35,7 +35,7 @@ describe('logger', () => {
 
     it('replaces Error values inside plain objects with sanitized records', () => {
       const fetchError = new TypeError('Failed to fetch');
-      logger.warn('xTweet', 'GraphQL batch enrichment failed, falling back to REST', {
+      logger.warn('discovery', 'batch enrichment failed, falling back to REST', {
         endpoint: '/graphql',
         attempt: 2,
         error: fetchError,
@@ -52,7 +52,7 @@ describe('logger', () => {
 
     it('replaces Errors nested at any depth inside objects and arrays', () => {
       const timeoutError = new Error('timeout');
-      logger.warn('webdav', 'probe failed', {
+      logger.warn('backendSync', 'probe failed', {
         request: { path: '/dav', error: timeoutError },
         attempts: [new TypeError('Failed to fetch'), 'aborted'],
       });

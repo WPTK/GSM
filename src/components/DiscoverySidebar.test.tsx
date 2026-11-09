@@ -19,7 +19,6 @@ describe('DiscoverySidebar code search count', () => {
       'most-popular': 0,
       topic: 0,
       'x-tweet': 0,
-      telegram: 0,
       weekly: 0,
       search: 0,
       'code-search': 0,

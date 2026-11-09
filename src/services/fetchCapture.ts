@@ -20,7 +20,7 @@
  * the diagnostics panel and export bundle. Entries are also handed to the
  * diagnostics bridge (setNetworkEntrySink) so debug-mode traffic reaches the
  * main-process journal. The existing manual capture blocks in githubApi /
- * webdav / ai services stay untouched — they carry business context this
+ * backend sync / ai services stay untouched — they carry business context this
  * layer cannot know about, and the plan keeps both views without dedup.
  *
  * Not covered (by design, see plan §六): XMLHttpRequest / EventSource /

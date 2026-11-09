@@ -108,43 +108,6 @@ interface ElectronAPI {
   setProxy: (config: ProxyConfig) => Promise<{ success: boolean }>;
   getProxy: () => Promise<ProxyConfig>;
   testProxy: (config: ProxyConfig) => Promise<{ success: boolean; error?: string }>;
-  /** X 推文频道：主进程代抓 x.com 未登录主页 HTML（绕开渲染进程 CORS） */
-  xFetchTimeline?: (handle: string) => Promise<{ success: boolean; html?: string; error?: string }>;
-  /**
-   * X 推文频道鉴权路径：主进程代发 x.com GraphQL / 静态资源 GET 请求
-   * （带用户的 auth_token/ct0 Cookie 与 Bearer，绕开渲染进程 CORS）
-   */
-  xFetchGraphQL?: (url: string, auth: { authToken: string; ct0: string } | null) => Promise<{ success: boolean; body?: string; error?: string }>;
-  /** Telegram 频道：主进程代抓 t.me/s/<name> 公开预览 HTML（可选 before 游标翻历史页） */
-  telegramFetchChannel?: (channel: string, before?: string) => Promise<{ success: boolean; html?: string; error?: string }>;
-  /**
-   * WebDAV：主进程代发 DAV 请求（渲染进程 webSecurity 开启且 file:// 源同样受 CORS 约束，
-   * 桌面版又不带后端，只能由主进程代发）。响应体以文本原样返回，供上层还原 Response。
-   */
-  webdavRequest?: (params: {
-    url: string;
-    method: string;
-    headers?: Record<string, string>;
-    body?: string;
-    timeoutMs?: number;
-  }) => Promise<{
-    success: boolean;
-    status?: number;
-    statusText?: string;
-    body?: string;
-    contentType?: string;
-    error?: string;
-    /** 主进程网络栈失败时的最底层错误码（如 ECONNREFUSED / ENOTFOUND / DEPTH_ZERO_SELF_SIGNED_CERT） */
-    causeCode?: string;
-    /** 最底层错误的原始描述（如 "connect ECONNREFUSED 10.0.0.5:5006"） */
-    causeMessage?: string;
-    timedOut?: boolean;
-  }>;
-  xAuth?: {
-    save: (auth: { authToken: string; ct0: string }) => Promise<{ success: boolean; error?: string }>;
-    get: () => Promise<{ authToken: string; ct0: string } | null>;
-    clear: () => Promise<{ success: boolean; error?: string }>;
-  };
   desktop?: DesktopElectronAPI;
   mcp?: McpElectronAPI;
   /** Diagnostics bridge (desktop only; absent in web builds). */
@@ -182,84 +145,6 @@ export const electronProxy = {
     }
     return window.electronAPI.testProxy(config);
   },
-};
-
-/** X 推文频道：经主进程抓取 x.com 未登录主页 HTML。非桌面环境返回 null。 */
-export const fetchXTimelineViaDesktop = async (handle: string): Promise<string | null> => {
-  if (!window.electronAPI?.xFetchTimeline) return null;
-  const result = await window.electronAPI.xFetchTimeline(handle);
-  if (!result.success || typeof result.html !== 'string') {
-    throw new Error(result.error || 'desktop x.com fetch failed');
-  }
-  return result.html;
-};
-
-const X_HOME_URL = 'https://x.com/home';
-const X_MAIN_JS_PATTERN = /^https:\/\/abs\.twimg\.com\/responsive-web\/client-web\/main\.[a-zA-Z0-9_-]+\.js$/;
-const X_GRAPHQL_API_PATTERN = /^https:\/\/x\.com\/i\/api\/graphql\/[A-Za-z0-9_-]+\/(UserTweets|UserByScreenName)(\?.*)?$/;
-
-export const isAllowedXGraphQLUrl = (url: string): boolean =>
-  url === X_HOME_URL || X_MAIN_JS_PATTERN.test(url) || X_GRAPHQL_API_PATTERN.test(url);
-
-/**
- * X 推文频道鉴权路径：经主进程代发 x.com GraphQL / 静态资源请求。非桌面环境返回 null。
- * 限制仅允许 x.com 与 abs.twimg.com 目标，主进程配置 redirect: 'error'
- * 拒绝跨域重定向，防止 Cookie 被转到允许域名之外。
- * auth 为 null 时走主进程免登录 guest 流程（guest token + Chromium 栈），
- * 用作鉴权请求被 x.com 边缘 WAF 403（TLS 指纹拦截）时的降级路径。
- */
-export const fetchXGraphQLViaDesktop = async (
-  url: string,
-  auth: { authToken: string; ct0: string } | null,
-): Promise<string | null> => {
-  if (typeof url !== 'string' || !isAllowedXGraphQLUrl(url)) {
-    throw new Error('invalid url for x.com fetch');
-  }
-  if (!window.electronAPI?.xFetchGraphQL) return null;
-  const result = await window.electronAPI.xFetchGraphQL(url, auth);
-  if (!result.success || typeof result.body !== 'string') {
-    throw new Error(result.error || 'desktop x.com GraphQL fetch failed');
-  }
-  return result.body;
-};
-
-/** X 鉴权 Cookie 本地安全读取（Electron safeStorage 加密保存在本机）。非桌面环境返回 null。 */
-export const loadEncryptedXAuthViaDesktop = async (): Promise<{ authToken: string; ct0: string } | null> => {
-  if (!window.electronAPI?.xAuth?.get) return null;
-  try {
-    return await window.electronAPI.xAuth.get();
-  } catch {
-    return null;
-  }
-};
-
-/** X 鉴权 Cookie 本地安全写入（Electron safeStorage 加密保存在本机）。 */
-export const saveEncryptedXAuthViaDesktop = async (auth: { authToken: string; ct0: string }): Promise<void> => {
-  if (!window.electronAPI?.xAuth?.save) return;
-  const result = await window.electronAPI.xAuth.save(auth);
-  if (result && !result.success) {
-    throw new Error(result.error || 'failed to save X authentication');
-  }
-};
-
-/** X 鉴权 Cookie 本地安全清理。 */
-export const clearEncryptedXAuthViaDesktop = async (): Promise<void> => {
-  if (!window.electronAPI?.xAuth?.clear) return;
-  const result = await window.electronAPI.xAuth.clear();
-  if (result && !result.success) {
-    throw new Error(result.error || 'failed to clear X authentication');
-  }
-};
-
-
-/** Telegram 频道：经主进程抓取 t.me/s 公开预览 HTML。非桌面环境返回 null。 */
-export const fetchTelegramChannelViaDesktop = async (channel: string, before?: string): Promise<string | null> => {
-  if (!window.electronAPI?.telegramFetchChannel) return null;
-  const result = await window.electronAPI.telegramFetchChannel(channel, before);
-  if (!result.success || typeof result.html !== 'string') {
-    throw new Error(result.error || 'desktop t.me fetch failed');
-  }
-  return result.html;
 };
 
 /** Default prefs mirror the main-process defaults; used before IPC resolves. */

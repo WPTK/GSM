@@ -229,7 +229,6 @@
     "logout": "Выйти",
     "logout-only-clears-credentials-repositories-ai-a": "После выхода из системы удаляются только учетные данные для входа. Локальные данные, такие как склады, анализ ИИ и классификация, будут сохранены; он будет автоматически унаследован, если вы измените токен и снова войдете в систему с той же учетной записью GitHub. Чтобы полностью очистить все данные, перейдите в «Настройки → Управление данными».",
     "menu-repositories": "склад",
-    "menu-gists": "Gist",
     "menu-releases": "выпускать",
     "menu-forks": "копия",
     "menu-subscription": "Обнаружить",
@@ -622,7 +621,6 @@
     "github-stars-repository-list": "Список репозиториев GitHub Stars",
     "release-information": "Информация о выпуске релиза",
     "ai-service-configurations": "Конфигурация службы ИИ",
-    "webdav-configurations": "Конфигурация WebDAV",
     "category-visibility-settings": "Настройки отображения категорий",
     "github-connected": "GitHub подключён",
     "github-not-configured": "GitHub не настроен на сервере"
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Включить ключи при резервном копировании/экспорте",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "Содержит ключи для настройки AI, WebDAV, прокси, удаленной загрузки и внутреннего сервера."
+    "includes-keys-for-ai-configs": "Включает ключи конфигураций ИИ и серверной части"
   },
   "mcpSettingsPanel": {
     "copied": "Скопировано",

@@ -8,7 +8,6 @@ export type LogEventType =
   | 'fork'
   | 'workflow'
   | 'backendSync'
-  | 'webdav'
   | 'update'
   | 'store'
   | 'app'
@@ -25,7 +24,6 @@ export const EVENT_TYPE_LABELS: Record<LogEventType, { zh: string; en: string }>
   fork:          { zh: '刷新复刻', en: 'Refresh Forks' },
   workflow:      { zh: '执行 Workflow', en: 'Run Workflow' },
   backendSync:   { zh: '后端同步', en: 'Backend Sync' },
-  webdav:        { zh: 'WebDAV 备份', en: 'WebDAV Backup' },
   update:        { zh: '应用更新', en: 'App Update' },
   store:         { zh: '数据存储', en: 'Data Store' },
   app:           { zh: '应用', en: 'App' },
@@ -54,7 +52,6 @@ export function inferEventType(module: string, message: string, data?: unknown):
   if (module === 'githubApi' && /fork/i.test(message)) return 'fork';
   if (module === 'githubApi' && /workflow/i.test(message)) return 'workflow';
   if (module === 'backendAdapter') return 'backendSync';
-  if (module === 'webdav') return 'webdav';
   if (module === 'update') return 'update';
   if (module.startsWith('store')) return 'store';
   if (module === 'app') return 'app';

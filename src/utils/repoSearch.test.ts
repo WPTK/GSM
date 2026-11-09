@@ -43,10 +43,10 @@ const sample: Repository[] = [
     id: 2,
     name: 'beta',
     full_name: 'acme/beta',
-    description: 'webdav client',
+    description: 'proxy client',
     language: 'TypeScript',
     stargazers_count: 50,
-    ai_tags: ['webdav'],
+    ai_tags: ['proxy'],
     custom_category: 'tools',
     license: 'GPL-3.0',
   }),
@@ -86,7 +86,7 @@ describe('applyRepoFilters', () => {
   });
 
   it('filters by tags across ai/topics/custom', () => {
-    const hits = applyRepoFilters(sample, { tags: ['webdav'] });
+    const hits = applyRepoFilters(sample, { tags: ['proxy'] });
     expect(hits.map((r) => r.id)).toEqual([2]);
   });
 

@@ -249,7 +249,6 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
           <li>• {t('backendPanel.github-stars-repository-list')}</li>
           <li>• {t('backendPanel.release-information')}</li>
           <li>• {t('backendPanel.ai-service-configurations')}</li>
-          <li>• {t('backendPanel.webdav-configurations')}</li>
           <li>• {t('backendPanel.category-visibility-settings')}</li>
         </ul>
       </div>

@@ -229,7 +229,6 @@
     "logout": "登出登入",
     "logout-only-clears-credentials-repositories-ai-a": "登出後僅清除登入憑證。仓库、AI 分析和分类等本地数据会保留；同一 GitHub 账号换 token 再登录会自动继承。如需完全清除所有数据，请前往「设置 → 数据管理」。",
     "menu-repositories": "倉庫",
-    "menu-gists": "Gist",
     "menu-releases": "發布",
     "menu-forks": "復刻",
     "menu-subscription": "發現",
@@ -622,7 +621,6 @@
     "github-stars-repository-list": "GitHub Stars 倉庫列表",
     "release-information": "Release 發布訊息",
     "ai-service-configurations": "AI 服務配置",
-    "webdav-configurations": "WebDAV 配置",
     "category-visibility-settings": "分類顯示設定",
     "github-connected": "GitHub 已連線",
     "github-not-configured": "伺服器未設定 GitHub"
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "備份/匯出時包含金鑰",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "包含 AI 設定、WebDAV、代理、遠端下載和後端伺服器的金鑰"
+    "includes-keys-for-ai-configs": "包含 AI 設定與後端伺服器的金鑰"
   },
   "mcpSettingsPanel": {
     "copied": "已複製",

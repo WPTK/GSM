@@ -24,7 +24,7 @@ export const IncludeKeysToggle: FC<IncludeKeysToggleProps> = ({ t }) => {
           <Key className="h-4 w-4 text-muted-foreground" />
           <div>
             <h4 className="text-sm font-medium text-foreground">{label}</h4>
-            <p className="text-sm text-muted-foreground">{t('includeKeysToggle.includes-keys-for-ai-configs-webdav-proxy-remote')}</p>
+            <p className="text-sm text-muted-foreground">{t('includeKeysToggle.includes-keys-for-ai-configs')}</p>
           </div>
         </div>
         <Switch checked={includeKeysInBackup} onCheckedChange={setIncludeKeysInBackup} aria-label={label} />

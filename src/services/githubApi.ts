@@ -313,7 +313,7 @@ function mapGraphqlRepoDetail(node: Record<string, unknown>): GitHubRepoDetailRe
 }
 
 const GITHUB_API_BASE = 'https://api.github.com';
-// 会话级 403 去重：README/Release/Gist 等生产路径按操作新建 service 实例，
+// 会话级 403 去重：README/Release 等生产路径按操作新建 service 实例，
 // 实例级状态会让同一 403 在同一会话内重复 warn。按「凭据 + 后端上下文」的
 // 非敏感指纹分桶（指纹仅用于判断凭据是否变化，绝不写入日志），凭据切换后
 // 自然换桶重新 warn。
@@ -415,7 +415,7 @@ export class GitHubApiService {
   }
 
   /**
-   * 设置后端代理地址。设置后所有请求（makeRequest / getGistFileRaw）将
+   * 设置后端代理地址。设置后所有请求（makeRequest）将
    * 通过服务器的 /api/proxy/github/* 路由转发，从而走用户配置的代理。
    * 传 null 恢复直连模式。
    */
@@ -505,7 +505,7 @@ export class GitHubApiService {
     let data: T | null | undefined;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const viaProxy = this.backendUrl != null;
-      // 每次尝试独立超时：超时上限不被重试+退避消耗（与 githubListsApi 一致）
+      // 每次尝试独立超时：超时上限不被重试+退避消耗（重试+退避）
       const timeoutController = createCombinedAbortController(signal, REQUEST_TIMEOUT_MS);
       try {
         if (this.backendUrl) {

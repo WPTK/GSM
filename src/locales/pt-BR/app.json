@@ -229,7 +229,6 @@
     "logout": "Sair",
     "logout-only-clears-credentials-repositories-ai-a": "Somente as credenciais de login são apagadas após o logout. Dados locais, como armazéns, análise de IA e classificação, serão retidos; ele será herdado automaticamente se você alterar o token e fazer login novamente com a mesma conta GitHub. Para limpar completamente todos os dados, vá em “Configurações → Gerenciamento de Dados”.",
     "menu-repositories": "armazém",
-    "menu-gists": "Gist",
     "menu-releases": "liberar",
     "menu-forks": "réplica",
     "menu-subscription": "Descobrir",
@@ -622,7 +621,6 @@
     "github-stars-repository-list": "Lista de repositórios GitHub Stars",
     "release-information": "Liberar informações de lançamento",
     "ai-service-configurations": "Configuração do serviço de IA",
-    "webdav-configurations": "Configuração WebDAV",
     "category-visibility-settings": "Configurações de exibição de categoria",
     "github-connected": "GitHub conectado",
     "github-not-configured": "O GitHub não está configurado no servidor"
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Incluir chaves ao fazer backup/exportar",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "Contém chaves para configuração de IA, WebDAV, proxy, download remoto e servidor backend"
+    "includes-keys-for-ai-configs": "Inclui as chaves das configurações de IA e do servidor backend"
   },
   "mcpSettingsPanel": {
     "copied": "Copiado",

@@ -65,7 +65,7 @@ const isMostlyAscii = (text) => /^[\x00-\x7F]+$/.test(text);
 async function main() {
   const zhNamespaces = {};
   const enNamespaces = {};
-  const nsFiles = (ONLY_NS ?? ['common', 'app', 'login', 'repositories', 'gists', 'releases', 'discovery', 'chat', 'search', 'plugins', 'settings', 'ai', 'services', 'errors']);
+  const nsFiles = (ONLY_NS ?? ['common', 'app', 'login', 'repositories', 'releases', 'discovery', 'chat', 'search', 'plugins', 'settings', 'ai', 'services', 'errors']);
   for (const ns of nsFiles) {
     try {
       zhNamespaces[ns] = JSON.parse(readFileSync(path.join(localesDir, 'zh', `${ns}.json`), 'utf8'));

@@ -229,7 +229,6 @@
     "logout": "ログアウト",
     "logout-only-clears-credentials-repositories-ai-a": "ログアウト後にクリアされるのは、ログイン資格情報のみです。倉庫、AI 分析、分類などのローカル データは保持されます。トークンを変更して同じGitHubアカウントで再度ログインすると自動的に引き継がれます。すべてのデータを完全に消去するには、「設定→データ管理」に移動します。",
     "menu-repositories": "倉庫",
-    "menu-gists": "Gist",
     "menu-releases": "リリース",
     "menu-forks": "レプリカ",
     "menu-subscription": "発見する",
@@ -622,7 +621,6 @@
     "github-stars-repository-list": "GitHub Stars リポジトリ リスト",
     "release-information": "リリースリリース情報",
     "ai-service-configurations": "AIサービス構成",
-    "webdav-configurations": "WebDAV設定",
     "category-visibility-settings": "カテゴリ表示設定",
     "github-connected": "GitHub に接続済み",
     "github-not-configured": "サーバーで GitHub が設定されていません"
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "バックアップ/エクスポート時にキーを含める",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "AI 構成、WebDAV、プロキシ、リモート ダウンロード、バックエンド サーバーのキーが含まれています"
+    "includes-keys-for-ai-configs": "AI設定とバックエンドサーバーのキーを含みます"
   },
   "mcpSettingsPanel": {
     "copied": "コピーされました",

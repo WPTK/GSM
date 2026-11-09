@@ -10,7 +10,6 @@ export const buildPersistedSnapshot = (
 ): PersistedSnapshot => ({
   repositories: [],
   gists: [],
-  starredGists: [],
   releases: [],
   releaseSubscriptions: [],
   readReleases: [],
@@ -26,7 +25,6 @@ export const buildPersistedSnapshot = (
  */
 export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
   discoveryRepos: {
-    trending: [{ id: 1, name: 'should-not-persist' }],
     'hot-release': [],
     'most-popular': [],
     topic: [],
@@ -34,7 +32,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
     'code-search': [],
   },
   discoveryIsLoading: {
-    trending: true,
     'hot-release': true,
     'most-popular': true,
     topic: true,
@@ -42,7 +39,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
     'code-search': true,
   },
   discoveryLastRefresh: {
-    trending: '2026-02-01T00:00:00.000Z',
     'hot-release': '2026-02-02T00:00:00.000Z',
     'most-popular': '2026-02-03T00:00:00.000Z',
     topic: '2026-02-04T00:00:00.000Z',
@@ -50,7 +46,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
     'code-search': '2026-02-06T00:00:00.000Z',
   },
   discoveryTotalCount: {
-    trending: 100,
     'hot-release': 80,
     'most-popular': 60,
     topic: 40,
@@ -58,7 +53,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
     'code-search': 10,
   },
   discoveryHasMore: {
-    trending: true,
     'hot-release': true,
     'most-popular': true,
     topic: true,
@@ -66,7 +60,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
     'code-search': true,
   },
   discoveryNextPage: {
-    trending: 6,
     'hot-release': 5,
     'most-popular': 4,
     topic: 3,
@@ -74,7 +67,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
     'code-search': 2,
   },
   discoveryScrollPositions: {
-    trending: 120,
     'hot-release': 80,
     'most-popular': 40,
     topic: 20,
@@ -85,7 +77,6 @@ export const buildTransientDiscoverySnapshot = (): PersistedSnapshot => ({
 
 export const buildExpectedResetDiscoveryState = () => ({
   discoveryRepos: {
-    trending: [],
     'hot-release': [],
     'most-popular': [],
     topic: [],
@@ -93,7 +84,6 @@ export const buildExpectedResetDiscoveryState = () => ({
     'code-search': [],
   },
   discoveryLastRefresh: {
-    trending: null,
     'hot-release': null,
     'most-popular': null,
     topic: null,
@@ -101,7 +91,6 @@ export const buildExpectedResetDiscoveryState = () => ({
     'code-search': null,
   },
   discoveryTotalCount: {
-    trending: 0,
     'hot-release': 0,
     'most-popular': 0,
     topic: 0,
@@ -109,7 +98,6 @@ export const buildExpectedResetDiscoveryState = () => ({
     'code-search': 0,
   },
   discoveryHasMore: {
-    trending: false,
     'hot-release': false,
     'most-popular': false,
     topic: false,
@@ -117,7 +105,6 @@ export const buildExpectedResetDiscoveryState = () => ({
     'code-search': false,
   },
   discoveryNextPage: {
-    trending: 1,
     'hot-release': 1,
     'most-popular': 1,
     topic: 1,
@@ -125,7 +112,6 @@ export const buildExpectedResetDiscoveryState = () => ({
     'code-search': 1,
   },
   discoveryIsLoading: {
-    trending: false,
     'hot-release': false,
     'most-popular': false,
     topic: false,
@@ -133,7 +119,6 @@ export const buildExpectedResetDiscoveryState = () => ({
     'code-search': false,
   },
   discoveryScrollPositions: {
-    trending: 0,
     'hot-release': 0,
     'most-popular': 0,
     topic: 0,

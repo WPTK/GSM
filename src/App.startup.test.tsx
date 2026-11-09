@@ -100,10 +100,6 @@ vi.mock('./components/ReleaseTimeline', () => {
   mocks.loadedViews.add('releases');
   return { ReleaseTimeline: () => <div data-testid="releases-view" /> };
 });
-vi.mock('./components/ForkTimeline', () => {
-  mocks.loadedViews.add('forks');
-  return { ForkTimeline: () => <div data-testid="forks-view" /> };
-});
 vi.mock('./components/SettingsPanel', () => {
   mocks.loadedViews.add('settings');
   return { SettingsPanel: () => <div data-testid="settings-view" /> };
@@ -113,15 +109,8 @@ vi.mock('./components/DiscoveryView', () => {
   mocks.loadedViews.add('subscription');
   return { DiscoveryView: () => <div data-testid="subscription-view" /> };
 });
-vi.mock('./components/GistView', () => {
-  mocks.loadedViews.add('gists');
-  return { GistView: () => <div data-testid="gists-view" /> };
-});
 vi.mock('./components/BackToTop', () => ({ BackToTop: () => null }));
 vi.mock('./components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }: { children: unknown }) => children }));
-vi.mock('./components/SyncModeChoiceModal', () => ({ SyncModeChoiceModal: () => null }));
-vi.mock('./components/UpdateNotificationBanner', () => ({ UpdateNotificationBanner: () => null }));
-vi.mock('./components/ListsPushIndicator', () => ({ ListsPushIndicator: () => null }));
 
 import App from './App';
 
@@ -173,9 +162,7 @@ describe('App backend initialization', () => {
     const lazyViews = [
       ['settings', 'settings-view'],
       ['subscription', 'subscription-view'],
-      ['gists', 'gists-view'],
       ['releases', 'releases-view'],
-      ['forks', 'forks-view'],
     ] as const;
 
     for (const [currentView, testId] of lazyViews) {

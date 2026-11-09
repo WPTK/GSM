@@ -54,7 +54,7 @@ describe('applyDiscoveryAnalysisSuccess', () => {
       analysisFailed: false,
     });
     expect(patched.rank).toBe(3);
-    expect(patched.channel).toBe('trending');
+    expect(patched.channel).toBe('hot-release');
     expect(patched.platform).toBe('Macos');
   });
 

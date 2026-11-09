@@ -229,7 +229,6 @@
     "logout": "Logout",
     "logout-only-clears-credentials-repositories-ai-a": "Logout only clears credentials. Repositories, AI analysis, and categories stay on this device; signing back in with the same GitHub account (even a new token) restores them. To completely clear all data, go to Settings → Data Management.",
     "menu-repositories": "Repositories",
-    "menu-gists": "Gist",
     "menu-releases": "Releases",
     "menu-forks": "Forks",
     "menu-subscription": "Discover",
@@ -622,7 +621,6 @@
     "github-stars-repository-list": "GitHub Stars repository list",
     "release-information": "Release information",
     "ai-service-configurations": "AI service configurations",
-    "webdav-configurations": "WebDAV configurations",
     "category-visibility-settings": "Category visibility settings",
     "github-connected": "GitHub connected",
     "github-not-configured": "GitHub is not configured on the server"
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Include keys in backup/export",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "Includes keys for AI configs, WebDAV, proxy, remote download, and backend server"
+    "includes-keys-for-ai-configs": "Includes keys for AI configs and the backend server"
   },
   "mcpSettingsPanel": {
     "copied": "Copied",

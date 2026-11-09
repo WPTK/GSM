@@ -229,7 +229,6 @@
     "logout": "Abmelden",
     "logout-only-clears-credentials-repositories-ai-a": "Nach der Abmeldung werden nur die Anmeldedaten gelöscht. Lokale Daten wie Lager, KI-Analyse und Klassifizierung bleiben erhalten; Es wird automatisch vererbt, wenn Sie das Token ändern und sich erneut mit demselben GitHub-Konto anmelden. Um alle Daten vollständig zu löschen, gehen Sie zu „Einstellungen → Datenverwaltung“.",
     "menu-repositories": "Lagerhaus",
-    "menu-gists": "Gist",
     "menu-releases": "freigeben",
     "menu-forks": "Replik",
     "menu-subscription": "Entdecken",
@@ -621,7 +620,6 @@
     "github-stars-repository-list": "GitHub Stars-Repository-Liste",
     "release-information": "Release-Informationen veröffentlichen",
     "ai-service-configurations": "KI-Dienstkonfiguration",
-    "webdav-configurations": "WebDAV-Konfiguration",
     "category-visibility-settings": "Anzeigeeinstellungen für Kategorien",
     "version": "Version",
     "github-connected": "GitHub verbunden",
@@ -899,7 +897,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Beziehen Sie beim Sichern/Exportieren Schlüssel mit ein",
-    "includes-keys-for-ai-configs-webdav-proxy-remote": "Enthält Schlüssel für AI-Konfiguration, WebDAV, Proxy, Remote-Download und Backend-Server"
+    "includes-keys-for-ai-configs": "Enthält Schlüssel für KI-Konfigurationen und den Backend-Server"
   },
   "mcpSettingsPanel": {
     "copied": "Kopiert",
