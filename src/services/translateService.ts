@@ -17,10 +17,10 @@ export interface TranslateOptions {
   textType?: 'html' | 'plain';
 }
 
-/** 微软 Edge 翻译（免费、无需鉴权）。旧版 Bearer token 鉴权端点已下线（404）。 */
-const MS_TRANSLATE_URL = 'https://edge.microsoft.com/translate/translatetext';
-/** Google 翻译免费接口（Chrome 扩展同款，CORS 全放行）。 */
-const GOOGLE_TRANSLATE_URL = 'https://clients5.google.com/translate_a/t';
+/** Translation goes through the same-origin relay (server/src/routes/egress.ts); the browser never calls the engines directly. */
+const MS_TRANSLATE_URL = '/api/translate/microsoft';
+
+const GOOGLE_TRANSLATE_URL = '/api/translate/google';
 
 /** 翻译请求超时：单批最多 50k 字符，慢网下放宽到 20s；超时同时覆盖响应体读取。 */
 const TRANSLATE_TIMEOUT_MS = 20_000;

@@ -2,7 +2,6 @@ import { useT } from "../i18n/useT";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Release } from '../types';
-import { sendToRpcDownload } from '../services/rpcDownloadService';
 import { AIService } from '../services/aiService';
 import { useAppStore } from '../store/useAppStore';
 import { useDialog } from '../hooks/useDialog';
@@ -13,37 +12,28 @@ export type ReleaseArtifactSummaryState = {
   error?: string;
 };
 
-export type RpcDownloadState = 'idle' | 'sending' | 'sent';
-
-export interface RpcDownloadLink {
-  url: string;
-  name: string;
-  updatedAt?: string;
-}
+export type DownloadState = 'idle' | 'sending';
 
 // 同一资产更新后 URL 不变但 updatedAt 会变，key 带上版本，
-// 否则旧版本的"已发送 ✓"会错误地残留在新版本上。
-export const computeRpcDownloadKey = (link: { url: string; updatedAt?: string }): string =>
+// 否则旧版本的状态会错误地残留在新版本上。
+export const computeDownloadKey = (link: { url: string; updatedAt?: string }): string =>
   `${link.url}@${link.updatedAt ?? ''}`;
 
 export interface ReleaseArtifactActions {
   summaries: Record<number, ReleaseArtifactSummaryState>;
-  rpcDownloadStates: Record<string, RpcDownloadState>;
-  sendRpcDownload: (link: RpcDownloadLink) => Promise<void>;
   generateSummary: (release: Release) => Promise<void>;
   cancelSummaryRequests: () => void;
-  /** 清空 summaries 与 RPC 发送状态（sheet 在 loadReleases 时重置，原为其本地 state 置空）。 */
+  /** 清空 summaries（sheet 在 loadReleases 时重置，原为其本地 state 置空）。 */
   reset: () => void;
 }
 
 /**
- * Release 资产动作（RPC 发送 + AI 总结），规范语义取自 ReleaseCard 版本；
+ * Release 资产动作（AI 总结），规范语义取自 ReleaseCard 版本；
  * useRepositoryReleaseSheet 委托本 hook（ADR 0001：同一逻辑不允许第三份拷贝）。
  */
 export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
-  const { language, backendApiSecret, aiConfigs, activeAIConfig } = useAppStore(useShallow((state) => ({
+  const { language, aiConfigs, activeAIConfig } = useAppStore(useShallow((state) => ({
     language: state.language,
-    backendApiSecret: state.backendApiSecret,
     aiConfigs: state.aiConfigs,
     activeAIConfig: state.activeAIConfig,
   })));
@@ -51,16 +41,6 @@ export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
   const t = useT('app');
 
   const [summaries, setSummaries] = useState<Record<number, ReleaseArtifactSummaryState>>({});
-  // 渲染态用 useState Record 取代原 ReleaseCard 的 refs + forceUpdate（渲染等价）；
-  // 同步镜像 ref 保留原 ref 的同步短路语义：同一事件循环内的快速连点不会被
-  // setState 的异步批处理放过，避免重复发送。
-  const rpcDownloadStatesRef = useRef<Record<string, RpcDownloadState>>({});
-  const [rpcDownloadStates, setRpcDownloadStates] = useState<Record<string, RpcDownloadState>>({});
-  const applyRpcDownloadState = useCallback((key: string, state: RpcDownloadState) => {
-    rpcDownloadStatesRef.current = { ...rpcDownloadStatesRef.current, [key]: state };
-    setRpcDownloadStates(rpcDownloadStatesRef.current);
-  }, []);
-
   const summaryAbortRefs = useRef<Record<number, AbortController | undefined>>({});
 
   const cancelSummaryRequests = useCallback(() => {
@@ -75,37 +55,7 @@ export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
     // 迟到的完成会回写旧结果到刚清空的状态里。
     cancelSummaryRequests();
     setSummaries({});
-    rpcDownloadStatesRef.current = {};
-    setRpcDownloadStates({});
   }, [cancelSummaryRequests]);
-
-  const sendRpcDownload = useCallback(async (link: RpcDownloadLink) => {
-    const key = computeRpcDownloadKey(link);
-    // 仅在发送进行中时短路，允许发送完成后再次点击重新发送
-    if (rpcDownloadStatesRef.current[key] === 'sending') return;
-
-    // 重试开始即清除旧的成功态：若本次失败/异常，行内不得残留 ✓，
-    // 否则卡片会把失败的重试报告成成功。
-    applyRpcDownloadState(key, 'sending');
-    try {
-      const result = await sendToRpcDownload(link.url, link.name, backendApiSecret || undefined);
-      if (result.success) {
-        applyRpcDownloadState(key, 'sent');
-        toast(t('useReleaseArtifactActions.sent-to-remote-downloader'), 'success');
-      } else {
-        applyRpcDownloadState(key, 'idle');
-        toast(
-          result.error === 'RPC service not running'
-            ? t('useReleaseArtifactActions.remote-download-service-not-running-please-check')
-            : result.error || t('useReleaseArtifactActions.send-failed'),
-          'error'
-        );
-      }
-    } catch {
-      applyRpcDownloadState(key, 'idle');
-      toast(t('useReleaseArtifactActions.remote-download-service-not-running-please-check'), 'error');
-    }
-  }, [applyRpcDownloadState, backendApiSecret, t, toast]);
 
   const generateSummary = useCallback(async (release: Release) => {
     const existing = summaries[release.id];
@@ -169,10 +119,8 @@ export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
 
   return useMemo(() => ({
     summaries,
-    rpcDownloadStates,
-    sendRpcDownload,
     generateSummary,
     cancelSummaryRequests,
     reset,
-  }), [summaries, rpcDownloadStates, sendRpcDownload, generateSummary, cancelSummaryRequests, reset]);
+  }), [summaries, generateSummary, cancelSummaryRequests, reset]);
 };

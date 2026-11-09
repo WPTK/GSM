@@ -6,7 +6,6 @@ import type {
   McpServiceConfig,
   Release,
 } from '../types';
-import type { ElectronPluginAPI } from '../plugins/types';
 import type { LogEntry } from './logger';
 
 /** Alias of persisted MCP prefs — keep identical to McpServiceConfig to avoid drift. */
@@ -112,10 +111,6 @@ interface ElectronAPI {
   mcp?: McpElectronAPI;
   /** Diagnostics bridge (desktop only; absent in web builds). */
   diagnostics?: DiagnosticsElectronAPI;
-  plugins?: ElectronPluginAPI & {
-    registry?: { load: () => Promise<import('./pluginRegistryService').PluginRegistryLoadResult> };
-    marketplace?: import('./pluginMarketplaceService').MarketplaceElectronAPI;
-  };
 }
 
 declare global {

@@ -1,9 +1,7 @@
 import { translateBackendError } from '../utils/backendErrors';
-import { normalizeBackendUrl } from '../utils/backendUrl';
 import { logger } from './logger';
 
-import { Repository, Release, AIConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
-import { useAppStore } from '../store/useAppStore';
+import { Repository, Release, AIConfig, WebDAVConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
 import { isReadmeCandidateItem, type GitHubReadmeCandidateItem } from '../utils/readmeVariants';
 
 interface GitHubContentResponse {
@@ -15,8 +13,6 @@ interface GitHubTreeResponse {
   tree?: GitHubReadmeCandidateItem[];
   truncated?: boolean;
 }
-
-const BACKEND_URL_STORAGE_KEY = 'github-stars-manager-backend-url';
 
 const JSON_ARRAY_SETTING_KEYS = new Set([
   'hiddenDefaultCategoryIds',
@@ -66,34 +62,26 @@ const hydrateBackendSettings = (settings: Record<string, unknown>): Record<strin
 };
 
 /**
- * 共享 helper：构造后端 API 鉴权头（fullstack Web 模式下 API_SECRET 的
- * `Authorization: Bearer ...`）。服务端 `authMiddleware` 对所有 `/api/*`
- * （除 health）要求该头，直接 `fetch(backendUrl/...)` 的传输层必须复用它，
- * 否则在配置 API_SECRET 时一律 401。
+ * Headers for same-origin backend calls. Authentication is the HttpOnly
+ * `gsm_session` cookie (set by POST /api/auth/session), which the browser
+ * attaches itself, so no secret is ever read from, or written to, browser
+ * storage or request headers.
  */
-export const getBackendAuthHeaders = (): Record<string, string> => {
-  let secret = '';
-  try {
-    secret = useAppStore.getState().backendApiSecret || '';
-  } catch {
-    secret = '';
-  }
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (secret) {
-    headers['Authorization'] = `Bearer ${secret}`;
-  }
-  return headers;
+export const getBackendAuthHeaders = (): Record<string, string> => ({
+  'Content-Type': 'application/json',
+});
+
+/** The only backend this UI talks to: its own origin. Null outside http(s) (e.g. file://). */
+const sameOriginApiUrl = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  const { protocol, origin } = window.location;
+  return protocol === 'http:' || protocol === 'https:' ? `${origin}/api` : null;
 };
 
-const readStoredBackendUrl = (): string | null => {
-  try {
-    return normalizeBackendUrl(localStorage.getItem(BACKEND_URL_STORAGE_KEY) || '');
-  } catch {
-    return null;
-  }
-};
+export interface BackendAuthStatus {
+  authenticated: boolean;
+  githubConfigured: boolean;
+}
 
 class BackendAdapter {
   private _backendUrl: string | null = null;
@@ -118,7 +106,7 @@ class BackendAdapter {
     this._backendUrl = url;
   }
 
-  async init(preferredUrl?: string): Promise<void> {
+  async init(): Promise<void> {
     if (this._beforeInitHook) {
       try {
         await this._beforeInitHook();
@@ -127,48 +115,28 @@ class BackendAdapter {
       }
     }
     try {
-      const configuredUrl = preferredUrl ? normalizeBackendUrl(preferredUrl) : readStoredBackendUrl();
-      // Same-origin probing only makes sense when the UI itself is served over
-      // HTTP(S) (nginx fullstack image / vite dev server). The desktop client
-      // loads the bundle from `file://`, where `location.origin` is `file://`
-      // and `${origin}/api` becomes `file:///api` — Chromium logs every probe
-      // as `net::ERR_FILE_NOT_FOUND` before falling back to local-only mode.
-      const sameOriginApiUrl = (() => {
-        const { protocol, origin } = window.location;
-        return protocol === 'http:' || protocol === 'https:' ? `${origin}/api` : null;
-      })();
-      const urls = preferredUrl
-        ? (configuredUrl ? [configuredUrl] : [])
-        : (configuredUrl ? [configuredUrl] : (sameOriginApiUrl ? [sameOriginApiUrl] : []));
-      if (!preferredUrl && !configuredUrl && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-        urls.push('http://localhost:3000/api');
-      }
-
-      for (const baseUrl of urls) {
+      const baseUrl = sameOriginApiUrl();
+      if (baseUrl) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
         try {
           // redirect: 'error' — a 307/308 must never bounce the probe (or any
-          // later authenticated request) to a different, possibly plaintext,
-          // destination.
+          // later authenticated request) to a different destination.
           const res = await fetch(`${baseUrl}/health`, {
             signal: controller.signal,
             redirect: 'error',
+            credentials: 'same-origin',
           });
-
           if (res.ok) {
             const data = await res.json();
             if (data.status === 'ok') {
-              // In-memory commit only. Persistence is an explicit caller
-              // decision (rememberActiveUrl) after its own auth checks, so a
-              // candidate that later fails authentication is never remembered.
               this.commitBackendUrl(baseUrl);
               logger.info('backendAdapter', 'Backend connected', { url: baseUrl });
               return;
             }
           }
         } catch {
-          // Try next URL
+          // Fall through to local-only mode
         } finally {
           clearTimeout(timeoutId);
         }
@@ -180,8 +148,8 @@ class BackendAdapter {
       this.commitBackendUrl(null);
       logger.info('backendAdapter', 'Backend not available, using local-only mode');
     } finally {
-      // 探测结束：标记结论已落定并通知订阅者。即使可用性没有翻转
-      // （如纯浏览器模式保持 null），订阅方也需要重新取值。
+      // 探测结束：标记结论已落定并通知订阅者。
+      setBackendProbed();
       for (const listener of this._availabilityListeners) listener();
     }
   }
@@ -197,24 +165,6 @@ class BackendAdapter {
   /** 供直接 fetch 后端路由的传输层复用（公开版 getAuthHeaders）。 */
   get backendAuthHeaders(): Record<string, string> {
     return getBackendAuthHeaders();
-  }
-
-  get configuredUrl(): string | null {
-    return this._backendUrl || readStoredBackendUrl();
-  }
-
-  /**
-   * Persist the active backend URL (the same storage the login screen prefills
-   * from). Call only after caller-side checks — auth, session restore — have
-   * fully succeeded; init() itself never persists candidate URLs.
-   */
-  rememberActiveUrl(): void {
-    if (!this._backendUrl) return;
-    try {
-      localStorage.setItem(BACKEND_URL_STORAGE_KEY, this._backendUrl);
-    } catch {
-      // A restricted browser may block storage; keep this session connected.
-    }
   }
 
   private getAuthHeaders(): Record<string, string> {
@@ -273,7 +223,7 @@ class BackendAdapter {
     }
 
     try {
-      const response = await fetch(url, { ...options, signal: controller.signal, redirect: 'error' });
+      const response = await fetch(url, { ...options, signal: controller.signal, redirect: 'error', credentials: 'same-origin' });
       if (logger.isDebugMode()) {
         // Capture response headers
         const responseHeaders: Record<string, string> = {};
@@ -737,11 +687,51 @@ class BackendAdapter {
   async fetchAIConfigs(): Promise<AIConfig[]> {
     if (!this._backendUrl) throw new Error('Backend not available');
 
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/ai?decrypt=true`, {
+    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/ai`, {
       headers: this.getAuthHeaders()
     });
     if (!res.ok) await this.throwTranslatedError(res, 'Fetch AI configs error');
     return res.json() as Promise<AIConfig[]>;
+  }
+
+  async syncWebDAVConfigs(configs: WebDAVConfig[]): Promise<void> {
+    if (!this._backendUrl) return;
+
+    // Pre-sync validation: warn about configs that will likely be skipped
+    for (const c of configs) {
+      if (!c.password) {
+        logger.warn('backendAdapter', 'WebDAV config has empty password, will be skipped', { name: c.name, id: c.id });
+      }
+    }
+
+    const res = await this.fetchWithRetry(`${this._backendUrl}/configs/webdav/bulk`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ configs })
+    }, 30000, 3);
+    if (!res.ok) await this.throwTranslatedError(res, 'Sync WebDAV configs error');
+
+    // Parse response and throw on partial failure so callers don't clear pending changes
+    try {
+      const data = await res.json() as { synced?: number; skipped?: number; errors?: Array<{ id: string; name: string; reason: string }> };
+      if (data.skipped && data.skipped > 0) {
+        const reasons = data.errors?.map(e => `${e.name}: ${e.reason}`).join('; ') ?? '';
+        throw new Error(`Sync WebDAV configs partial failure: ${data.skipped} skipped${reasons ? ` (${reasons})` : ''}`);
+      }
+    } catch (err) {
+      // Re-throw our own errors; ignore JSON parse errors from empty responses
+      if (err instanceof Error && err.message.startsWith('Sync WebDAV configs partial failure')) throw err;
+    }
+  }
+
+  async fetchWebDAVConfigs(): Promise<WebDAVConfig[]> {
+    if (!this._backendUrl) throw new Error('Backend not available');
+
+    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/webdav`, {
+      headers: this.getAuthHeaders()
+    });
+    if (!res.ok) await this.throwTranslatedError(res, 'Fetch WebDAV configs error');
+    return res.json() as Promise<WebDAVConfig[]>;
   }
 
   // === Embedding Configs ===
@@ -770,7 +760,7 @@ class BackendAdapter {
   async fetchEmbeddingConfigs(): Promise<EmbeddingConfig[]> {
     if (!this._backendUrl) throw new Error('Backend not available');
 
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/embedding?decrypt=true`, {
+    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/embedding`, {
       headers: this.getAuthHeaders()
     });
     if (!res.ok) await this.throwTranslatedError(res, 'Fetch embedding configs error');
@@ -793,7 +783,7 @@ class BackendAdapter {
   async fetchVectorSearchConfig(): Promise<VectorSearchConfig> {
     if (!this._backendUrl) throw new Error('Backend not available');
 
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/vector-search?decrypt=true`, {
+    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/vector-search`, {
       headers: this.getAuthHeaders()
     });
     if (!res.ok) await this.throwTranslatedError(res, 'Fetch vector search config error');
@@ -875,39 +865,55 @@ class BackendAdapter {
     }
   }
 
-  async verifyAuth(): Promise<boolean> {
-    if (!this._backendUrl) return false;
+  // === Session (cookie) auth ===
 
-    try {
-      const res = await this.fetchWithTimeout(`${this._backendUrl}/settings`, {
-        headers: this.getAuthHeaders(),
-      }, 5000);
-      return res.ok;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Restore the GitHub token stored on the backend for cross-browser/device
-   * session recovery. Only callable when the backend is reachable AND this
-   * client already authenticates (Bearer API_SECRET) — the backend never hands
-   * it out to unauthenticated callers.
-   */
-  async restoreAuth(): Promise<{ github_token: string | null } | null> {
+  /** Whether the current cookie session is valid, and whether the server holds a GitHub token. */
+  async authStatus(): Promise<BackendAuthStatus | null> {
     if (!this._backendUrl) return null;
-
     try {
-      const res = await this.fetchWithTimeout(`${this._backendUrl}/sync/auth`, {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-      }, 8000);
+      const res = await this.fetchWithTimeout(`${this._backendUrl}/auth/status`, undefined, 5000);
       if (!res.ok) return null;
-      return res.json() as Promise<{ github_token: string | null }>;
+      const data = await res.json() as Partial<BackendAuthStatus>;
+      return {
+        authenticated: data.authenticated === true,
+        githubConfigured: data.githubConfigured === true,
+      };
     } catch {
       return null;
     }
   }
+
+  /**
+   * Exchange the API secret for an HttpOnly session cookie. The secret is sent
+   * once, in the request body, and is not retained anywhere.
+   * Returns true on success, false when the secret is wrong; throws on transport failure.
+   */
+  async login(secret: string): Promise<boolean> {
+    if (!this._backendUrl) throw new Error('Backend not available');
+    const res = await this.fetchWithTimeout(`${this._backendUrl}/auth/session`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ secret }),
+    }, 10000);
+    if (res.status === 204 || res.ok) return true;
+    if (res.status === 401) return false;
+    await this.throwTranslatedError(res, 'Login error');
+    return false;
+  }
+
+  /** End the cookie session. */
+  async logout(): Promise<void> {
+    if (!this._backendUrl) return;
+    try {
+      await this.fetchWithTimeout(`${this._backendUrl}/auth/session`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      }, 5000);
+    } catch {
+      // Best effort: the cookie also expires on its own.
+    }
+  }
+
 
   // === GitHub Search Proxy ===
 

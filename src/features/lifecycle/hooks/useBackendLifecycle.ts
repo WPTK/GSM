@@ -4,7 +4,6 @@ import {
   startAutoSync,
   stopAutoSync,
   syncFromBackend,
-  syncLocalGitHubTokenToBackend,
   tryRestoreAuthFromBackend,
 } from '../../../services/autoSync';
 import {
@@ -12,7 +11,6 @@ import {
   startMcpElectronBridge,
   stopMcpElectronBridge,
 } from '../../../services/mcpElectronBridge';
-import { startPluginSnapshotBridge, stopPluginSnapshotBridge } from '../../../plugins/pluginSnapshotBridge';
 
 /**
  * Owns application-wide backend and Electron MCP startup after Store hydration.
@@ -23,7 +21,6 @@ export const useBackendLifecycle = (hasHydrated: boolean): void => {
   useEffect(() => {
     return () => {
       stopMcpElectronBridge();
-      stopPluginSnapshotBridge();
     };
   }, []);
 
@@ -41,9 +38,6 @@ export const useBackendLifecycle = (hasHydrated: boolean): void => {
           // receives authentication state before it consumes backend records.
           await tryRestoreAuthFromBackend();
           if (!cancelled) {
-            await syncLocalGitHubTokenToBackend();
-          }
-          if (!cancelled) {
             await syncFromBackend();
           }
           if (!cancelled) {
@@ -59,7 +53,6 @@ export const useBackendLifecycle = (hasHydrated: boolean): void => {
         if (!cancelled) {
           startMcpElectronBridge();
           refreshMcpElectronBridge();
-          startPluginSnapshotBridge();
         }
       }
     };

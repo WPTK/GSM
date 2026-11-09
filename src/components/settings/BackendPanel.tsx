@@ -1,14 +1,10 @@
 
 import { TranslateFn } from '../../i18n/useT';
-import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import React from 'react';
-import { Server, Plug, RefreshCw, Upload, Download, CheckCircle, AlertCircle, Route } from 'lucide-react';
+import { Server, Plug, RefreshCw, Upload, Download, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
 import { useBackendSettingsActions } from '../../features/settings/hooks/useBackendSettingsActions';
-import { useAppStore } from '../../store/useAppStore';
-import type { RouteMode } from '../../types';
 
 interface BackendPanelProps {
   t: TranslateFn;
@@ -18,38 +14,15 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
   const {
     status,
     health,
-    urlInput,
-    secretInput,
+    githubConfigured,
     backendAvailable,
     isSyncingToBackend,
     isSyncingFromBackend,
-    setUrlInput,
-    setSecretInput,
     testConnection: handleTestConnection,
+    logout: handleLogout,
     syncToBackend: handleSyncToBackend,
     syncFromBackend: handleSyncFromBackend,
   } = useBackendSettingsActions();
-  const routeMode = useAppStore((state) => state.routeMode);
-  const setRouteMode = useAppStore((state) => state.setRouteMode);
-
-  const routeOptions: Array<{ value: RouteMode; label: string; hint: string }> = [
-    {
-      value: 'auto',
-      label: t('backendPanel.auto'),
-      hint: t('backendPanel.use-backend-when-available-otherwise-this-device'),
-    },
-    {
-      value: 'backend',
-      label: t('backendPanel.prefer-backend'),
-      hint: t('backendPanel.backend-proxied-request-families-prefer-the-back'),
-    },
-    {
-      value: 'browser',
-      label: t('backendPanel.browser-direct'),
-      hint: t('backendPanel.skip-backend-proxying-and-use-this-device-networ'),
-    },
-  ];
-
   const getStatusIcon = () => {
     switch (status) {
       case 'connected':
@@ -105,84 +78,33 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
       )}
 
       <div className="p-4 bg-background dark:bg-muted/40 rounded-lg border border-border dark:border-border">
-        <div className="flex items-center space-x-2 mb-1">
-          <Route className="w-4 h-4 text-muted-foreground dark:text-muted-foreground" />
-          <h4 className="text-sm font-medium text-foreground dark:text-foreground">
-            {t('backendPanel.network-request-routing')}
-          </h4>
-        </div>
-        <p className="text-xs text-muted-foreground dark:text-muted-foreground mb-3">
-          {t('backendPanel.choose-where-backend-proxied-github-release-requ')}
-        </p>
-        <RadioGroup
-          value={routeMode}
-          onValueChange={(value) => setRouteMode(value as RouteMode)}
-          className="gap-3"
-        >
-          {routeOptions.map((option) => (
-            <label
-              key={option.value}
-              htmlFor={`route-mode-${option.value}`}
-              className="flex items-start space-x-3 rounded-lg p-2 hover:bg-muted/50 dark:hover:bg-muted/30 cursor-pointer"
-            >
-              <RadioGroupItem value={option.value} id={`route-mode-${option.value}`} className="mt-0.5" />
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground dark:text-foreground">{option.label}</div>
-                <div className="text-xs text-muted-foreground dark:text-muted-foreground">{option.hint}</div>
-              </div>
-            </label>
-          ))}
-        </RadioGroup>
-        {!backendAvailable && (
-          <p className="text-xs text-warning mt-3">
-            {t('backendPanel.the-backend-is-unreachable-right-now-so-auto-pre')}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-foreground dark:text-foreground">
+            {githubConfigured === false
+              ? t('backendPanel.github-not-configured')
+              : githubConfigured === true
+                ? t('backendPanel.github-connected')
+                : null}
           </p>
-        )}
-        <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-3">
-          {t('backendPanel.tip-pick-browser-direct-when-the-server-e-g-a-ma')}
-        </p>
-      </div>
-
-      <div className="p-4 bg-background dark:bg-muted/40 rounded-lg border border-border dark:border-border">
-        <label htmlFor="backend-url" className="block text-sm font-medium text-foreground dark:text-muted-foreground mb-2">
-          {t('backendPanel.backend-url')}
-        </label>
-        <Input
-          id="backend-url"
-          type="url"
-          value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
-          className="w-full px-3 py-2 border border-border dark:border-border rounded-lg bg-card dark:bg-card text-foreground dark:text-foreground focus:ring-2 focus:ring-(--ui-focus-ring) focus:border-transparent focus:outline-none mb-3"
-          placeholder="https://example.com"
-        />
-        <label htmlFor="backend-api-secret" className="block text-sm font-medium text-foreground dark:text-muted-foreground mb-2">
-          {t('backendPanel.api-secret')}
-        </label>
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-          <Input
-            id="backend-api-secret"
-            type="password"
-            value={secretInput}
-            onChange={(e) => setSecretInput(e.target.value)}
-            className="flex-1 px-3 py-2 border border-border dark:border-border rounded-lg bg-card dark:bg-card text-foreground dark:text-foreground focus:ring-2 focus:ring-(--ui-focus-ring) focus:border-transparent focus:outline-none"
-            placeholder={t('backendPanel.enter-backend-api-secret-optional')}
-          />
-          <Button
-            onClick={handleTestConnection}
-            disabled={status === 'checking'}
-            className="flex items-center justify-center space-x-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {status === 'checking' ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Plug className="w-4 h-4" />
-            )}
-            <span>{t('backendPanel.test-connection')}</span>
-          </Button>
+          <div className="flex space-x-3">
+            <Button
+              onClick={handleTestConnection}
+              disabled={status === 'checking'}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {status === 'checking' ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plug className="w-4 h-4" />
+              )}
+              <span>{t('backendPanel.test-connection')}</span>
+            </Button>
+            <Button variant="outline" onClick={handleLogout} className="flex items-center space-x-2">
+              <LogOut className="w-4 h-4" />
+              <span>{t('header.logout')}</span>
+            </Button>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-2">
-          {t('backendPanel.the-backend-url-is-shared-with-the-login-screen')}
-        </p>
       </div>
 
       {backendAvailable && (

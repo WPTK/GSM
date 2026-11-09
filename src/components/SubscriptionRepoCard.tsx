@@ -1,7 +1,8 @@
 import { getIntlLocale } from '../i18n/format';
+import { imageProxySrc } from '../utils/imageProxy';
 import { useT } from "../i18n/useT";
 import React, { useState, useMemo, useCallback } from 'react';
-import { Star, StarOff, ExternalLink, Bot, GitFork, Sparkles, BookOpen, AlertTriangle, FileText, Calendar } from 'lucide-react';
+import { Star, StarOff, ExternalLink, Bot, GitFork, Sparkles, AlertTriangle, FileText, Calendar } from 'lucide-react';
 import { getPlatformIcon as getSharedPlatformIcon } from './platformMeta';
 import type { DiscoveryRepo } from '../types';
 import { useAppStore } from '../store/useAppStore';
@@ -87,13 +88,6 @@ export const SubscriptionRepoCard: React.FC<SubscriptionRepoCardProps> = ({ repo
     void star(onStar);
   };
 
-  // 处理在ZRead打开
-  const handleOpenInZRead = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const zreadUrl = `https://zread.ai/${repo.full_name}`;
-    window.open(zreadUrl, '_blank');
-  }, [repo.full_name]);
-
   // 处理单个项目AI分析（校验/中止/patch/toast 均在 hook）
   const handleAnalyze = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -148,7 +142,7 @@ export const SubscriptionRepoCard: React.FC<SubscriptionRepoCardProps> = ({ repo
             <div className="flex items-center gap-2 min-w-0">
               {!desktopSafeMode && repo.owner?.avatar_url && (
                 <img
-                  src={repo.owner.avatar_url}
+                  src={imageProxySrc(repo.owner.avatar_url)}
                   alt={repo.owner.login}
                   className="w-6 h-6 rounded-full flex-shrink-0"
                 />
@@ -181,16 +175,6 @@ export const SubscriptionRepoCard: React.FC<SubscriptionRepoCardProps> = ({ repo
                 ) : (
                   <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 )}
-              </Button>
-
-              {/* ZRead button - hidden on small screens */}
-              <Button
-                size="icon"
-                onClick={handleOpenInZRead}
-                className="app-row-action !hidden sm:!inline-flex"
-                title={t('subscriptionRepoCard.open-in-zread')}
-              >
-                <BookOpen className="w-4 h-4" />
               </Button>
 
               {/* 周刊/推文/频道消息：查看原贴按钮 */}

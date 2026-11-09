@@ -2,7 +2,6 @@ import { Repository, AIConfig, Category, DiscoveryRepo } from '../types';
 import { createGitHubApiService } from './githubApiFactory';
 import { AIService } from './aiService';
 import { backend } from './backendAdapter';
-import { shouldBypassBackend } from './routeMode';
 import { resolveCategoryAssignment, buildCategoryHints } from '../utils/categoryUtils';
 
 export interface AIAnalysisResult {
@@ -39,7 +38,7 @@ export const analyzeRepository = async (options: AnalyzeRepositoryOptions): Prom
   onProgress?.('Fetching README...');
   let readmeContent = '';
   try {
-    readmeContent = (shouldBypassBackend() || !backend.isAvailable)
+    readmeContent = !backend.isAvailable
       ? await githubApi.getRepositoryReadme(owner, name, signal)
       : await backend.getRepositoryReadme(owner, name, signal);
   } catch (error) {

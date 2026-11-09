@@ -25,6 +25,7 @@ import '../styles/github-markdown.scoped.css';
 import { useAppStore } from '../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
 import { safeWriteText, getClipboardErrorMessage } from '../utils/clipboardUtils';
+import { imageProxySrc } from '../utils/imageProxy';
 
 interface MarkdownRendererProps {
   content: string;
@@ -325,6 +326,24 @@ const resolveImageSrc = (imageSrc: string, baseUrl?: string): string => {
   return imageSrc;
 };
 
+/**
+ * The browser only ever loads README images from its own origin: GitHub-hosted
+ * images go through /api/img; anything else is blocked until the reader presses
+ * "Load images" for this README (then it loads straight from its host).
+ */
+const applyImagePolicy = (resolved: string, allowAll: boolean): string | undefined => {
+  const proxied = imageProxySrc(resolved);
+  if (proxied) return proxied;
+  return allowAll ? resolved : undefined;
+};
+
+interface ImagePolicy {
+  allowAll: boolean;
+  reportBlocked: () => void;
+}
+
+const ImagePolicyContext = React.createContext<ImagePolicy>({ allowAll: false, reportBlocked: () => {} });
+
 const UNSAFE_SRC_SET_SCHEME = /^(?!https?:)[a-z][a-z0-9+.-]*:/i;
 
 const SRC_SET_SPACE = /[\t\n\f\r ]/;
@@ -407,13 +426,14 @@ const parseSrcSet = (srcSet: string): Array<{ url: string; descriptor: string }>
  * they are kept exactly as authored — the same contract `resolveImageSrc` has
  * for `img[src]`.
  */
-const resolveSrcSet = (srcSet: string | undefined, baseUrl?: string): string | undefined => {
+const resolveSrcSet = (srcSet: string | undefined, baseUrl: string | undefined, allowAll: boolean): string | undefined => {
   if (!srcSet) return srcSet;
 
   return parseSrcSet(srcSet)
     .map(({ url, descriptor }) => {
       if (UNSAFE_SRC_SET_SCHEME.test(url)) return null;
-      const resolved = resolveImageSrc(url, baseUrl);
+      const resolved = applyImagePolicy(resolveImageSrc(url, baseUrl), allowAll);
+      if (!resolved) return null;
       return descriptor ? `${resolved} ${descriptor}` : resolved;
     })
     .filter((candidate): candidate is string => candidate !== null)
@@ -468,7 +488,14 @@ const MarkdownImage: React.FC<{ src?: string; alt?: string; baseUrl?: string }> 
   const imgRef = useRef<HTMLImageElement>(null);
   const zoomOverlayRef = useRef<HTMLDivElement>(null);
 
-  const imageUrl = useMemo(() => resolveImageSrc(src || '', baseUrl), [src, baseUrl]);
+  const { allowAll, reportBlocked } = useContext(ImagePolicyContext);
+  const resolvedUrl = useMemo(() => resolveImageSrc(src || '', baseUrl), [src, baseUrl]);
+  const policyUrl = useMemo(() => applyImagePolicy(resolvedUrl, allowAll), [resolvedUrl, allowAll]);
+  const isBlocked = !!src && policyUrl === undefined;
+  const imageUrl = policyUrl ?? '';
+  useEffect(() => {
+    if (isBlocked) reportBlocked();
+  }, [isBlocked, reportBlocked]);
   const pictureSources = useContext(PictureSourcesContext);
   // A `<picture>` can select a `<source>` that differs from the `<img>` fallback
   // (dark-mode / AVIF candidates), so the resource the user actually sees is
@@ -662,6 +689,14 @@ const MarkdownImage: React.FC<{ src?: string; alt?: string; baseUrl?: string }> 
   };
 
   if (!src) return null;
+
+  if (isBlocked) {
+    return (
+      <span className="inline-flex items-center rounded border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
+        {alt || t('markdown.images-blocked')}
+      </span>
+    );
+  }
 
   if (hasError) {
     return (
@@ -1025,6 +1060,21 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({
     ];
   }, [enableHtml, mathPlugins]);
 
+  // Per-README opt-in for images the same-origin proxy does not serve. Resets
+  // whenever a different README (content or base) is rendered.
+  const t = useT('app');
+  const [allowAllImages, setAllowAllImages] = useState(false);
+  const [hasBlockedImages, setHasBlockedImages] = useState(false);
+  useEffect(() => {
+    setAllowAllImages(false);
+    setHasBlockedImages(false);
+  }, [content, baseUrl]);
+  const reportBlocked = useCallback(() => setHasBlockedImages(true), []);
+  const imagePolicy = useMemo<ImagePolicy>(
+    () => ({ allowAll: allowAllImages, reportBlocked }),
+    [allowAllImages, reportBlocked],
+  );
+
   const fontSizePx = fontSize === 'small' ? '14px' : fontSize === 'large' ? '18px' : '16px';
 
   const getHeadingId = useCallback((children: React.ReactNode): string | undefined => {
@@ -1048,7 +1098,10 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({
     const PictureSource: React.FC<React.ComponentPropsWithoutRef<'source'> & ExtraProps> = ({
       srcSet,
       ...props
-    }) => <source {...stripAstNode(props)} srcSet={resolveSrcSet(srcSet, baseUrl)} />;
+    }) => {
+      const { allowAll } = useContext(ImagePolicyContext);
+      return <source {...stripAstNode(props)} srcSet={resolveSrcSet(srcSet, baseUrl, allowAll)} />;
+    };
     const isPictureSource = (node: React.ReactNode): boolean =>
       React.isValidElement(node) && node.type === PictureSource;
 
@@ -1163,13 +1216,23 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(({
 
   return (
     <div className={`markdown-body max-w-none ${className}`} style={{ fontSize: fontSizePx }}>
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        rehypePlugins={rehypePlugins}
-        components={markdownComponents}
-      >
-        {content}
-      </ReactMarkdown>
+      {hasBlockedImages && !allowAllImages && (
+        <div className="not-prose mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{t('markdown.images-blocked')}</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => setAllowAllImages(true)}>
+            {t('markdown.load-images')}
+          </Button>
+        </div>
+      )}
+      <ImagePolicyContext.Provider value={imagePolicy}>
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+          components={markdownComponents}
+        >
+          {content}
+        </ReactMarkdown>
+      </ImagePolicyContext.Provider>
     </div>
   );
 });

@@ -9,7 +9,7 @@ import { getPlatformDisplayName, getPlatformIcon } from './platformMeta';
 import { buildReleaseDownloadLinks, type ReleaseDownloadLink } from '../utils/releaseDownloadLinks';
 import { detectInstallableAssets } from '../utils/installableAssets';
 import { formatFileSize } from '../utils/formatBytes';
-import { computeRpcDownloadKey } from '../hooks/useReleaseArtifactActions';
+import { computeDownloadKey } from '../hooks/useReleaseArtifactActions';
 import { useDeviceTarget } from '../hooks/useDeviceTarget';
 
 /**
@@ -76,7 +76,7 @@ export const InstallableAssetRecommendation: React.FC<InstallableAssetRecommenda
   const [best, ...alternatives] = detection.matches;
   const bestLink = linksByAssetId.get(best.assetId);
   const bestDownloadState = bestLink
-    ? downloadStates[computeRpcDownloadKey(bestLink)] ?? 'idle'
+    ? downloadStates[computeDownloadKey(bestLink)] ?? 'idle'
     : 'idle';
   const PlatformIcon = getPlatformIcon(best.platform);
   // 平台未知时不要声称「适配当前设备」：此时候选是并列的全部平台，不是设备匹配结果。
@@ -154,7 +154,7 @@ export const InstallableAssetRecommendation: React.FC<InstallableAssetRecommenda
             {alternatives.map((match) => {
               const link = linksByAssetId.get(match.assetId);
               const downloadState = link
-                ? downloadStates[computeRpcDownloadKey(link)] ?? 'idle'
+                ? downloadStates[computeDownloadKey(link)] ?? 'idle'
                 : 'idle';
               return (
                 <li key={match.assetId} className="flex flex-wrap items-center justify-between gap-2">

@@ -3,15 +3,11 @@
 
 
 import { useT } from '../../../i18n/useT';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Release, ReleaseAsset, Repository } from '../../../types';
 import { backend } from '../../../services/backendAdapter';
-import { createGitHubApiService } from '../../../services/githubApiFactory';
-import { shouldBypassBackend } from '../../../services/routeMode';
-import { useAppStore } from '../../../store/useAppStore';
 import { useDialog } from '../../../hooks/useDialog';
-import { computeRpcDownloadKey, useReleaseArtifactActions } from '../../../hooks/useReleaseArtifactActions';
+import { computeDownloadKey, useReleaseArtifactActions } from '../../../hooks/useReleaseArtifactActions';
 import type { ReleaseDownloadLink } from '../../../utils/releaseDownloadLinks';
 
 const REMOTE_RELEASE_PAGE_SIZE = 100;
@@ -113,28 +109,18 @@ const downloadBrowserBlob = (blob: Blob, fileName: string) => {
 };
 
 export const useRepositoryReleaseSheet = (repository: Repository) => {
-  const {
-
-    githubToken,
-    rpcDownloadConfig,
-  } = useAppStore(useShallow((state) => ({
-    language: state.language,
-    githubToken: state.githubToken,
-    rpcDownloadConfig: state.rpcDownloadConfig,
-  })));
   const { toast } = useDialog();
-  // RPC 发送与 AI 总结动作委托共享 hook（避免第三份拷贝）；summaries/downloadStates
-  // 的对外形状由 hook 供给，downloadStates 的 key 已版本化为 computeRpcDownloadKey(link)。
+  // AI 总结动作委托共享 hook（避免第三份拷贝）；summaries/downloadStates
+  // 的对外形状由 hook 供给，downloadStates 的 key 已版本化为 computeDownloadKey(link)。
   const artifactActions = useReleaseArtifactActions();
-  // 共享 hook 返回的 artifactActions 对象随 summaries/RPC 状态更新换引用——依赖只能
+  // 共享 hook 返回的 artifactActions 对象随 summaries 状态更新换引用——依赖只能
   // 挂它解构出的引用稳定成员（useCallback 零依赖或仅依赖 store 值），否则每次状态
-  // 更新都会连带换 cancel effect / loadReleases / sendAssetToRpc 的身份。
-  const { cancelSummaryRequests, reset: resetArtifactStates, sendRpcDownload } = artifactActions;
+  // 更新都会连带换 cancel effect / loadReleases 的身份。
+  const { cancelSummaryRequests, reset: resetArtifactStates } = artifactActions;
   const [releases, setReleases] = useState<Release[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 非 RPC（浏览器）下载路径的行内 sending 状态不属 RPC 委托范围，留在本 hook；
-  // 同样使用版本化 key，与 RPC 状态合并后对外暴露。
+  // 下载按钮的行内 sending 状态，使用版本化 key。
   const [browserDownloadStates, setBrowserDownloadStates] = useState<Record<string, 'idle' | 'sending'>>({});
   const fetchAbortRef = useRef<AbortController | null>(null);
   const t = useT('repositories');
@@ -175,37 +161,15 @@ export const useRepositoryReleaseSheet = (repository: Repository) => {
 
     try {
       const { owner, name } = getRepositoryCoordinates(repository.full_name);
-      let liveReleases: Release[] | null = null;
-      let backendError: unknown;
-
-      if (!shouldBypassBackend() && backend.isAvailable) {
-        try {
-          liveReleases = await fetchAllPages(async (page, signal) => {
-            const records = await backend.getRepositoryReleases(owner, name, page, REMOTE_RELEASE_PAGE_SIZE, signal);
-            return {
-              releases: records
-                .filter(isPublishedReleaseRecord)
-                .map((record) => mapBackendRelease(record, repository)),
-              hasMore: records.length === REMOTE_RELEASE_PAGE_SIZE,
-            };
-          }, controller.signal);
-        } catch (requestError) {
-          if (isAbortError(requestError)) throw requestError;
-          backendError = requestError;
-        }
-      }
-
-      if (liveReleases === null) {
-        if (!githubToken) {
-          throw backendError || new Error(t('useRepositoryReleaseSheet.configure-a-github-token-in-settings-or-connect'));
-        }
-        const githubApi = createGitHubApiService(githubToken, { direct: true });
-        liveReleases = await fetchAllPages(
-          (page, signal) => githubApi.getRepositoryReleasesPage(owner, name, page, REMOTE_RELEASE_PAGE_SIZE, signal),
-          controller.signal,
-        );
-      }
-
+      const liveReleases = await fetchAllPages(async (page, signal) => {
+        const records = await backend.getRepositoryReleases(owner, name, page, REMOTE_RELEASE_PAGE_SIZE, signal);
+        return {
+          releases: records
+            .filter(isPublishedReleaseRecord)
+            .map((record) => mapBackendRelease(record, repository)),
+          hasMore: records.length === REMOTE_RELEASE_PAGE_SIZE,
+        };
+      }, controller.signal);
       if (controller.signal.aborted) return;
       setReleases(liveReleases.map((release) => withRepositoryIdentity(release, repository)));
     } catch (requestError) {
@@ -218,38 +182,16 @@ export const useRepositoryReleaseSheet = (repository: Repository) => {
         setIsLoading(false);
       }
     }
-  }, [resetArtifactStates, fetchAllPages, githubToken, repository, t]);
-
-  const sendAssetToRpc = useCallback(async (link: ReleaseDownloadLink) => {
-    // enabled 守卫留在 sheet：ReleaseCard 侧由按钮显隐承担（共享 hook 不重复判断）
-    if (!rpcDownloadConfig.enabled) return;
-    await sendRpcDownload(link);
-  }, [sendRpcDownload, rpcDownloadConfig.enabled]);
+  }, [resetArtifactStates, fetchAllPages, repository]);
 
   const downloadAsset = useCallback(async (link: ReleaseDownloadLink) => {
-    if (rpcDownloadConfig.enabled) {
-      await sendAssetToRpc(link);
-      return;
-    }
-
-    const downloadKey = computeRpcDownloadKey(link);
+    const downloadKey = computeDownloadKey(link);
     if (browserDownloadStates[downloadKey] === 'sending') return;
     setBrowserDownloadStates((previous) => ({ ...previous, [downloadKey]: 'sending' }));
 
     try {
       let blob: Blob;
-      if (githubToken && link.authenticatedUrl) {
-        const response = await fetch(link.authenticatedUrl, {
-          headers: {
-            Accept: 'application/octet-stream',
-            Authorization: `Bearer ${githubToken}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error(`${t('useRepositoryReleaseSheet.download-failed')} (${response.status})`);
-        }
-        blob = await response.blob();
-      } else if (!shouldBypassBackend() && backend.isAvailable && link.authenticatedPath) {
+      if (link.authenticatedPath) {
         blob = await backend.downloadGitHubResource(link.authenticatedPath);
       } else {
         window.open(link.url, '_blank', 'noopener,noreferrer');
@@ -262,7 +204,7 @@ export const useRepositoryReleaseSheet = (repository: Repository) => {
       setBrowserDownloadStates((previous) => ({ ...previous, [downloadKey]: 'idle' }));
       toast(`${t('useRepositoryReleaseSheet.download-failed')}: ${getErrorMessage(downloadError)}`, 'error');
     }
-  }, [browserDownloadStates, githubToken, rpcDownloadConfig.enabled, sendAssetToRpc, t, toast]);
+  }, [browserDownloadStates, t, toast]);
 
   const generateSummary = artifactActions.generateSummary;
 
@@ -271,13 +213,8 @@ export const useRepositoryReleaseSheet = (repository: Repository) => {
     isLoading,
     error,
     summaries: artifactActions.summaries,
-    downloadStates: useMemo(
-      () => ({ ...browserDownloadStates, ...artifactActions.rpcDownloadStates }),
-      [browserDownloadStates, artifactActions.rpcDownloadStates],
-    ),
-    isRpcEnabled: rpcDownloadConfig.enabled,
+    downloadStates: browserDownloadStates,
     loadReleases,
-    sendAssetToRpc,
     downloadAsset,
     generateSummary,
     cancelPendingRequests,

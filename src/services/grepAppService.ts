@@ -1,15 +1,15 @@
 /**
- * grep.app 代码搜索服务（前端直连优先）。
+ * grep.app code search service. The browser calls the same-origin relay /api/codesearch.
  *
- * 接口为非官方逆向规格：`GET https://grep.app/api/search`，无需认证。
+ * Upstream (unofficial) spec: `GET https://grep.app/api/search`, no auth; the server owns that host.
  * 实测注意：
  * - 机房 IP 会触发 Vercel Challenge（429），浏览器 egress 正常，故默认由浏览器直接 fetch。
  * - `repo/path` 实际为纯字符串（文档中的 `{raw}` 包裹已过时），此处做双向兼容。
  * - `f.lang` 等过滤有效，但 `facets` 仍返回全局分布，UI 需用 facets 做选项、用 hits 做展示。
  */
 
-export const GREP_APP_BASE_URL = 'https://grep.app';
-export const GREP_APP_SEARCH_URL = `${GREP_APP_BASE_URL}/api/search`;
+/** Same-origin relay to grep.app (server/src/routes/egress.ts). */
+export const GREP_APP_SEARCH_URL = '/api/codesearch';
 
 export type GrepMatchMode = 'fuzzy' | 'words' | 'regexp';
 

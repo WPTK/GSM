@@ -1,16 +1,7 @@
 
-import { useT } from '../i18n/useT';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { createGitHubApiService } from '../services/githubApiFactory';
 import { backend } from '../services/backendAdapter';
-import { shouldBypassBackend } from '../services/routeMode';
-import { useAppStore } from '../store/useAppStore';
 import type { GitHubReadmeCandidateItem, ReadmeVariant } from '../utils/readmeVariants';
-
-const isAbortError = (error: unknown, signal?: AbortSignal): boolean => {
-  return Boolean(signal?.aborted || (error as { name?: string })?.name === 'AbortError');
-};
 
 // controller 被 hook 自身 abort（被新请求取代或 cancel()）时，以 AbortError 命名的错误
 // 拒绝，调用方据此丢弃过期结果且不动 loading 态——等价于原先 View 持有 signal 的
@@ -30,12 +21,7 @@ export interface ReadmeFetchActions {
 }
 
 export const useReadmeFetch = ({ owner, name }: UseReadmeFetchOptions): ReadmeFetchActions => {
-  const { githubToken } = useAppStore(useShallow((state) => ({
-    githubToken: state.githubToken,
-  })));
-
   const contentAbortRef = useRef<AbortController | null>(null);
-  const t = useT('app');
   const candidatesAbortRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -51,6 +37,8 @@ export const useReadmeFetch = ({ owner, name }: UseReadmeFetchOptions): ReadmeFe
 
   useEffect(() => cancel, [cancel]);
 
+  // The browser has a single path: the same-origin backend. There is no direct
+  // GitHub fallback (the browser holds no token).
   const fetchReadmeContent = useCallback(async (variant: ReadmeVariant): Promise<string> => {
     if (contentAbortRef.current) {
       contentAbortRef.current.abort();
@@ -58,22 +46,6 @@ export const useReadmeFetch = ({ owner, name }: UseReadmeFetchOptions): ReadmeFe
     const controller = new AbortController();
     contentAbortRef.current = controller;
     const signal = controller.signal;
-
-    const fetchFromGitHubApi = async (): Promise<string> => {
-      if (!githubToken) {
-        throw new Error(t('useReadmeFetch.not-logged-in-and-backend-unavailable-cannot-loa'));
-      }
-      const githubApi = createGitHubApiService(githubToken, { direct: true });
-      return variant.isDefault || !variant.path
-        ? githubApi.getRepositoryReadme(owner, name, signal)
-        : githubApi.getRepositoryReadmeByPath(owner, name, variant.path, signal);
-    };
-
-    if (shouldBypassBackend() || !backend.isAvailable) {
-      const directContent = await fetchFromGitHubApi();
-      if (signal.aborted) throw abortOperation();
-      return directContent;
-    }
 
     try {
       const content = variant.isDefault || !variant.path
@@ -83,16 +55,9 @@ export const useReadmeFetch = ({ owner, name }: UseReadmeFetchOptions): ReadmeFe
       return content;
     } catch (backendError) {
       if (signal.aborted) throw abortOperation();
-      if (isAbortError(backendError, signal) || !githubToken) {
-        throw backendError;
-      }
-
-      console.warn('Falling back to direct GitHub README fetch after backend failure:', backendError);
-      const content = await fetchFromGitHubApi();
-      if (signal.aborted) throw abortOperation();
-      return content;
+      throw backendError;
     }
-  }, [owner, name, githubToken, t]);
+  }, [owner, name]);
 
   const fetchReadmeCandidates = useCallback(async (defaultBranch: string | undefined): Promise<GitHubReadmeCandidateItem[]> => {
     if (candidatesAbortRef.current) {
@@ -102,34 +67,15 @@ export const useReadmeFetch = ({ owner, name }: UseReadmeFetchOptions): ReadmeFe
     candidatesAbortRef.current = controller;
     const signal = controller.signal;
 
-    const fetchFromGitHubApi = async (): Promise<GitHubReadmeCandidateItem[]> => {
-      if (!githubToken) return [];
-      const githubApi = createGitHubApiService(githubToken, { direct: true });
-      return githubApi.listRepositoryReadmeCandidates(owner, name, defaultBranch, signal);
-    };
-
-    if (shouldBypassBackend() || !backend.isAvailable) {
-      const directCandidates = await fetchFromGitHubApi();
-      if (signal.aborted) throw abortOperation();
-      return directCandidates;
-    }
-
     try {
       const candidates = await backend.listRepositoryReadmeCandidates(owner, name, defaultBranch, signal);
       if (signal.aborted) throw abortOperation();
       return candidates;
     } catch (backendError) {
       if (signal.aborted) throw abortOperation();
-      if (isAbortError(backendError, signal) || !githubToken) {
-        throw backendError;
-      }
-
-      console.warn('Falling back to direct GitHub README variant detection after backend failure:', backendError);
-      const candidates = await fetchFromGitHubApi();
-      if (signal.aborted) throw abortOperation();
-      return candidates;
+      throw backendError;
     }
-  }, [owner, name, githubToken]);
+  }, [owner, name]);
 
   return useMemo(() => ({
     fetchReadmeContent,
@@ -137,7 +83,6 @@ export const useReadmeFetch = ({ owner, name }: UseReadmeFetchOptions): ReadmeFe
     cancel,
   }), [fetchReadmeContent, fetchReadmeCandidates, cancel]);
 };
-
 // 原 ReadmeModal 变体选择的 find(...)||default 提纯。
 export const pickReadmeCandidate = (
   variants: ReadmeVariant[],

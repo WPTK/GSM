@@ -6,22 +6,20 @@ import type { Category } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { useDialog } from '../../../hooks/useDialog';
 import { backend } from '../../../services/backendAdapter';
-import { normalizeBackendUrl } from '../../../utils/backendUrl';
-import { syncLocalGitHubTokenToBackend, tryRestoreAuthFromBackend } from '../../../services/autoSync';
+import { tryRestoreAuthFromBackend } from '../../../services/autoSync';
 
 type BackendStatus = 'connected' | 'disconnected' | 'checking';
 
 export interface BackendSettingsActions {
   status: BackendStatus;
   health: { version: string; timestamp: string } | null;
-  urlInput: string;
-  secretInput: string;
+  /** Whether the server holds a GitHub token; null until the status is known. */
+  githubConfigured: boolean | null;
   backendAvailable: boolean;
   isSyncingToBackend: boolean;
   isSyncingFromBackend: boolean;
-  setUrlInput: (value: string) => void;
-  setSecretInput: (value: string) => void;
   testConnection: () => Promise<void>;
+  logout: () => Promise<void>;
   syncToBackend: () => Promise<void>;
   syncFromBackend: () => Promise<void>;
 }
@@ -43,8 +41,6 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
     assetFilters: store.assetFilters,
     defaultCategoryOverrides: store.defaultCategoryOverrides,
     collapsedSidebarCategoryCount: store.collapsedSidebarCategoryCount,
-    backendApiSecret: store.backendApiSecret,
-    setBackendApiSecret: store.setBackendApiSecret,
     setRepositories: store.setRepositories,
     setReleases: store.setReleases,
     setAIConfigs: store.setAIConfigs,
@@ -56,18 +52,18 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
   const [health, setHealth] = useState<{ version: string; timestamp: string } | null>(null);
   const [isSyncingToBackend, setIsSyncingToBackend] = useState(false);
   const [isSyncingFromBackend, setIsSyncingFromBackend] = useState(false);
-  const [urlInput, setUrlInput] = useState(() => backend.configuredUrl?.replace(/\/api$/, '') || '');
-  const [secretInput, setSecretInput] = useState(state.backendApiSecret || '');
+  const [githubConfigured, setGithubConfigured] = useState<boolean | null>(null);
 
-  const checkConnection = useCallback(async (syncToken: boolean, preferredUrl?: string) => {
+  const checkConnection = useCallback(async () => {
     setStatus('checking');
     try {
-      await backend.init(preferredUrl);
+      await backend.init();
       const healthData = await backend.checkHealth();
       if (healthData) {
         setStatus('connected');
         setHealth({ version: healthData.version, timestamp: healthData.timestamp });
-        if (syncToken) void syncLocalGitHubTokenToBackend();
+        const auth = await backend.authStatus();
+        setGithubConfigured(auth ? auth.githubConfigured : null);
         return true;
       }
     } catch {
@@ -75,46 +71,34 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
     }
     setStatus('disconnected');
     setHealth(null);
+    setGithubConfigured(null);
     return false;
   }, []);
 
   useEffect(() => {
-    void checkConnection(true);
+    void checkConnection();
   }, [checkConnection]);
 
   const testConnection = useCallback(async () => {
-    const trimmedUrl = urlInput.trim();
-    if (trimmedUrl && !normalizeBackendUrl(trimmedUrl)) {
-      toast(t('useBackendSettingsActions.invalid-backend-url-remote-backends-must-use-htt'), 'error');
-      return;
-    }
-    const previousUrl = backend.backendUrl;
-    state.setBackendApiSecret(secretInput || null);
-    // With an address entered, probe exactly that URL; empty keeps the
-    // previous auto-detect behavior (remembered URL, else same-origin).
-    const connected = await checkConnection(false, trimmedUrl || undefined);
+    const connected = await checkConnection();
     if (!connected) {
-      await backend.init(previousUrl ?? undefined);
       toast(t('useBackendSettingsActions.backend-connection-failed-please-check-the-serve'), 'error');
       return;
     }
+    toast(t('useBackendSettingsActions.backend-connection-successful'), 'success');
+    // A deliberate manual action; app-start restoration is not moved here.
+    void tryRestoreAuthFromBackend();
+  }, [checkConnection, t, toast]);
+
+  const logout = useCallback(async () => {
     try {
-      const authOk = secretInput ? await backend.verifyAuth() : true;
-      if (!authOk) throw new Error('Authentication failed');
-      // Health and auth both passed — remember the address (shared with the
-      // login screen prefill).
-      backend.rememberActiveUrl();
-      toast(t('useBackendSettingsActions.backend-connection-successful'), 'success');
-      // These are deliberate manual settings actions; app-start restoration is not moved here.
-      void tryRestoreAuthFromBackend();
-      void syncLocalGitHubTokenToBackend();
-    } catch {
-      await backend.init(previousUrl ?? undefined);
-      setStatus('disconnected');
-      setHealth(null);
-      toast(t('useBackendSettingsActions.backend-connection-failed-please-check-the-serve'), 'error');
+      await backend.logout();
+    } catch (error) {
+      console.warn('Logout request failed:', error);
     }
-  }, [checkConnection, secretInput, state, t, toast, urlInput]);
+    // Clearing the local identity returns the app to the login screen.
+    useAppStore.getState().logout();
+  }, []);
 
   const syncToBackend = useCallback(async () => {
     if (!backend.isAvailable) {
@@ -201,14 +185,12 @@ export const useBackendSettingsActions = (): BackendSettingsActions => {
   return {
     status,
     health,
-    urlInput,
-    secretInput,
+    githubConfigured,
     backendAvailable: backend.isAvailable,
     isSyncingToBackend,
     isSyncingFromBackend,
-    setUrlInput,
-    setSecretInput,
     testConnection,
+    logout,
     syncToBackend,
     syncFromBackend,
   };

@@ -1,4 +1,5 @@
 import { i18n } from '../i18n';
+import { imageProxySrc } from '../utils/imageProxy';
 import { useT } from "../i18n/useT";
 import type { AppLanguage } from '../i18n/languages';
 import { Button } from './ui/button';
@@ -556,7 +557,7 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({
           <div className="flex flex-wrap items-center gap-3 border-b border-border p-4 dark:border-border">
             <div className="flex min-w-0 flex-1 items-center space-x-3">
               <img
-                src={repository.owner.avatar_url}
+                src={imageProxySrc(repository.owner.avatar_url)}
                 alt={repository.owner.login}
                 className="w-8 h-8 rounded-full"
               />

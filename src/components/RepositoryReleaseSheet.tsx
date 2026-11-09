@@ -13,7 +13,7 @@ import MarkdownRenderer from './MarkdownRenderer';
 import AssetLeadingIcon from './AssetLeadingIcon';
 import { useAppStore } from '../store/useAppStore';
 import { useRepositoryReleaseSheet } from '../features/repositories/hooks/useRepositoryReleaseSheet';
-import { computeRpcDownloadKey } from '../hooks/useReleaseArtifactActions';
+import { computeDownloadKey } from '../hooks/useReleaseArtifactActions';
 import { buildReleaseDownloadLinks, type ReleaseDownloadLink } from '../utils/releaseDownloadLinks';
 import { formatFileSize } from '../utils/formatBytes';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
@@ -21,7 +21,6 @@ import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from './ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { ReleasePluginRecommendations } from './ReleasePluginRecommendations';
 import { RepositoryHealthPanel } from './RepositoryHealthPanel';
 import { InstallableAssetRecommendation } from './InstallableAssetRecommendation';
 
@@ -108,7 +107,7 @@ const ReleaseAssetsTable: React.FC<{
         </TableHeader>
         <TableBody>
           {displayedLinks.map((link) => {
-            const downloadState = downloadStates[computeRpcDownloadKey(link)] ?? 'idle';
+            const downloadState = downloadStates[computeDownloadKey(link)] ?? 'idle';
             const isSending = downloadState === 'sending';
             const isSent = downloadState === 'sent';
             return (
@@ -176,7 +175,6 @@ const ReleaseContent: React.FC<{
         <TabsTrigger className="text-xs" value="summary">{t('repositoryReleaseSheet.summary')}</TabsTrigger>
       </TabsList>
       <TabsContent value="assets" className="mt-3">
-        <ReleasePluginRecommendations release={release} repository={repository} language={language} />
         <InstallableAssetRecommendation
           release={release}
           downloadStates={downloadStates}

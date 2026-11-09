@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { imageProxySrc } from '../../../utils/imageProxy';
 import { Check, Copy, Edit3, Loader2, RefreshCw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useT } from '../../../i18n/useT';
 import type { AppLanguage } from '../../../i18n/languages';
@@ -84,7 +85,7 @@ export const EmptyState: React.FC<{
   }, [repository.language, repository.topics, t]);
   return (
     <div className="flex min-h-full flex-col items-center justify-center px-4 py-12 text-center">
-      <img src={repository.owner.avatar_url} alt="" className="h-14 w-14 rounded-2xl border border-border shadow-sm" />
+      <img src={imageProxySrc(repository.owner.avatar_url)} alt="" className="h-14 w-14 rounded-2xl border border-border shadow-sm" />
       <h2 className="mt-4 text-lg font-semibold tracking-tight">{repository.full_name}</h2>
       <p className="mt-1.5 max-w-md text-sm leading-6 text-muted-foreground">
         {repository.description || t('repositoryChatSheet.empty-description')}

@@ -2,6 +2,7 @@
 
 
 
+import { imageProxySrc } from '../utils/imageProxy';
 import { useT } from '../i18n/useT';
 import React, { useState, useMemo } from 'react';
 import { Settings, Calendar, Search, Moon, Sun, LogOut, Compass, Menu, X } from 'lucide-react';
@@ -174,7 +175,7 @@ export const Header: React.FC = () => {
             {user && (
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <img
-                  src={user.avatar_url}
+                  src={imageProxySrc(user.avatar_url)}
                   alt={user.name || user.login}
                   className="w-8 h-8 rounded-full"
                 />

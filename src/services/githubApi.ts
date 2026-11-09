@@ -312,8 +312,8 @@ function mapGraphqlRepoDetail(node: Record<string, unknown>): GitHubRepoDetailRe
   };
 }
 
-const GITHUB_API_BASE = 'https://api.github.com';
-// 会话级 403 去重：README/Release 等生产路径按操作新建 service 实例，
+const SAME_ORIGIN_API_BASE = '/api';
+// 会话级 403 去重：README/Release/Gist 等生产路径按操作新建 service 实例，
 // 实例级状态会让同一 403 在同一会话内重复 warn。按「凭据 + 后端上下文」的
 // 非敏感指纹分桶（指纹仅用于判断凭据是否变化，绝不写入日志），凭据切换后
 // 自然换桶重新 warn。
@@ -407,34 +407,20 @@ export class GitHubApiService {
   private token: string;
   private rateLimitRemaining: number | null = null;
   private rateLimitReset: number | null = null;
-  private backendUrl: string | null = null;
-  private backendAuthToken: string | null = null;
+  /** 同源后端：浏览器只访问自己的 origin，GitHub 凭据由服务端持有。 */
+  private readonly backendUrl = SAME_ORIGIN_API_BASE;
 
+  /**
+   * `token` 仅为占位常量（'server'）：浏览器不持有 GitHub 令牌，
+   * 真实令牌由服务端在 /api/proxy/github/* 中附加。
+   */
   constructor(token: string) {
     this.token = token;
   }
 
-  /**
-   * 设置后端代理地址。设置后所有请求（makeRequest）将
-   * 通过服务器的 /api/proxy/github/* 路由转发，从而走用户配置的代理。
-   * 传 null 恢复直连模式。
-   */
-  setBackendUrl(url: string | null): void {
-    this.backendUrl = url;
-  }
-
-  setBackendAuthToken(token: string | null): void {
-    this.backendAuthToken = token;
-  }
-
   private getBackendHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.backendAuthToken) {
-      headers.Authorization = `Bearer ${this.backendAuthToken}`;
-    }
-    return headers;
+    return { 'Content-Type': 'application/json' };
   }
-
   // 403 多来自无 token/低速率限制的周期性探测，属于持续噪音：同一（凭据上下文,
   // 后端路由, method, endpoint, 失败原因）只 warn 一次，重复失败降级为 debug。
   // 键含失败原因，新出现的不同 403 成因仍可 warn。仅影响日志，不改变抛错行为。
@@ -445,7 +431,7 @@ export class GitHubApiService {
     // message 可能来自代理/后端响应体，写入日志与去重键前先做内联脱敏。
     const safeMessage = redactInline(message);
     const contextKey = credentialContextFingerprint(
-      `${this.token}\u0000${this.backendAuthToken ?? ''}\u0000${this.backendUrl ?? ''}`,
+      `${this.token}\u0000${this.backendUrl}`,
     );
     let warned403Requests = warned403RequestsByContext.get(contextKey);
     if (!warned403Requests) {
@@ -504,43 +490,30 @@ export class GitHubApiService {
     let response: Response | undefined;
     let data: T | null | undefined;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const viaProxy = this.backendUrl != null;
-      // 每次尝试独立超时：超时上限不被重试+退避消耗（重试+退避）
+      // 每次尝试独立超时：超时上限不被重试+退避消耗（与 githubListsApi 一致）
       const timeoutController = createCombinedAbortController(signal, REQUEST_TIMEOUT_MS);
       try {
-        if (this.backendUrl) {
-          // 通过后端代理路由：POST {backendUrl}/proxy/github/{endpoint}?query
-          // 服务端负责加鉴权头 + 读取代理配置 + 转发，所以客户端不再传 Authorization。
-          const proxyUrl = `${this.backendUrl}/proxy/github${endpoint}`;
-          const proxyBody: Record<string, unknown> = { method };
-          const requestHeaders = fetchOptions.headers as Record<string, string> | undefined;
-          // 转发必要头（如 starred repos 需要 star+json，POST/PATCH 需要 JSON Content-Type）
-          const acceptHeader = requestHeaders?.Accept || requestHeaders?.accept;
-          const contentTypeHeader = requestHeaders?.['Content-Type'] || requestHeaders?.['content-type'];
-          const proxyHeaders: Record<string, string> = {};
-          if (acceptHeader) proxyHeaders.Accept = acceptHeader;
-          if (contentTypeHeader) proxyHeaders['Content-Type'] = contentTypeHeader;
-          if (Object.keys(proxyHeaders).length > 0) proxyBody.headers = proxyHeaders;
-          if (fetchOptions.body) proxyBody.body = fetchOptions.body;
+        // 唯一路径：POST /api/proxy/github/{endpoint}?query（同源，gsm_session cookie 鉴权）。
+        // 服务端附加 GitHub 令牌，所以浏览器既不持有也不发送 Authorization。
+        const proxyUrl = `${this.backendUrl}/proxy/github${endpoint}`;
+        const proxyBody: Record<string, unknown> = { method };
+        const requestHeaders = fetchOptions.headers as Record<string, string> | undefined;
+        // 转发必要头（如 starred repos 需要 star+json，POST/PATCH 需要 JSON Content-Type）
+        const acceptHeader = requestHeaders?.Accept || requestHeaders?.accept;
+        const contentTypeHeader = requestHeaders?.['Content-Type'] || requestHeaders?.['content-type'];
+        const proxyHeaders: Record<string, string> = {};
+        if (acceptHeader) proxyHeaders.Accept = acceptHeader;
+        if (contentTypeHeader) proxyHeaders['Content-Type'] = contentTypeHeader;
+        if (Object.keys(proxyHeaders).length > 0) proxyBody.headers = proxyHeaders;
+        if (fetchOptions.body) proxyBody.body = fetchOptions.body;
 
-          response = await fetch(proxyUrl, {
-            method: 'POST',
-            signal: timeoutController.signal,
-            headers: this.getBackendHeaders(),
-            body: JSON.stringify(proxyBody),
-          });
-        } else {
-          response = await fetch(`${GITHUB_API_BASE}${endpoint}`, {
-            ...fetchOptions,
-            signal: timeoutController.signal,
-            headers: {
-              'Authorization': `Bearer ${this.token}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              ...fetchOptions.headers,
-            },
-          });
-        }
+        response = await fetch(proxyUrl, {
+          method: 'POST',
+          signal: timeoutController.signal,
+          credentials: 'same-origin',
+          headers: this.getBackendHeaders(),
+          body: JSON.stringify(proxyBody),
+        });
       } catch (caughtError) {
         const timedOut = isTimeoutAbort(caughtError, signal);
         const fetchError = timedOut ? new Error(TIMEOUT_ERROR_MESSAGE) : caughtError;
@@ -592,7 +565,7 @@ export class GitHubApiService {
       const durationMs = Date.now() - startTime;
       if (response.status === 401) {
         logger.warn('githubApi', 'API request failed: unauthorized', { method, endpoint, status: response.status, durationMs });
-        if (viaProxy) {
+        {
           // The proxy forwards upstream GitHub bodies verbatim, while the
           // backend's own auth middleware marks its 401s with code
           // 'UNAUTHORIZED'. Only the latter is a backend API key problem.
@@ -739,6 +712,235 @@ export class GitHubApiService {
     }
 
     return allRepos;
+  }
+
+  private mergeGistMetadata(existing: Gist | undefined, incoming: Gist, starred?: boolean): Gist {
+    // 列表 API 不返回文件内容，深度合并文件以保留已加载过的 content；
+    // starred 仅信任显式传入或接口新值，不再回退到缓存，避免取消收藏后状态陈旧。
+    const mergedFiles: Record<string, GistFile> = { ...incoming.files };
+    if (existing?.files) {
+      for (const [filename, file] of Object.entries(mergedFiles)) {
+        const existingFile = existing.files[filename];
+        if (existingFile) {
+          // 优先保留已加载过的完整内容：
+          // - incoming.content 不存在（列表 API 不返回 content）
+          // - incoming 标记为截断，而 existing 已有完整内容
+          const incomingIncomplete = file.content === undefined || (file.truncated && existingFile.content !== undefined && !existingFile.truncated);
+          if (incomingIncomplete && existingFile.content !== undefined) {
+            mergedFiles[filename] = { ...file, content: existingFile.content, truncated: false };
+          }
+        }
+      }
+    }
+
+    return {
+      ...incoming,
+      files: mergedFiles,
+      starred: starred ?? incoming.starred,
+      ai_summary: existing?.ai_summary,
+      analyzed_at: existing?.analyzed_at,
+      analysis_failed: existing?.analysis_failed,
+      analysis_error: existing?.analysis_error,
+      last_edited: existing?.last_edited,
+    };
+  }
+
+  async getGists(page = 1, perPage = 100): Promise<Gist[]> {
+    return this.makeRequest<Gist[]>(`/gists?page=${page}&per_page=${perPage}`);
+  }
+
+  async getAllGists(existingGists: Gist[] = []): Promise<Gist[]> {
+    let allGists: Gist[] = [];
+    let page = 1;
+    const perPage = 100;
+    const existingById = new Map(existingGists.map(gist => [gist.id, gist]));
+
+    while (true) {
+      const gists = await this.getGists(page, perPage);
+      if (gists.length === 0) break;
+
+      allGists = [
+        ...allGists,
+        ...gists.map(gist => this.mergeGistMetadata(existingById.get(gist.id), gist)),
+      ];
+
+      if (gists.length < perPage) break;
+      page++;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return allGists;
+  }
+
+  async getStarredGists(page = 1, perPage = 100): Promise<Gist[]> {
+    return this.makeRequest<Gist[]>(`/gists/starred?page=${page}&per_page=${perPage}`);
+  }
+
+  async getAllStarredGists(existingGists: Gist[] = []): Promise<Gist[]> {
+    let allGists: Gist[] = [];
+    let page = 1;
+    const perPage = 100;
+    const existingById = new Map(existingGists.map(gist => [gist.id, gist]));
+
+    while (true) {
+      const gists = await this.getStarredGists(page, perPage);
+      if (gists.length === 0) break;
+
+      allGists = [
+        ...allGists,
+        ...gists.map(gist => this.mergeGistMetadata(existingById.get(gist.id), gist, true)),
+      ];
+
+      if (gists.length < perPage) break;
+      page++;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return allGists;
+  }
+
+  async getGist(gistId: string, existing?: Gist): Promise<Gist> {
+    const gist = await this.makeRequest<Gist>(`/gists/${encodeURIComponent(gistId)}`);
+    return this.mergeGistMetadata(existing, gist, existing?.starred);
+  }
+
+  /**
+   * 获取 gist 用于 AI 分析。正常走详情 API；若详情 API 返回 5xx（如某些 gist 稳定 502），
+   * 则降级用缓存元数据 + raw_url 拉取文件内容，确保分析不中断。
+   */
+  async getGistForAnalysis(gistId: string, existing?: Gist, signal?: AbortSignal): Promise<Gist> {
+    try {
+      return await this.getGist(gistId, existing);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isServerFailure = /5\d{2}/.test(msg);
+      if (!isServerFailure || !existing) throw err;
+
+      // 降级：用 existing 的元数据，从 raw_url 逐个拉取文件内容
+      const files = { ...existing.files };
+      const entries = Object.entries(files);
+      await Promise.all(entries.map(async ([filename, file]) => {
+        if (file.content || !file.raw_url) return;
+        try {
+          const content = await this.getGistFileRaw(file.raw_url, signal);
+          files[filename] = { ...file, content, truncated: false };
+        } catch { /* 单文件失败不影响其他文件 */ }
+      }));
+      return { ...existing, files };
+    }
+  }
+
+  /**
+   * 拉取 gist 单个文件的原始内容。
+   * 用于 GitHub gist 详情 API 返回 truncated:true（文件 >1MB，content 被省略）时的回退取数。
+   * raw_url 指向 gist.githubusercontent.com，不能复用 makeRequest（它会在前面拼 /api/proxy/github）。
+   * 当 backendUrl 已设置时通过服务端代理路由（走用户配置的代理），否则直连。
+   */
+  async getGistFileRaw(rawUrl: string, signal?: AbortSignal): Promise<string> {
+    if (this.backendUrl) {
+      const proxyUrl = `${this.backendUrl}/proxy/github-raw`;
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        signal,
+        headers: this.getBackendHeaders(),
+        body: JSON.stringify({ url: rawUrl }),
+      });
+      if (!response.ok) {
+        // 尝试从 JSON 错误体提取消息
+        let detail = response.statusText;
+        try { const data = await response.json(); detail = (data as { error?: string }).error || detail; } catch { /* ignore */ }
+        throw new Error(`GitHub raw proxy error: ${response.status} ${detail}`);
+      }
+      return response.text();
+    }
+
+    const response = await fetch(rawUrl, {
+      signal,
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+    }
+    return response.text();
+  }
+
+  async createGist(input: GistCreateInput): Promise<Gist> {
+    const files = input.files.reduce<Record<string, { content: string }>>((acc, file) => {
+      acc[file.filename] = { content: file.content };
+      return acc;
+    }, {});
+
+    return this.makeRequest<Gist>('/gists', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        description: input.description,
+        public: input.public,
+        files,
+      }),
+    });
+  }
+
+  async updateGist(gistId: string, input: GistUpdateInput, existing?: Gist): Promise<Gist> {
+    const files = (input.files || []).reduce<Record<string, { content?: string; filename?: string } | null>>((acc, file) => {
+      if (file.deleted) {
+        acc[file.previousFilename || file.filename] = null;
+        return acc;
+      }
+
+      acc[file.previousFilename || file.filename] = {
+        content: file.content,
+        ...(file.previousFilename && file.previousFilename !== file.filename ? { filename: file.filename } : {}),
+      };
+      return acc;
+    }, {});
+
+    const payload: Record<string, unknown> = {};
+    if (input.description !== undefined) payload.description = input.description;
+    if (Object.keys(files).length > 0) payload.files = files;
+
+    const gist = await this.makeRequest<Gist>(`/gists/${encodeURIComponent(gistId)}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return this.mergeGistMetadata(existing, gist, existing?.starred);
+  }
+
+  async deleteGist(gistId: string): Promise<void> {
+    await this.makeRequest<void>(`/gists/${encodeURIComponent(gistId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async unstarGist(gistId: string): Promise<void> {
+    await this.makeRequest<void>(`/gists/${encodeURIComponent(gistId)}/star`, {
+      method: 'DELETE',
+    });
+  }
+
+  async starGist(gistId: string): Promise<void> {
+    await this.makeRequest<void>(`/gists/${encodeURIComponent(gistId)}/star`, {
+      method: 'PUT',
+    });
+  }
+
+  getGistContentPreview(gist: Gist, maxChars = 6000): string {
+    return Object.values(gist.files || {})
+      .map((file: GistFile) => {
+        const content = file.content || '';
+        return `### ${file.filename}\n${content.slice(0, maxChars)}`;
+      })
+      .join('\n\n')
+      .slice(0, maxChars);
   }
 
   async getWatchedRepositories(page = 1, perPage = 100): Promise<Repository[]> {

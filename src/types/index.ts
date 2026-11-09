@@ -9,11 +9,6 @@ export type {
   RepositoryCardActionId,
   RepositoryCardActionPreference,
 } from './repositoryCardActions';
-export {
-  isPluginActionId,
-  makePluginActionId,
-  parsePluginActionId,
-} from './repositoryCardActions';
 import type { RepositoryChatSettings } from './repositoryChat';
 export type { RepositoryChatSettings } from './repositoryChat';
 import type { ThemeTokens } from './themeTokens';

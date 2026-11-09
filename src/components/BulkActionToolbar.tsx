@@ -1,19 +1,10 @@
 import { useT } from "../i18n/useT";
-import type { AppLanguage } from '../i18n/languages';
 import React, { useState, useRef } from 'react';
-import { X, Star, FolderOpen, Bot, Bell, BellOff, CheckSquare, Square, Loader2, Lock, Unlock, RotateCcw, Plug } from 'lucide-react';
+import { X, Star, FolderOpen, Bot, Bell, BellOff, CheckSquare, Square, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
 import { Repository } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from './ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { usePluginActions } from '../plugins/hooks/usePluginActions';
-import { applyPluginActionResult } from '../plugins/applyPluginActionResult';
-import { useDialog } from '../hooks/useDialog';
-import { usePluginExporters } from '../plugins/hooks/usePluginExporters';
-import { pluginClient } from '../plugins/pluginClient';
-import { PluginIcon } from '../plugins/pluginIcons';
-import type { RegisteredPluginAction } from '../plugins/types';
 
 interface BulkActionToolbarProps {
   selectedCount: number;
@@ -32,98 +23,6 @@ interface TooltipState {
   y: number;
 }
 
-interface RegisteredExporter {
-  id: string;
-  title: string;
-  fileExtension: string;
-  mimeType: string;
-  pluginId: string;
-  pluginName: string;
-}
-
-const PluginBulkMenu: React.FC<{
-  actions: RegisteredPluginAction[];
-  exporters: RegisteredExporter[];
-  repositories: Repository[];
-  language: AppLanguage;
-  disabled: boolean;
-  onBusyChange: (busy: boolean) => void;
-}> = ({ actions, exporters, repositories, language, disabled, onBusyChange }) => {
-  const { toast } = useDialog();
-  const t = useT('app');
-
-  const runAction = async (action: RegisteredPluginAction) => {
-    onBusyChange(true);
-    try {
-      const operation = await pluginClient.runAction({
-        pluginId: action.pluginId,
-        actionId: action.id,
-        repositories,
-      });
-      if (!operation.success) return toast(operation.error.message, 'error');
-      await applyPluginActionResult(operation.result, toast, language);
-    } catch {
-      toast(t('bulkActionToolbar.plugin-action-failed'), 'error');
-    } finally {
-      onBusyChange(false);
-    }
-  };
-
-  const runExporter = async (exporter: RegisteredExporter) => {
-    onBusyChange(true);
-    try {
-      const operation = await pluginClient.runExporter({
-        pluginId: exporter.pluginId,
-        exporterId: exporter.id,
-        repositories,
-      });
-      if (!operation.success) return toast(operation.error.message, 'error');
-      const url = URL.createObjectURL(new Blob([operation.result.content], { type: operation.result.mimeType }));
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = operation.result.fileName;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      toast(t('bulkActionToolbar.export-complete'), 'success');
-    } catch {
-      toast(t('bulkActionToolbar.plugin-export-failed'), 'error');
-    } finally {
-      onBusyChange(false);
-    }
-  };
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={disabled}
-          aria-label={t('bulkActionToolbar.plugin-actions')}
-          className="h-9 w-9 shrink-0 rounded-lg bg-muted text-muted-foreground hover:bg-accent hover:text-foreground sm:h-10 sm:w-10"
-        >
-          <Plug className="h-4 w-4 sm:h-5 sm:w-5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {actions.map((action) => (
-          <DropdownMenuItem key={`${action.pluginId}:${action.id}`} onSelect={() => void runAction(action)}>
-            <PluginIcon pluginId={action.pluginId} icon={action.icon} className="mr-2 h-4 w-4" />
-            {action.title}
-          </DropdownMenuItem>
-        ))}
-        {exporters.map((exporter) => (
-          <DropdownMenuItem key={`${exporter.pluginId}:export:${exporter.id}`} onSelect={() => void runExporter(exporter)}>
-            <FolderOpen className="mr-2 h-4 w-4" />
-            {exporter.title}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-};
-
 export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
   selectedCount,
   repositories,
@@ -136,8 +35,6 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
   const { language } = useAppStore(useShallow((state) => ({
     language: state.language,
   })));
-  const pluginActions = usePluginActions('bulk-toolbar');
-  const pluginExporters = usePluginExporters();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showConfirm, setShowConfirm] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
@@ -476,17 +373,6 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
                 <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
               )}
             </Button>
-
-            {(pluginActions.actions.length > 0 || pluginExporters.exporters.length > 0) && (
-              <PluginBulkMenu
-                actions={pluginActions.actions}
-                exporters={pluginExporters.exporters}
-                repositories={repositories}
-                language={language}
-                disabled={isProcessing}
-                onBusyChange={setIsProcessing}
-              />
-            )}
 
             <div className="hidden sm:block w-px h-6 bg-muted dark:bg-accent mx-2"></div>
 

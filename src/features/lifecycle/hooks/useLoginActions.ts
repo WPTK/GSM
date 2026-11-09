@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { GITHUB_TOKEN_INVALID_ERROR } from '../../../services/githubApi';
-import { createGitHubApiService } from '../../../services/githubApiFactory';
+import { createGitHubApiService, SERVER_HELD_TOKEN } from '../../../services/githubApiFactory';
 import { backend } from '../../../services/backendAdapter';
 import { syncFromBackend } from '../../../services/autoSync';
 import type { GitHubUser } from '../../../types';
@@ -9,88 +9,38 @@ export type BackendLoginResult =
   | { status: 'connected'; githubToken: string; user: GitHubUser }
   | { status: 'backend-unavailable' }
   | { status: 'unauthorized' }
-  | { status: 'restore-failed' }
-  | { status: 'restored-token-invalid' }
-  | { status: 'github-token-required' };
+  | { status: 'github-not-configured' }
+  | { status: 'github-token-invalid' };
 
 export interface LoginActions {
-  authenticateWithGitHub: (token: string) => Promise<GitHubUser>;
-  syncTokenToBackend: (token: string) => Promise<{ ok: boolean }>;
-  configuredBackendUrl: string | null;
-  restoreBackendSession: (url: string) => Promise<BackendLoginResult>;
-  setupBackendGitHubToken: (token: string) => Promise<GitHubUser>;
+  /** Exchange the API secret for the session cookie, then verify the server-held GitHub token. */
+  loginWithApiSecret: (secret: string) => Promise<BackendLoginResult>;
   syncBackendData: () => Promise<void>;
 }
 
 export const useLoginActions = (): LoginActions => {
-  const authenticateWithGitHub = useCallback(async (token: string) => {
-    // 必须直连校验调用方传入的 token：走后端代理时服务端用的是库里存的
-    // github_token，会拿旧令牌的身份冒充本次登录校验结果。
-    const api = createGitHubApiService(token, { direct: true });
-    return api.getCurrentUser();
-  }, []);
-  const syncTokenToBackend = useCallback(async (token: string) => {
-    if (!backend.isAvailable) return { ok: true };
-    try {
-      await backend.syncSettings({ github_token: token });
-      return { ok: true };
-    } catch (e) {
-      console.warn('Failed to save GitHub token to backend:', e);
-      return { ok: false };
-    }
-  }, []);
-  const restoreBackendSession = useCallback(async (url: string): Promise<BackendLoginResult> => {
-    const previousUrl = backend.backendUrl;
-    await backend.init(url);
+  const loginWithApiSecret = useCallback(async (secret: string): Promise<BackendLoginResult> => {
+    if (!backend.isAvailable) await backend.init();
     if (!backend.isAvailable) return { status: 'backend-unavailable' };
-    if (!await backend.verifyAuth()) {
-      // Wrong key: drop the candidate and fall back to whatever backend was
-      // active before (or auto-detect), so a failed candidate is never kept.
-      await backend.init(previousUrl ?? undefined);
-      return { status: 'unauthorized' };
-    }
+    if (!await backend.login(secret)) return { status: 'unauthorized' };
 
-    const restored = await backend.restoreAuth();
-    if (!restored) {
-      await backend.init(previousUrl ?? undefined);
-      return { status: 'restore-failed' };
-    }
-    if (!restored.github_token) return { status: 'github-token-required' };
+    const status = await backend.authStatus();
+    if (!status?.githubConfigured) return { status: 'github-not-configured' };
 
     try {
-      const user = await authenticateWithGitHub(restored.github_token);
-      // Backend, API key, and stored token are all proven — remember the URL
-      // (the setup step re-remembers after persisting a new token).
-      backend.rememberActiveUrl();
-      return { status: 'connected', githubToken: restored.github_token, user };
+      const user = await createGitHubApiService().getCurrentUser();
+      return { status: 'connected', githubToken: SERVER_HELD_TOKEN, user };
     } catch (err) {
       if (err instanceof Error && err.message === GITHUB_TOKEN_INVALID_ERROR) {
-        // Confirmed auth failure: the stored token is what failed, while the
-        // backend and API key are fine — keep the connection for token setup;
-        // saving a new token there overwrites the broken one on the backend.
-        return { status: 'restored-token-invalid' };
+        return { status: 'github-token-invalid' };
       }
-      // Network failures, rate limits, and 5xx are transient — propagate so
-      // the user can retry without being pushed into token setup.
+      // Network failures, rate limits and 5xx are transient: let the user retry.
       throw err;
     }
-  }, [authenticateWithGitHub]);
-  const setupBackendGitHubToken = useCallback(async (token: string) => {
-    const user = await authenticateWithGitHub(token);
-    await backend.syncSettings({ github_token: token });
-    backend.rememberActiveUrl();
-    return user;
-  }, [authenticateWithGitHub]);
+  }, []);
   const syncBackendData = useCallback(async () => {
     await syncFromBackend({ force: true });
   }, []);
 
-  return {
-    authenticateWithGitHub,
-    syncTokenToBackend,
-    configuredBackendUrl: backend.configuredUrl,
-    restoreBackendSession,
-    setupBackendGitHubToken,
-    syncBackendData,
-  };
+  return { loginWithApiSecret, syncBackendData };
 };

@@ -1,7 +1,6 @@
 
 import { getDateFnsLocale, getIntlLocale } from '../i18n/format';
 import { useT, type TranslateFn } from '../i18n/useT';
-import type { AppLanguage } from '../i18n/languages';
 import React, { Suspense, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -9,19 +8,17 @@ import {
   getPlatformIcon,
 } from './platformMeta';
 import { useRepositoryPlatforms } from '../hooks/useRepositoryPlatforms';
-import { GripVertical, Star, StarOff, ExternalLink, Calendar, Bell, BellOff, Bot, Sparkles, Terminal, Edit3, BookOpen, Square, CheckSquare, Loader2, HelpCircle, Search, Scale, MoreHorizontal, PackageOpen, MessageSquareText } from 'lucide-react';
+import { GripVertical, Star, StarOff, ExternalLink, Calendar, Bell, BellOff, Bot, Sparkles, Terminal, Edit3, Square, CheckSquare, Loader2, HelpCircle, Search, Scale, MoreHorizontal, PackageOpen, MessageSquareText } from 'lucide-react';
 import { Repository, Category } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { isRepositoryCardFieldVisible } from '../utils/repositoryCardFields';
 import { normalizeRepositoryCardActions } from '../utils/repositoryCardActions';
 import {
-  isPluginActionId,
-  makePluginActionId,
   type BuiltinRepositoryCardActionId,
   type RepositoryCardActionId,
   type RepositoryCardActionPreference,
 } from '../types/repositoryCardActions';
-import { PluginIcon } from '../plugins/pluginIcons';
+import { imageProxySrc } from '../utils/imageProxy';
 import { useRepositoryDragStore } from '../store/useRepositoryDragStore';
 import { getAICategory, getDefaultCategory } from '../utils/categoryUtils';
 import { formatDistanceToNow } from 'date-fns';
@@ -34,12 +31,6 @@ import { useRepositoryCardActions } from '../features/repositories/hooks/useRepo
 import { useTranslatedDescription } from '../hooks/useTranslatedDescription';
 import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { usePluginActions } from '../plugins/hooks/usePluginActions';
-import { applyPluginActionResult } from '../plugins/applyPluginActionResult';
-import { useOptionalDialog } from '../hooks/useDialog';
-import { pluginClient } from '../plugins/pluginClient';
-import { pluginPageSession } from '../plugins/pluginPageSession';
-import type { RegisteredPluginAction } from '../plugins/types';
 
 type DialogContentPointerDownOutsideHandler = NonNullable<
   React.ComponentProps<typeof DialogContent>['onPointerDownOutside']
@@ -166,13 +157,6 @@ const MAX_CACHE_SIZE = 500;
 const DEFAULT_ROOT_FONT_SIZE = 16;
 const ACTION_SLOT_WIDTH_REM = 1.75;
 const ACTION_SLOT_GAP_REM = 0.125;
-const PLUGIN_ACTION_TIMEOUT_MS = 30_000;
-
-interface PluginActionRun {
-  token: symbol;
-  timeoutId: number;
-}
-
 const resolveActionSlotMetrics = () => {
   const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
     || DEFAULT_ROOT_FONT_SIZE;
@@ -218,9 +202,6 @@ interface OverflowActionRowProps {
   actionPreferences: RepositoryCardActionPreference[];
   selectionMode: boolean;
   onAskRepository?: (repository: Repository) => void;
-  repository: Repository;
-  language: AppLanguage;
-  docsUrl: string;
   githubUrl: string;
   aiButtonTitle: string;
   isAnalyzing: boolean;
@@ -230,10 +211,6 @@ interface OverflowActionRowProps {
   isFindingSimilar?: boolean;
   onFindSimilar?: () => void;
   persistFindSimilarInMenu?: boolean;
-  pluginActions: RegisteredPluginAction[];
-  pluginActionRunsRef: React.MutableRefObject<Map<string, PluginActionRun>>;
-  runningPluginActionIds: Set<string>;
-  setRunningPluginActionIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   isActionsMenuOpen?: boolean;
   onActionsMenuOpenChange?: (open: boolean) => void;
   onAnalyze: () => void;
@@ -257,9 +234,6 @@ const OverflowActionRow: React.FC<OverflowActionRowProps> = ({
   actionPreferences,
   selectionMode,
   onAskRepository,
-  repository,
-  language,
-  docsUrl,
   githubUrl,
   aiButtonTitle,
   isAnalyzing,
@@ -269,10 +243,6 @@ const OverflowActionRow: React.FC<OverflowActionRowProps> = ({
   isFindingSimilar = false,
   onFindSimilar,
   persistFindSimilarInMenu = false,
-  pluginActions,
-  pluginActionRunsRef,
-  runningPluginActionIds,
-  setRunningPluginActionIds,
   isActionsMenuOpen,
   onActionsMenuOpenChange,
   onAnalyze,
@@ -286,72 +256,6 @@ const OverflowActionRow: React.FC<OverflowActionRowProps> = ({
   onMenuPointerDownOutside,
   t,
 }) => {
-  const dialog = useOptionalDialog();
-  const toast = dialog?.toast;
-  const pluginActionMap = useMemo(() => {
-    const map = new Map<string, RegisteredPluginAction>();
-    for (const action of pluginActions) {
-      map.set(makePluginActionId(action.pluginId, action.id), action);
-    }
-    return map;
-  }, [pluginActions]);
-  const runPluginAction = async (action: RegisteredPluginAction) => {
-    if (action.opensPage) {
-      pluginPageSession.open({
-        pluginId: action.pluginId,
-        pluginName: action.pluginName,
-        pageId: action.opensPage,
-        pageTitle: action.title,
-        repository,
-        display: action.display,
-      });
-      return;
-    }
-    const actionId = makePluginActionId(action.pluginId, action.id);
-    if (pluginActionRunsRef.current.has(actionId)) return;
-    const runToken = Symbol(actionId);
-    setRunningPluginActionIds((previous) => new Set(previous).add(actionId));
-    const isCurrentRun = () => pluginActionRunsRef.current.get(actionId)?.token === runToken;
-    const timeoutId = window.setTimeout(() => {
-      if (!isCurrentRun()) return;
-      pluginActionRunsRef.current.delete(actionId);
-      setRunningPluginActionIds((previous) => {
-        const next = new Set(previous);
-        next.delete(actionId);
-        return next;
-      });
-      toast?.(t('repositoryCard.plugin-action-timed-out'), 'error');
-    }, PLUGIN_ACTION_TIMEOUT_MS);
-    pluginActionRunsRef.current.set(actionId, { token: runToken, timeoutId });
-    try {
-      const operation = await pluginClient.runAction({
-        pluginId: action.pluginId,
-        actionId: action.id,
-        repositories: [repository],
-      });
-      if (!isCurrentRun()) return;
-      if (!operation.success) {
-        toast?.(operation.error.message, 'error');
-        return;
-      }
-      if (toast) {
-        await applyPluginActionResult(operation.result, toast, language, () => !isCurrentRun());
-      }
-    } catch {
-      if (isCurrentRun()) toast?.(t('repositoryCard.failed-to-apply-plugin-result'), 'error');
-    } finally {
-      clearTimeout(timeoutId);
-      if (isCurrentRun()) {
-        pluginActionRunsRef.current.delete(actionId);
-        setRunningPluginActionIds((previous) => {
-          const next = new Set(previous);
-          next.delete(actionId);
-          return next;
-        });
-      }
-    }
-  };
-
   const availableActions = actionPreferences.filter((item) => item.id !== 'ask' || onAskRepository);
   const inlineCandidates = availableActions.filter((item) => item.visible);
   const inlineActionIds = inlineCandidates.slice(0, visibleActionCount).map((item) => item.id);
@@ -397,14 +301,6 @@ const OverflowActionRow: React.FC<OverflowActionRowProps> = ({
         <PackageOpen className="w-4 h-4" />
       </SelectionAwareButton>
     ),
-    docs: (
-      <a href={docsUrl} target="_blank" rel="noopener noreferrer"
-        onClick={(event) => selectionMode && event.preventDefault()}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${mutedIconButtonClass} ${selectionMode ? 'pointer-events-none opacity-50' : ''}`}
-        title={t('repositoryCard.view-on-deepwiki-2')}>
-        <BookOpen className="w-4 h-4" />
-      </a>
-    ),
     github: (
       <a href={githubUrl} target="_blank" rel="noopener noreferrer"
         onClick={(event) => selectionMode && event.preventDefault()}
@@ -445,14 +341,6 @@ const OverflowActionRow: React.FC<OverflowActionRowProps> = ({
         {t('repositoryCard.view-releases')}
       </DropdownMenuItem>
     ),
-    docs: (
-      <DropdownMenuItem asChild>
-        <a href={docsUrl} target="_blank" rel="noopener noreferrer">
-          <BookOpen className="mr-2 h-3.5 w-3.5" />
-          {t('repositoryCard.view-on-deepwiki')}
-        </a>
-      </DropdownMenuItem>
-    ),
     github: (
       <DropdownMenuItem asChild>
         <a href={githubUrl} target="_blank" rel="noopener noreferrer">
@@ -463,51 +351,9 @@ const OverflowActionRow: React.FC<OverflowActionRowProps> = ({
     ),
   };
 
-  const renderInlineActionNode = (id: RepositoryCardActionId): React.ReactNode => {
-    if (isPluginActionId(id)) {
-      const action = pluginActionMap.get(id);
-      if (!action) return null;
-      const isRunning = runningPluginActionIds.has(id);
-      return (
-        <SelectionAwareButton
-          key={id}
-          onClick={() => void runPluginAction(action)}
-          disabled={isRunning}
-          aria-busy={isRunning}
-          selectionMode={selectionMode}
-          className={mutedIconButtonClass}
-          title={action.title}
-          aria-label={action.title}
-        >
-          {isRunning
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <PluginIcon pluginId={action.pluginId} icon={action.icon} className="w-4 h-4" />}
-        </SelectionAwareButton>
-      );
-    }
-    return inlineActionNodes[id as BuiltinRepositoryCardActionId];
-  };
+  const renderInlineActionNode = (id: RepositoryCardActionId): React.ReactNode => inlineActionNodes[id];
 
-  const renderMenuActionNode = (id: RepositoryCardActionId): React.ReactNode => {
-    if (isPluginActionId(id)) {
-      const action = pluginActionMap.get(id);
-      if (!action) return null;
-      const isRunning = runningPluginActionIds.has(id);
-      return (
-        <DropdownMenuItem
-          key={id}
-          disabled={isRunning}
-          onSelect={() => void runPluginAction(action)}
-        >
-          {isRunning
-            ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            : <PluginIcon pluginId={action.pluginId} icon={action.icon} className="mr-2 h-3.5 w-3.5" />}
-          {action.title}
-        </DropdownMenuItem>
-      );
-    }
-    return menuActionNodes[id as BuiltinRepositoryCardActionId];
-  };
+  const renderMenuActionNode = (id: RepositoryCardActionId): React.ReactNode => menuActionNodes[id];
 
   return (
     <div ref={actionRowRef} data-testid={testId} className={className}>
@@ -576,10 +422,9 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
   // 卡片可见字段（开发守则 §14）：未提供时按默认（显示）处理
   const cardFields = useAppStore((state) => state.repositoryCardFields);
   const savedActionPreferences = useAppStore((state) => state.repositoryCardActions);
-  const pluginActions = usePluginActions('repository-card');
   const actionPreferences = useMemo(
-    () => normalizeRepositoryCardActions(savedActionPreferences, pluginActions.actions),
-    [savedActionPreferences, pluginActions.actions],
+    () => normalizeRepositoryCardActions(savedActionPreferences),
+    [savedActionPreferences],
   );
   const showDescription = isRepositoryCardFieldVisible(cardFields, 'description');
   // 「自动翻译仓库描述」：仅当卡片实际展示原始描述时才翻译
@@ -616,8 +461,6 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
   const [showDragHint, setShowDragHint] = useState(false);
   const dragHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
-  const pluginActionRunsRef = useRef(new Map<string, PluginActionRun>());
-  const [runningPluginActionIds, setRunningPluginActionIds] = useState<Set<string>>(new Set());
   const cardRef = useRef<HTMLDivElement>(null);
   const menuDismissedByPointerDownRef = useRef(false);
   const releaseSheetOutsideDismissedAtRef = useRef<number | null>(null);
@@ -629,13 +472,6 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
 
   const restoreReadmeTriggerFocus = useCallback(() => {
     cardRef.current?.focus();
-  }, []);
-
-  useEffect(() => () => {
-    for (const run of pluginActionRunsRef.current.values()) {
-      window.clearTimeout(run.timeoutId);
-    }
-    pluginActionRunsRef.current.clear();
   }, []);
 
   useEffect(() => {
@@ -753,16 +589,6 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
 
   // 展示平台：优先 release 资产/仓库元数据的确定性识别，无信号时回退 ai_platforms
   const displayPlatforms = useRepositoryPlatforms(repository);
-
-  // Convert GitHub URL to DeepWiki URL
-  const getDeepWikiUrl = (githubUrl: string) => {
-    return githubUrl.replace('github.com', 'deepwiki.com');
-  };
-
-  // Convert GitHub URL to Zread URL
-  const getZreadUrl = (fullName: string) => {
-    return `https://zread.ai/${fullName}`;
-  };
 
   // 使用 useMemo 缓存显示内容计算
   // 方案一：分离内容与状态指示，同时显示多个状态标签
@@ -1163,7 +989,7 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
       {/* Header - Repository Info */}
       <div className="app-repository-card-header flex items-start space-x-3 mb-3">
         <img
-          src={repository.owner.avatar_url}
+          src={imageProxySrc(repository.owner.avatar_url)}
           alt={repository.owner.login}
           className={`app-repository-card-avatar ${viewMode === 'list' ? 'w-10 h-10' : 'w-8 h-8'} rounded-full flex-shrink-0`}
         />
@@ -1211,9 +1037,6 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
                 actionPreferences={actionPreferences}
                 selectionMode={selectionMode}
                 onAskRepository={onAskRepository}
-                repository={repository}
-                language={language}
-                docsUrl={language === 'zh' ? getZreadUrl(repository.full_name) : getDeepWikiUrl(repository.html_url)}
                 githubUrl={repository.html_url}
                 aiButtonTitle={aiButtonTitle}
                 isAnalyzing={isAnalyzing}
@@ -1223,10 +1046,6 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
                 isFindingSimilar={isFindingSimilar}
                 onFindSimilar={handleFindSimilar}
                 persistFindSimilarInMenu
-                pluginActions={pluginActions.actions}
-                pluginActionRunsRef={pluginActionRunsRef}
-                runningPluginActionIds={runningPluginActionIds}
-                setRunningPluginActionIds={setRunningPluginActionIds}
                 isActionsMenuOpen={isActionsMenuOpen}
                 onActionsMenuOpenChange={setIsActionsMenuOpen}
                 onAnalyze={handleAIAnalyze}
@@ -1309,18 +1128,11 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
           actionPreferences={actionPreferences}
           selectionMode={selectionMode}
           onAskRepository={onAskRepository}
-          repository={repository}
-          language={language}
-          docsUrl={language === 'zh' ? getZreadUrl(repository.full_name) : getDeepWikiUrl(repository.html_url)}
           githubUrl={repository.html_url}
           aiButtonTitle={aiButtonTitle}
           isAnalyzing={isAnalyzing}
           isSubscribed={isSubscribed}
           unstarring={unstarring}
-          pluginActions={pluginActions.actions}
-          pluginActionRunsRef={pluginActionRunsRef}
-          runningPluginActionIds={runningPluginActionIds}
-          setRunningPluginActionIds={setRunningPluginActionIds}
           isActionsMenuOpen={isActionsMenuOpen}
           onActionsMenuOpenChange={setIsActionsMenuOpen}
           onAnalyze={handleAIAnalyze}

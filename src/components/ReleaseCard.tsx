@@ -2,21 +2,18 @@ import { getDateFnsLocale, getIntlLocale } from '../i18n/format';
 import { useT } from "../i18n/useT";
 import type { AppLanguage } from '../i18n/languages';
 import React, { memo, useCallback, useMemo, useState, useEffect } from 'react';
-import { ExternalLink, GitBranch, Calendar, Download, ChevronDown, ChevronUp, BookOpen, ArrowUpRight, FolderOpen, Folder, BellOff, FileArchive, Code2, Loader2, CheckCircle2, Sparkles } from 'lucide-react';
+import { ExternalLink, GitBranch, Calendar, Download, ChevronDown, ChevronUp, BookOpen, ArrowUpRight, FolderOpen, Folder, BellOff, FileArchive, Code2, Loader2, Sparkles } from 'lucide-react';
 import { Release } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import MarkdownRenderer from './MarkdownRenderer';
 import AssetLeadingIcon from './AssetLeadingIcon';
-import { useAppStore } from '../store/useAppStore';
-import { useShallow } from 'zustand/react/shallow';
-import { computeRpcDownloadKey, useReleaseArtifactActions } from '../hooks/useReleaseArtifactActions';
+import { useReleaseArtifactActions } from '../hooks/useReleaseArtifactActions';
 import {
   effectiveReleaseTime,
   shouldShowAssetsUpdatedIndicator,
 } from '../utils/releaseAssets';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { ReleasePluginRecommendations } from './ReleasePluginRecommendations';
 import type { InstallablePlatform } from '../types/installableAsset';
 
 interface DownloadLink {
@@ -134,11 +131,8 @@ const ReleaseCard: React.FC<ReleaseCardProps> = memo(({
   const effectiveTime = effectiveReleaseTime(release);
   const showAssetsUpdatedIndicator = shouldShowAssetsUpdatedIndicator(release);
 
-  // RPC 发送与 AI 总结动作由共享 hook 承担（useRepositoryReleaseSheet 同源委托）
-  const { rpcDownloadConfig } = useAppStore(useShallow((state) => ({
-    rpcDownloadConfig: state.rpcDownloadConfig,
-  })));
-  const { summaries, rpcDownloadStates, sendRpcDownload, generateSummary } = useReleaseArtifactActions();
+  // AI 总结动作由共享 hook 承担（useRepositoryReleaseSheet 同源委托）
+  const { summaries, generateSummary } = useReleaseArtifactActions();
   // AI 总结状态内聚在 hook（展开态留在卡片内，不持久化）；
   // 卡片卸载时的请求取消由 hook 的 unmount 副作用承担（卡片卸载即 hook 卸载）。
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
@@ -172,10 +166,6 @@ const ReleaseCard: React.FC<ReleaseCardProps> = memo(({
 
   // 判断是否有任何内容展开
   const isAnyExpanded = isAssetsExpanded || isReleaseNotesExpanded || isSummaryExpanded;
-
-  const handleRpcDownload = useCallback(async (link: DownloadLink) => {
-    await sendRpcDownload(link);
-  }, [sendRpcDownload]);
 
   const handleToggleSummary = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -356,7 +346,6 @@ const ReleaseCard: React.FC<ReleaseCardProps> = memo(({
           <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-3 sm:pt-4 border-t border-border dark:border-border">
           {isAssetsExpanded && visibleDownloadLinks.length > 0 && (
             <div className="py-2">
-              <ReleasePluginRecommendations release={release} language={language} />
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center space-x-2 min-w-0">
                   <FileArchive className="w-3.5 h-3.5 text-muted-foreground dark:text-muted-foreground flex-shrink-0" />
@@ -384,66 +373,8 @@ const ReleaseCard: React.FC<ReleaseCardProps> = memo(({
 
               <div className="ui-inset-surface max-h-72 overflow-hidden overflow-y-auto">
                 {visibleDownloadLinks.map((link, index) => {
-                  const isRpcEnabled = rpcDownloadConfig.enabled;
-                  // 与 sendRpcDownload 使用相同的版本化 key
-                  const rpcKey = computeRpcDownloadKey(link);
-                  const isDownloading = rpcDownloadStates[rpcKey] === 'sending';
-                  const isDownloaded = rpcDownloadStates[rpcKey] === 'sent';
                   const isAssetUpdated = link.assetId !== undefined
                     && release.updated_asset_ids?.includes(link.assetId) === true;
-
-                  if (isRpcEnabled) {
-                    return (
-                      <Button
-                        key={index}
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (link.assetId !== undefined) onMarkAssetAsRead(link.assetId);
-                          handleRpcDownload(link);
-                        }}
-                        disabled={isDownloading}
-                        className={`h-auto flex items-center justify-between rounded-none px-4 py-3 w-full text-left hover:bg-muted dark:hover:bg-accent transition-colors border-b border-border last:border-b-0 disabled:opacity-60 ${
-                          link.isSourceCode ? 'bg-accent/60' : ''
-                        }`}
-                      >
-                        <div className="flex items-center space-x-1.5 min-w-0 flex-1">
-                          {isDownloading ? (
-                            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin flex-shrink-0" />
-                          ) : isDownloaded ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-success flex-shrink-0" />
-                          ) : link.isSourceCode ? (
-                            <Code2 className="w-3.5 h-3.5 text-muted-foreground dark:text-muted-foreground flex-shrink-0" />
-                          ) : (
-                            <AssetLeadingIcon name={link.name} contentType={link.contentType} />
-                          )}
-                          <span className={`text-sm truncate ${link.isSourceCode ? 'text-muted-foreground dark:text-muted-foreground font-medium' : 'text-foreground dark:text-muted-foreground'}`}>
-                            {link.name}
-                          </span>
-                          {assetBadges?.get(link.url) && (
-                            <AssetCompatibilityBadge
-                              kind={assetBadges.get(link.url)!}
-                              platform={currentPlatform}
-                            />
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2 text-xs text-muted-foreground dark:text-muted-foreground flex-shrink-0">
-                          {isAssetUpdated && (
-                            <span className="text-xs px-1 py-px rounded bg-primary/10 text-primary font-medium whitespace-nowrap">
-                              {t('releaseCard.asset-updated')}
-                            </span>
-                          )}
-                          <AssetUpdatedTime updatedAt={link.updatedAt} language={language} />
-                          {link.size > 0 && (
-                            <span>{formatFileSize(link.size)}</span>
-                          )}
-                          {link.downloadCount > 0 && (
-                            <span>{t('releaseCard.download-count', { count: link.downloadCount.toLocaleString(getIntlLocale(language)) })}</span>
-                          )}
-                        </div>
-                      </Button>
-                    );
-                  }
 
                   return (
                     <a

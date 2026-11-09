@@ -1,4 +1,5 @@
 import { useT } from "../i18n/useT";
+import { imageProxySrc } from '../utils/imageProxy';
 import { Textarea } from './ui/textarea';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -736,7 +737,7 @@ export const RepositoryEditModal: React.FC<RepositoryEditModalProps> = ({
         {/* Repository Info Header */}
         <div className="flex items-center space-x-3 p-4 bg-gradient-to-r from-accent/60 to-background dark:bg-primary/10 dark:from-transparent dark:to-transparent rounded-xl border border-border dark:border-primary/20">
           <img
-            src={repository.owner.avatar_url}
+            src={imageProxySrc(repository.owner.avatar_url)}
             alt={repository.owner.login}
             className="w-10 h-10 rounded-full border-2 border-card dark:border-card shadow-sm"
           />

@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import {
   Bell,
-  BookOpen,
   Bot,
   ChevronDown,
   ChevronUp,
@@ -13,14 +12,9 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useT } from '../../i18n/useT';
-import { usePluginActions } from '../../plugins/hooks/usePluginActions';
-import { PluginIcon } from '../../plugins/pluginIcons';
-import type { RegisteredPluginAction } from '../../plugins/types';
 import { useAppStore } from '../../store/useAppStore';
 import {
   DEFAULT_REPOSITORY_CARD_ACTIONS,
-  isPluginActionId,
-  makePluginActionId,
   type BuiltinRepositoryCardActionId,
   type RepositoryCardActionPreference,
 } from '../../types/repositoryCardActions';
@@ -35,7 +29,6 @@ const ACTION_LABEL_KEYS: Record<BuiltinRepositoryCardActionId, string> = {
   subscribe: 'repositoryCard.subscribe-to-releases',
   edit: 'repositoryCard.edit-repository-info',
   releases: 'repositoryCard.view-releases',
-  docs: 'repositoryCard.view-on-deepwiki',
   github: 'repositoryCard.view-on-github',
 };
 
@@ -45,7 +38,6 @@ const BUILTIN_ICONS: Record<BuiltinRepositoryCardActionId, LucideIcon> = {
   subscribe: Bell,
   edit: Edit3,
   releases: PackageOpen,
-  docs: BookOpen,
   github: ExternalLink,
 };
 
@@ -73,19 +65,9 @@ export const RepositoryCardActionsSettings: React.FC<RepositoryCardActionsSettin
       setActions: state.setRepositoryCardActions,
     })),
   );
-  const { actions: pluginActions } = usePluginActions('repository-card');
-
-  const pluginActionMap = useMemo(() => {
-    const map = new Map<string, RegisteredPluginAction>();
-    for (const action of pluginActions) {
-      map.set(makePluginActionId(action.pluginId, action.id), action);
-    }
-    return map;
-  }, [pluginActions]);
-
   const displayedActions = useMemo(
-    () => normalizeRepositoryCardActions(actions, pluginActions),
-    [actions, pluginActions],
+    () => normalizeRepositoryCardActions(actions),
+    [actions],
   );
 
   const saveWithInactive = (next: typeof displayedActions) => {
@@ -118,18 +100,7 @@ export const RepositoryCardActionsSettings: React.FC<RepositoryCardActionsSettin
   };
 
   const handleReset = () => {
-    if (pluginActions.length === 0) {
-      setActions(DEFAULT_REPOSITORY_CARD_ACTIONS.map((item) => ({ ...item })));
-      return;
-    }
-    const resetList = [
-      ...DEFAULT_REPOSITORY_CARD_ACTIONS.map((item) => ({ ...item })),
-      ...pluginActions.map((action) => ({
-        id: makePluginActionId(action.pluginId, action.id),
-        visible: false,
-      })),
-    ];
-    setActions(resetList);
+    setActions(DEFAULT_REPOSITORY_CARD_ACTIONS.map((item) => ({ ...item })));
   };
 
   return (
@@ -141,36 +112,12 @@ export const RepositoryCardActionsSettings: React.FC<RepositoryCardActionsSettin
         <p className="text-xs text-muted-foreground">{hint}</p>
         <div className="space-y-2">
           {displayedActions.map((item, index) => {
-            const isPlugin = isPluginActionId(item.id);
-            let label = '';
-            let iconNode: React.ReactNode = null;
-            let subtitleNode: React.ReactNode = null;
-
-            if (isPlugin) {
-              const pluginAction = pluginActionMap.get(item.id);
-              label = pluginAction?.title || item.id;
-              iconNode = (
-                <PluginIcon
-                  pluginId={pluginAction?.pluginId}
-                  icon={pluginAction?.icon}
-                  className="h-4 w-4 shrink-0 text-muted-foreground"
-                />
-              );
-              if (pluginAction?.pluginName) {
-                subtitleNode = (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    ({pluginAction.pluginName})
-                  </span>
-                );
-              }
-            } else {
-              const builtinId = item.id as BuiltinRepositoryCardActionId;
-              label = t(ACTION_LABEL_KEYS[builtinId]);
-              const IconComp = BUILTIN_ICONS[builtinId];
-              iconNode = IconComp ? (
-                <IconComp className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : null;
-            }
+            const builtinId = item.id as BuiltinRepositoryCardActionId;
+            const label = t(ACTION_LABEL_KEYS[builtinId]);
+            const IconComp = BUILTIN_ICONS[builtinId];
+            const iconNode = IconComp ? (
+              <IconComp className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : null;
 
             return (
               <div
@@ -180,7 +127,6 @@ export const RepositoryCardActionsSettings: React.FC<RepositoryCardActionsSettin
                 {iconNode}
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {label}
-                  {subtitleNode}
                 </span>
                 <Button
                   type="button"
