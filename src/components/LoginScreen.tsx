@@ -84,7 +84,7 @@ export const LoginScreen: React.FC = () => {
   const conflictResolveRef = useRef<((overwrite: boolean) => void) | null>(null);
   const {
     setUser, setGitHubToken,
-    repositories, gists, starredGists, releases, forks,
+    repositories, releases,
     customCategories, categoryOrder, hiddenDefaultCategoryIds,
     defaultCategoryOverrides,
     lastSync, accountWorkspaces, language, setLanguage, themeMode, systemTheme, setThemeMode,

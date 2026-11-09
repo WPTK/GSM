@@ -2,8 +2,7 @@
 import { TranslateFn } from '../../i18n/useT';
 import React from 'react';
 import { ExternalLink, Mail, Monitor, Package } from 'lucide-react';
-import { Github, Twitter } from '../ui/brand-icons';
-import { UpdateChecker } from '../UpdateChecker';
+import { Github } from '../ui/brand-icons';
 import { version } from '../../../package.json';
 import { PROJECT_REPO_URL } from '../../constants/project';
 import { Button } from '../ui/button';

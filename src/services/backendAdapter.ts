@@ -1,7 +1,7 @@
 import { translateBackendError } from '../utils/backendErrors';
 import { logger } from './logger';
 
-import { Repository, Release, AIConfig, WebDAVConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
+import { Repository, Release, AIConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
 import { isReadmeCandidateItem, type GitHubReadmeCandidateItem } from '../utils/readmeVariants';
 
 interface GitHubContentResponse {
@@ -149,7 +149,6 @@ class BackendAdapter {
       logger.info('backendAdapter', 'Backend not available, using local-only mode');
     } finally {
       // 探测结束：标记结论已落定并通知订阅者。
-      setBackendProbed();
       for (const listener of this._availabilityListeners) listener();
     }
   }
@@ -692,46 +691,6 @@ class BackendAdapter {
     });
     if (!res.ok) await this.throwTranslatedError(res, 'Fetch AI configs error');
     return res.json() as Promise<AIConfig[]>;
-  }
-
-  async syncWebDAVConfigs(configs: WebDAVConfig[]): Promise<void> {
-    if (!this._backendUrl) return;
-
-    // Pre-sync validation: warn about configs that will likely be skipped
-    for (const c of configs) {
-      if (!c.password) {
-        logger.warn('backendAdapter', 'WebDAV config has empty password, will be skipped', { name: c.name, id: c.id });
-      }
-    }
-
-    const res = await this.fetchWithRetry(`${this._backendUrl}/configs/webdav/bulk`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({ configs })
-    }, 30000, 3);
-    if (!res.ok) await this.throwTranslatedError(res, 'Sync WebDAV configs error');
-
-    // Parse response and throw on partial failure so callers don't clear pending changes
-    try {
-      const data = await res.json() as { synced?: number; skipped?: number; errors?: Array<{ id: string; name: string; reason: string }> };
-      if (data.skipped && data.skipped > 0) {
-        const reasons = data.errors?.map(e => `${e.name}: ${e.reason}`).join('; ') ?? '';
-        throw new Error(`Sync WebDAV configs partial failure: ${data.skipped} skipped${reasons ? ` (${reasons})` : ''}`);
-      }
-    } catch (err) {
-      // Re-throw our own errors; ignore JSON parse errors from empty responses
-      if (err instanceof Error && err.message.startsWith('Sync WebDAV configs partial failure')) throw err;
-    }
-  }
-
-  async fetchWebDAVConfigs(): Promise<WebDAVConfig[]> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/webdav`, {
-      headers: this.getAuthHeaders()
-    });
-    if (!res.ok) await this.throwTranslatedError(res, 'Fetch WebDAV configs error');
-    return res.json() as Promise<WebDAVConfig[]>;
   }
 
   // === Embedding Configs ===
