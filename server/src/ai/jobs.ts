@@ -358,7 +358,7 @@ export async function collectBatchResults(id: string): Promise<void> {
   const retries: ItemRow[] = [];
   let creditLow = false;
 
-  for await (const entry of stream as AsyncIterable<{ custom_id: string; result: { type: string; message?: any; error?: any } }>) {
+  for await (const entry of stream) {
     const repoId = Number(/^repo-(\d+)$/.exec(entry.custom_id)?.[1]);
     const item = Number.isFinite(repoId) ? itemRows(id).find((i) => i.repo_id === repoId) : undefined;
     if (!item || item.status !== 'pending') continue;

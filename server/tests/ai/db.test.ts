@@ -7,7 +7,7 @@ import { runMigrations } from '../../src/db/migrations.js';
 import { encrypt } from '../../src/services/crypto.js';
 import { config } from '../../src/config.js';
 
-vi.mock('../../src/db/connection.js', () => ({ getDb: () => (globalThis as any).__testDb, closeDb: () => undefined }));
+vi.mock('../../src/db/connection.js', () => ({ getDb: () => (globalThis as unknown as { __testDb: unknown }).__testDb, closeDb: () => undefined }));
 
 const { default: syncRouter } = await import('../../src/routes/sync.js');
 const { default: repositoriesRouter } = await import('../../src/routes/repositories.js');

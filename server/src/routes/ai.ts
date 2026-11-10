@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getDb } from '../db/connection.js';
 import { CUSTOM_ANALYSIS_PROMPT_KEY } from '../db/settingsKeys.js';
 import { logger } from '../services/logger.js';
-import { getAnthropicClient } from '../ai/client.js';
+import { getAnthropicClient, type MessageStreamLike } from '../ai/client.js';
 import { getModels, isConnected, keySuffix } from '../ai/claudeConfig.js';
 import { getAiState, isCreditLowError, setCreditLow } from '../ai/creditState.js';
 import { messageText, toUsage } from '../ai/analyze.js';
@@ -71,8 +71,8 @@ function describeUpstreamError(err: unknown): { status: number; code: AiErrorCod
   }
   const e = err as { status?: number; headers?: Record<string, string> | { get?: (k: string) => string | null } };
   if (e?.status === 429) {
-    const h = e.headers as any;
-    const retryAfter = typeof h?.get === 'function' ? h.get('retry-after') : h?.['retry-after'];
+    const h = e.headers as { get?: (k: string) => string | null; [key: string]: unknown } | undefined;
+    const retryAfter = typeof h?.get === 'function' ? h.get('retry-after') : (h?.['retry-after'] as string | undefined);
     return { status: 429, code: 'AI_RATE_LIMITED', message: 'Anthropic rate limit reached', retryAfter: retryAfter ?? undefined };
   }
   return { status: 502, code: 'AI_UPSTREAM_ERROR', message: 'The Anthropic API request failed' };
@@ -218,7 +218,7 @@ router.post('/api/ai/messages', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
-  let stream: any;
+  let stream: MessageStreamLike | undefined;
   let finished = false;
   res.on('close', () => {
     if (!finished) stream?.abort?.();

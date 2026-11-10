@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { freshDb, insertRepos, makeFakeClient, resetAiEnv, textMessage, VALID_ANALYSIS, waitFor, type FakeClient } from './helpers.js';
 
-vi.mock('../../src/db/connection.js', () => ({ getDb: () => (globalThis as any).__testDb, closeDb: () => undefined }));
+vi.mock('../../src/db/connection.js', () => ({ getDb: () => (globalThis as unknown as { __testDb: unknown }).__testDb, closeDb: () => undefined }));
 vi.mock('../../src/ai/readme.js', () => ({ fetchReadme: vi.fn(async (name: string) => `README for ${name}`) }));
 
 const { setAnthropicClientForTests } = await import('../../src/ai/client.js');
@@ -162,7 +162,7 @@ describe('direct and batch routing', () => {
     expect(getJob(job.id).mode).toBe('direct');
     expect(fake.calls.batchCreate).toHaveLength(0);
     expect(fake.calls.create).toHaveLength(20);
-    const row = db.prepare('SELECT ai_summary, ai_tags, ai_platforms, analyzed_at FROM repositories WHERE id = 1').get() as any;
+    const row = db.prepare('SELECT ai_summary, ai_tags, ai_platforms, analyzed_at FROM repositories WHERE id = 1').get() as { ai_summary: string; ai_tags: string; ai_platforms: string; analyzed_at: string };
     expect(row.ai_summary).toBe(VALID_ANALYSIS.summary);
     expect(JSON.parse(row.ai_tags)).toEqual(VALID_ANALYSIS.tags);
     expect(row.analyzed_at).toBeTruthy();
@@ -194,7 +194,7 @@ describe('direct and batch routing', () => {
     expect(fake.calls.batchCreate).toHaveLength(1);
     const reqs = fake.calls.batchCreate[0].requests;
     expect(reqs).toHaveLength(21);
-    expect(reqs.map((r: any) => r.custom_id)).toContain('repo-21');
+    expect(reqs.map((r: { custom_id: string }) => r.custom_id)).toContain('repo-21');
     expect(reqs[0].params.output_config.format.type).toBe('json_schema');
     expect(db.prepare('SELECT batch_id FROM ai_jobs WHERE id = ?').get(job.id)).toEqual({ batch_id: 'batch_1' });
   });
@@ -259,7 +259,7 @@ describe('credit-low state', () => {
     const ids = insertRepos(db, 3);
     const est = await estimateFor(ids);
     let broke = true;
-    fake.impl.create = (p: any) => {
+    fake.impl.create = () => {
       if (broke) throw Object.assign(new Error('Your credit balance is too low to access the Anthropic API'), { status: 400 });
       return textMessage(JSON.stringify(VALID_ANALYSIS));
     };
@@ -310,7 +310,7 @@ describe('credit-low state', () => {
     await pollBatchesOnce();
     expect(getJob(job.id).status).toBe('paused');
     expect(getAiState().state).toBe('credit_low');
-    fake.impl.batchCreate = (p: any) => ({ id: 'batch_2', processing_status: 'in_progress', n: p.requests.length });
+    fake.impl.batchCreate = (p) => ({ id: 'batch_2', processing_status: 'in_progress', n: (p.requests as unknown[]).length });
     expect(await runCreditProbe()).toBe(true);
     await waitFor(() => getJob(job.id).status === 'submitted');
     expect(fake.calls.batchCreate[1].requests).toHaveLength(20);
@@ -336,7 +336,7 @@ describe('submit races and crash window', () => {
     const est = await estimateFor(ids);
     fake.impl.batchCreate = () => new Promise(() => undefined); // process "dies" inside create()
     const job = createJob(est.id, false);
-    await waitFor(() => (db.prepare('SELECT batch_id FROM ai_jobs WHERE id = ?').get(job.id) as any).batch_id?.startsWith('pending:'));
+    await waitFor(() => (db.prepare('SELECT batch_id FROM ai_jobs WHERE id = ?').get(job.id) as { batch_id?: string }).batch_id?.startsWith('pending:'));
     const second = makeFakeClient();
     setAnthropicClientForTests(second);
     resumeJobsOnBoot();

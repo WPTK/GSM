@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { freshDb, makeFakeClient, resetAiEnv, textMessage, HttpError, type FakeClient } from './helpers.js';
 
 vi.mock('../../src/db/connection.js', () => ({
-  getDb: () => (globalThis as any).__testDb,
+  getDb: () => (globalThis as unknown as { __testDb: unknown }).__testDb,
   closeDb: () => undefined,
 }));
 
@@ -239,7 +239,7 @@ describe('relay limits', () => {
 
   it('aborts the upstream call of a non-stream request when the client disconnects', async () => {
     let seen: AbortSignal | undefined;
-    fake.impl.create = (_p: any, options: any) => new Promise((_res, rej) => {
+    fake.impl.create = (_p, options) => new Promise((_res, rej) => {
       seen = options?.signal;
       options?.signal?.addEventListener('abort', () => rej(new Error('aborted')));
     });

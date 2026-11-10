@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { runMigrations } from '../../src/db/migrations.js';
-import type { AnthropicLike } from '../../src/ai/client.js';
+import type { AnthropicLike, BatchLike, BatchResultEntryLike, ClientParams, MessageLike, MessageStreamLike } from '../../src/ai/client.js';
 
 /** getDb() is mocked in each test file to return this database. */
 export function freshDb(): Database.Database {
@@ -36,23 +36,23 @@ export class HttpError extends Error {
 
 export interface FakeClient extends AnthropicLike {
   calls: {
-    create: any[];
-    stream: any[];
-    countTokens: any[];
-    batchCreate: any[];
+    create: ClientParams[];
+    stream: ClientParams[];
+    countTokens: ClientParams[];
+    batchCreate: ClientParams[];
     batchRetrieve: string[];
     batchResults: string[];
     batchCancel: string[];
     modelsRetrieve: string[];
   };
   impl: {
-    create: (params: any, options?: any) => Promise<any> | any;
-    countTokens: (params: any) => Promise<{ input_tokens: number }> | { input_tokens: number };
-    batchCreate: (params: any) => Promise<any> | any;
-    batchRetrieve: (id: string) => Promise<any> | any;
-    batchResults: (id: string) => AsyncIterable<any> | Promise<AsyncIterable<any>>;
-    modelsRetrieve: (id: string) => Promise<any> | any;
-    stream: (params: any) => any;
+    create: (params: ClientParams, options?: ClientParams) => Promise<MessageLike> | MessageLike;
+    countTokens: (params: ClientParams) => Promise<{ input_tokens: number }> | { input_tokens: number };
+    batchCreate: (params: ClientParams) => Promise<BatchLike> | BatchLike;
+    batchRetrieve: (id: string) => Promise<BatchLike> | BatchLike;
+    batchResults: (id: string) => AsyncIterable<BatchResultEntryLike> | Promise<AsyncIterable<BatchResultEntryLike>>;
+    modelsRetrieve: (id: string) => Promise<{ id?: string }> | { id?: string };
+    stream: (params: ClientParams) => MessageStreamLike;
   };
 }
 
@@ -77,20 +77,20 @@ export function makeFakeClient(): FakeClient {
     calls,
     impl,
     messages: {
-      create: async (params: any, options?: any) => {
+      create: async (params: ClientParams, options?: ClientParams) => {
         calls.create.push(params);
         return impl.create(params, options);
       },
-      stream: (params: any) => {
+      stream: (params: ClientParams) => {
         calls.stream.push(params);
         return impl.stream(params);
       },
-      countTokens: async (params: any) => {
+      countTokens: async (params: ClientParams) => {
         calls.countTokens.push(params);
         return impl.countTokens(params);
       },
       batches: {
-        create: async (params: any) => {
+        create: async (params: ClientParams) => {
           calls.batchCreate.push(params);
           return impl.batchCreate(params);
         },
