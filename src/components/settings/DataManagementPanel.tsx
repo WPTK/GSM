@@ -107,7 +107,6 @@ interface ExportData {
   data: {
     repositories?: Repository[];
     releases?: Release[];
-    aiConfigs?: LegacyBackupAIConfig[];
     customCategories?: Category[];
     assetFilters?: AssetFilter[];
     discoveryRepos?: Record<string, DiscoveryRepo[]>;
@@ -151,25 +150,8 @@ interface DataCleanupSuggestion {
   bgColor: string;
 }
 
-const MASKED_SECRET = '***';
-
-/**
- * Shape of an AI config inside an older backup file. The browser no longer holds AI configs
- * (Claude is configured on the server), so these are read for the import preview only and are
- * never written into browser state.
- */
-interface LegacyBackupAIConfig {
-  id: string;
-  name?: string;
-  apiKey?: string;
-  [key: string]: unknown;
-}
-
-const hasMaskedSecrets = (data: ExportData['data']): boolean => {
-  return !!(
-    data.aiConfigs?.some(config => config.apiKey === MASKED_SECRET)
-  );
-};
+// Older backups may carry `aiConfigs`. Claude is configured on the server now, so that
+// section is ignored on import: it is neither shown in the preview nor written to the store.
 
 const UI_SETTINGS_DATA_KEYS = [
   'theme',
@@ -188,7 +170,6 @@ const UI_SETTINGS_DATA_KEYS = [
 const IMPORT_DATA_KEYS = [
   'repositories',
   'releases',
-  'aiConfigs',
   'customCategories',
   'assetFilters',
   'discoveryRepos',
@@ -948,12 +929,7 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         }
       }
 
-      // 如果导入的数据包含屏蔽的密钥，提示用户
-      if (hasMaskedSecrets(importedData)) {
-        showSuccess(t('dataManagementPanel.data-imported-successfully-some-secrets-were-mas'));
-      } else {
-        showSuccess(t('dataManagementPanel.data-imported-successfully'));
-      }
+      showSuccess(t('dataManagementPanel.data-imported-successfully'));
 
       addLog(t('dataManagementPanel.import-data'), true);
       setImportPreview({ data: null, isOpen: false, fileName: '' });
@@ -1824,11 +1800,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
                       • {t('dataManagementPanel.releases')}: {importPreview.data.data.releases.length} {t('dataManagementPanel.items')}
                     </p>
                   )}
-                  {importPreview.data.data.aiConfigs && (
-                    <p className="text-muted-foreground dark:text-muted-foreground">
-                      • {t('dataManagementPanel.ai-configs')}: {importPreview.data.data.aiConfigs.length} {t('dataManagementPanel.items')}
-                    </p>
-                  )}
                   {importPreview.data.data.customCategories && (
                     <p className="text-muted-foreground dark:text-muted-foreground">
                       • {t('dataManagementPanel.categories')}: {importPreview.data.data.customCategories.length} {t('dataManagementPanel.items')}
@@ -1841,16 +1812,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
                   )}
                 </div>
               </div>
-
-              {/* Warning for masked secrets */}
-              {hasMaskedSecrets(importPreview.data.data) && (
-                <div className="flex items-start space-x-3 text-warning bg-warning/10 p-4 rounded-lg border border-warning/30">
-                  <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm">
-                    {t('dataManagementPanel.warning-some-secrets-in-this-backup-are-masked-p')}
-                  </p>
-                </div>
-              )}
 
               <DialogFooter className="pt-4">
                 <Button
