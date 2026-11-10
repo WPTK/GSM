@@ -1,0 +1,58 @@
+# GSM (hardened fork), single container, built from this checkout.
+# Run it through deploy/up.sh (it passes --env-file deploy/.env). See deploy/README.md.
+name: gsm
+
+services:
+  gsm:
+    build:
+      context: ..
+      dockerfile: Dockerfile.fullstack
+    image: gsm-fullstack:local
+    container_name: gsm
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Start at 1 GB; measure with `docker stats` after the first start and adjust.
+    mem_limit: 1g
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    # Loopback only: never reachable from the LAN. Expose it to the tailnet with
+    # `tailscale serve` (see deploy/README.md for why).
+    ports:
+      - "127.0.0.1:${GSM_PORT:-8765}:3000"
+    environment:
+      # Required. Compose refuses to start if one is unset or empty. Never give them defaults.
+      # Each also has a *_FILE variant (Docker secrets); see deploy/.env.example.
+      API_SECRET: ${API_SECRET:?API_SECRET is not set; add it to deploy/.env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is not set; add it to deploy/.env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is not set; add it to deploy/.env}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?GITHUB_TOKEN is not set; add it to deploy/.env}
+      # Optional. Defaults match server/src/ai/claudeConfig.ts; an empty OUTBOUND_ALLOWLIST means the built-in list.
+      CLAUDE_MODEL_BULK: ${CLAUDE_MODEL_BULK:-claude-haiku-5-5}
+      CLAUDE_MODEL_CHAT: ${CLAUDE_MODEL_CHAT:-claude-sonnet-5-5}
+      AI_SPEND_CONFIRM_USD: ${AI_SPEND_CONFIRM_USD:-2}
+      OUTBOUND_ALLOWLIST: ${OUTBOUND_ALLOWLIST:-}
+      # `uniquelocal` trusts the Docker bridge gateway that tailscale serve arrives through, so
+      # X-Forwarded-Proto is honoured and the session cookie gets Secure. Safe only because the
+      # port above is published on 127.0.0.1.
+      TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
+      # The page is served over https by tailscale serve, so upgrade insecure requests.
+      CSP_UPGRADE_INSECURE_REQUESTS: ${CSP_UPGRADE_INSECURE_REQUESTS:-true}
+    volumes:
+      - gsm-data:/app/data
+      # Phase 5 writes backups here. The container user is node (uid 1000), so the host
+      # directory must be owned by uid 1000: sudo chown 1000:1000 backups
+      - ${GSM_BACKUP_DIR:-./backups}:/backups
+
+volumes:
+  gsm-data:

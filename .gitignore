@@ -78,3 +78,7 @@ CLAUDE.md
 
 # Security audit: kept local until the upstream advisory is published
 docs/hardening/AUDIT.md
+
+# Local deployment state
+deploy/.env
+backups/
