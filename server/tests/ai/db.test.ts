@@ -77,20 +77,24 @@ describe('migration v5', () => {
 describe('sync export', () => {
   beforeEach(() => { freshDb(); });
 
-  it('never contains an AI key in the clear or encrypted', async () => {
-    const secret = 'fake-anthropic-key-THISMUSTNOTLEAK-abcd';
+  it('exports no trace of a legacy AI key: no ciphertext, last 4, mask, or api_key fields', async () => {
+    const secret = 'fake-anthropic-key-THISMUSTNOTLEAK-wxyz';
+    const cipher = encrypt(secret, config.encryptionKey);
     testDb().prepare(
       "INSERT INTO ai_configs (id, name, api_type, base_url, api_key_encrypted, model, is_active) VALUES ('c1','My','claude','https://api.anthropic.com',?, 'm', 1)",
-    ).run(encrypt(secret, config.encryptionKey));
+    ).run(cipher);
     const res = await request(app()).post('/api/sync/export').expect(200);
     const text = JSON.stringify(res.body);
+    expect(res.body.ai_configs).toHaveLength(1);
     expect(text).not.toContain('THISMUSTNOTLEAK');
-    expect(res.body.ai_configs[0].api_key_encrypted).toBeUndefined();
-    expect(res.body.ai_configs[0].api_key_masked).toBe('***abcd');
+    expect(text).not.toContain(cipher);
+    expect(text).not.toContain('wxyz');
+    expect(text).not.toContain('***');
+    expect(text).not.toMatch(/api_key/);
+    expect(res.body.ai_configs[0].name).toBe('My');
     expect(text).not.toContain('ai.state');
   });
 });
-
 describe('repositories upsert keeps newer server analysis', () => {
   const repo = (extra: Record<string, unknown> = {}) => ({
     id: 1, name: 'r', full_name: 'o/r', html_url: 'https://github.com/o/r', stargazers_count: 1,

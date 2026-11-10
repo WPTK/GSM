@@ -2,8 +2,6 @@ import { CUSTOM_ANALYSIS_PROMPT_KEY, EXCLUDED_SETTING_KEYS } from '../db/setting
 import { MAX_CUSTOM_ANALYSIS_PROMPT_CHARS } from '../ai/contract.js';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
-import { decrypt } from '../services/crypto.js';
-import { config } from '../config.js';
 import { toDisplayPref, DESCRIPTION_DISPLAY_VALUES, TAGS_DISPLAY_VALUES } from './repositories.js';
 
 const router = Router();
@@ -22,12 +20,6 @@ function canonicalizeLicenseString(value: string): string | null {
   return trimmed;
 }
 
-function maskApiKey(key: string | null | undefined): string {
-  if (!key || typeof key !== 'string') return '';
-  if (key.length <= 4) return '****';
-  return '***' + key.slice(-4);
-}
-
 // POST /api/sync/export
 router.post('/api/sync/export', (_req, res) => {
   try {
@@ -38,18 +30,13 @@ router.post('/api/sync/export', (_req, res) => {
     const categories = db.prepare('SELECT * FROM categories').all() as Record<string, unknown>[];
     const assetFilters = db.prepare('SELECT * FROM asset_filters').all() as Record<string, unknown>[];
 
-    // AI configs — mask api_key
+    // AI configs: legacy api_key_encrypted is dropped; no part of any key is exported
     const aiConfigRows = db.prepare('SELECT * FROM ai_configs').all() as Record<string, unknown>[];
     const aiConfigs = aiConfigRows.map((row) => {
       const masked = { ...row };
-      if (masked.api_key_encrypted && typeof masked.api_key_encrypted === 'string') {
-        try {
-          masked.api_key_masked = maskApiKey(decrypt(masked.api_key_encrypted, config.encryptionKey));
-        } catch {
-          masked.api_key_masked = '****';
-        }
-      }
       delete masked.api_key_encrypted;
+      delete masked.api_key_masked;
+      delete masked.api_key;
       return masked;
     });
 
