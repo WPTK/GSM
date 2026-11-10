@@ -1,4 +1,5 @@
-import { EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
+import { CUSTOM_ANALYSIS_PROMPT_KEY, EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
+import { MAX_CUSTOM_ANALYSIS_PROMPT_CHARS } from '../ai/contract.js';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
 import { decrypt } from '../services/crypto.js';
@@ -335,7 +336,13 @@ router.post('/api/sync/import', (req, res) => {
         let settingsCount = 0;
         for (const [key, value] of Object.entries(settings)) {
           if (EXCLUDED_SETTING_KEYS.has(key)) continue;
-          settingsStmt.run(key, (value as string) ?? null);
+          let stored = (value as string) ?? null;
+          if (key === CUSTOM_ANALYSIS_PROMPT_KEY) {
+            // Same cap as PUT /api/ai/settings; a non-string value cannot be a prompt.
+            if (typeof stored !== 'string') continue;
+            stored = stored.slice(0, MAX_CUSTOM_ANALYSIS_PROMPT_CHARS);
+          }
+          settingsStmt.run(key, stored);
           settingsCount++;
         }
         counts.settings = settingsCount;

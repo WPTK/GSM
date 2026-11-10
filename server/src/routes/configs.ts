@@ -1,4 +1,4 @@
-import { EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
+import { AI_STATE_SETTING_KEY, CUSTOM_ANALYSIS_PROMPT_KEY, EXCLUDED_SETTING_KEYS } from '../db/settingsKeys.js';
 import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
@@ -247,6 +247,17 @@ router.put('/api/settings', (req, res) => {
         code: 'GITHUB_TOKEN_NOT_SETTABLE',
       });
       return;
+    }
+
+    // Server-owned AI settings have their own routes (/api/ai/settings) and state.
+    for (const key of [AI_STATE_SETTING_KEY, CUSTOM_ANALYSIS_PROMPT_KEY]) {
+      if (Object.prototype.hasOwnProperty.call(updates, key)) {
+        res.status(400).json({
+          error: `The setting ${key} cannot be set here`,
+          code: 'SETTING_NOT_SETTABLE',
+        });
+        return;
+      }
     }
 
     const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');

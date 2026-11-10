@@ -42,6 +42,7 @@ export interface StoredEstimate {
 }
 
 const estimates = new Map<string, StoredEstimate>();
+const MAX_STORED_ESTIMATES = 50;
 let lastCache: AiCacheInfo | null = null;
 
 export function getLastCacheDecision(): AiCacheInfo | null {
@@ -234,6 +235,12 @@ export async function createEstimate(req: AnalysisEstimateRequest): Promise<Stor
   };
   stored.response.estimateId = stored.id;
   estimates.set(stored.id, stored);
+  // Map keeps insertion order: drop the oldest beyond the cap.
+  while (estimates.size > MAX_STORED_ESTIMATES) {
+    const oldest = estimates.keys().next().value;
+    if (oldest === undefined) break;
+    estimates.delete(oldest);
+  }
   return stored;
 }
 

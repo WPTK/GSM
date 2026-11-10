@@ -115,6 +115,17 @@ describe('prompt cache decision', () => {
 });
 
 describe('estimate and spend guard', () => {
+  it('keeps at most 50 estimates and evicts the oldest first', async () => {
+    const { getEstimate } = await import('../../src/ai/estimate.js');
+    const ids = insertRepos(db, 1);
+    const made = [];
+    for (let i = 0; i < 52; i++) made.push(await estimateFor(ids));
+    expect(getEstimate(made[0].id)).toBeNull();
+    expect(getEstimate(made[1].id)).toBeNull();
+    expect(getEstimate(made[2].id)).not.toBeNull();
+    expect(getEstimate(made[51].id)).not.toBeNull();
+  });
+
   it('reports an upper bound and labels batch use above 20 repos', async () => {
     const ids = insertRepos(db, 21);
     const est = await estimateFor(ids);

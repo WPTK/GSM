@@ -76,6 +76,18 @@ describe('PUT /api/settings', () => {
   });
 });
 
+describe('PUT /api/settings server-owned AI keys', () => {
+  it.each(['ai.state', 'ai.customAnalysisPrompt'])('rejects %s with 400 and stores nothing', async (key) => {
+    const values = createSettingsDb();
+    const res = await request(createTestApp())
+      .put('/api/settings')
+      .send({ [key]: 'x', activeAIConfig: 'default' })
+      .expect(400);
+    expect(res.body.code).toBe('SETTING_NOT_SETTABLE');
+    expect(values.size).toBe(0);
+  });
+});
+
 describe('GET /api/settings', () => {
   it('never reports a stored github_token, even a masked one', async () => {
     getDbMock.mockReturnValue({

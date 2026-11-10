@@ -33,6 +33,14 @@ describe('claude config', () => {
     expect(keySuffix()).toHaveLength(4);
   });
 
+  it('keySuffix is null for a key shorter than 12 characters', () => {
+    process.env.ANTHROPIC_API_KEY = 'short-key-1';
+    expect(keySuffix()).toBeNull();
+    process.env.ANTHROPIC_API_KEY = '123456789012';
+    resetClaudeConfigForTests();
+    expect(keySuffix()).toBe('9012');
+  });
+
   it('has the documented defaults', () => {
     expect(getModels()).toEqual({ bulk: 'claude-haiku-5-5', chat: 'claude-sonnet-5-5' });
     expect(getSpendConfirmUsd()).toBe(2);

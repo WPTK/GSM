@@ -205,3 +205,25 @@ describe('POST /api/sync/import release upsert is_read semantics', () => {
     expect(statements[idx].params[14]).toBe('https://example.com/t2');
   });
 });
+
+describe('POST /api/sync/import settings', () => {
+  it('caps ai.customAnalysisPrompt at 4000 characters and skips ai.state', async () => {
+    const { statements } = captureStatements();
+    await request(createTestApp())
+      .post('/api/sync/import')
+      .send({
+        settings: {
+          'ai.customAnalysisPrompt': 'p'.repeat(5000),
+          'ai.state': '{"creditLow":true}',
+          theme: 'dark',
+        },
+      })
+      .expect(200);
+
+    const settingsRuns = statements.filter((s) => s.sql.includes('INTO settings')).map((s) => s.params);
+    const prompt = settingsRuns.find((p) => p[0] === 'ai.customAnalysisPrompt');
+    expect(prompt?.[1]).toHaveLength(4000);
+    expect(settingsRuns.some((p) => p[0] === 'ai.state')).toBe(false);
+    expect(settingsRuns.some((p) => p[0] === 'theme')).toBe(true);
+  });
+});

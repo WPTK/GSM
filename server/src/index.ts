@@ -124,7 +124,7 @@ export function createApp(): express.Express {
       next();
       return;
     }
-    (req.path.startsWith('/api/ai/') ? aiJsonParser : jsonParser)(req, res, next);
+    (req.path.toLowerCase().startsWith('/api/ai/') ? aiJsonParser : jsonParser)(req, res, next);
   });
 
   // Routes

@@ -41,7 +41,8 @@ export function getAnthropicKey(): string | null {
 /** Last 4 characters of the key and nothing more; null when no key is set. */
 export function keySuffix(): string | null {
   const key = getAnthropicKey();
-  if (!key) return null;
+  // A short key would show most of itself; real keys are far longer than 12 characters.
+  if (!key || key.length < 12) return null;
   return key.slice(-4);
 }
 
