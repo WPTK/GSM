@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AIConfig, Repository } from '../../types';
+import type { Repository } from '../../types';
 import type { RepositoryChatSession, ToolEvidence } from '../../types/repositoryChat';
 import type { ChatToolEventInput } from './loop';
 
@@ -65,23 +65,12 @@ const session: RepositoryChatSession = {
   updatedAt: '2026-08-26T00:00:00.000Z',
 };
 
-const aiConfig: AIConfig = {
-  id: 'ai-1',
-  name: 'Test AI',
-  apiType: 'openai',
-  baseUrl: 'https://example.com/v1',
-  apiKey: 'test-key',
-  model: 'test-model',
-  isActive: true,
-};
-
 const turnInput = (question: string, overrides: Partial<RepositoryChatTurnInput> = {}): RepositoryChatTurnInput => ({
   repository,
   session,
   messages: [],
   question,
   githubToken: 'github-token',
-  aiConfig,
   language: 'en' as const,
   maxToolsPerTurn: 12,
   agentBudget: { maxTurns: 6, maxToolCalls: 12, maxReadFiles: 8, maxCodeReads: 3, maxNoProgressRounds: 2, maxDurationMs: 90_000 },

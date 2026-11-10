@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AIConfig, Repository } from '../../../types';
+import type { Repository } from '../../../types';
 import type { RepositoryChatMessage, RepositoryChatSession } from '../../../types/repositoryChat';
 const mocks = vi.hoisted(() => ({
   runRepositoryChatTurn: vi.fn(),
@@ -20,6 +20,17 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../store/useAppStore', () => ({
   useAppStore: (selector: (state: Record<string, unknown>) => unknown) => selector(mocks.appState),
+}));
+
+vi.mock('../../../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({
+    connected: true,
+    state: 'ok',
+    status: { connected: true, keySuffix: 'abcd', models: { bulk: 'claude-bulk', chat: 'claude-chat' }, state: 'ok' },
+    loading: false,
+    error: null,
+    refresh: async () => {},
+  }),
 }));
 
 vi.mock('../../../services/repositoryChatRunner', () => ({
@@ -77,20 +88,10 @@ const session: RepositoryChatSession = {
 };
 const defaultTitleSession: RepositoryChatSession = { ...session, title: 'New conversation' };
 
-const aiConfig: AIConfig = {
-  id: 'ai-1',
-  name: 'Test AI',
-  apiType: 'openai-compatible',
-  baseUrl: 'https://example.com/v1',
-  apiKey: 'test-key',
-  model: 'test-model',
-  isActive: true,
-};
 const emptyMessages: RepositoryChatMessage[] = [];
 
 const repositoryChatSettings = {
   enabled: true,
-  chatConfigId: aiConfig.id,
   retainSessionDays: 90,
   maxToolsPerTurn: 6,
   enableWebTools: false,
@@ -130,8 +131,6 @@ describe('useRepositoryChat persistence failures', () => {
       language: 'en',
       user: { id: 42, login: 'test-user' },
       githubToken: 'github-token',
-      aiConfigs: [aiConfig],
-      activeAIConfig: aiConfig.id,
       repositoryChatSettings,
     };
   });

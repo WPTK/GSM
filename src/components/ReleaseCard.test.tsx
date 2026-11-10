@@ -4,8 +4,6 @@ import ReleaseCard from './ReleaseCard';
 import type { Release } from '../types';
 
 const storeState: Record<string, unknown> = {
-  aiConfigs: [],
-  activeAIConfig: null,
   language: 'zh',
 };
 

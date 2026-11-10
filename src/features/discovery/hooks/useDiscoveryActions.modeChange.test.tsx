@@ -15,6 +15,14 @@ const mocks = vi.hoisted(() => ({
   loadAllAnalyses: vi.fn(),
 }));
 
+vi.mock('../../../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: true }),
+}));
+
+vi.mock('../../../hooks/useClaudeSpendConfirm', () => ({
+  useClaudeSpendConfirm: () => async () => true,
+}));
+
 vi.mock('../../../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: vi.fn() }),
 }));
@@ -48,15 +56,6 @@ const setupStore = (mode: 'keyword' | 'semantic', query = 'markdown editor') => 
     discoveryPlatform: 'All',
     discoverySortBy: 'BestMatch',
     discoverySortOrder: 'Descending',
-    activeAIConfig: 'cfg-1',
-    aiConfigs: [{
-      id: 'cfg-1',
-      name: 'cfg',
-      baseUrl: 'https://api.example.test',
-      apiKey: 'key',
-      model: 'model-x',
-      isActive: true,
-    }],
   });
 };
 

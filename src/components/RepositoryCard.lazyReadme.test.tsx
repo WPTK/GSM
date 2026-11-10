@@ -63,7 +63,6 @@ const storeState = {
   analyzingRepositoryIds: new Set<number>(),
   toggleReleaseSubscription: vi.fn(),
   githubToken: null,
-  activeAIConfig: null,
   setAnalyzingRepository: vi.fn(),
   language: 'en' as const,
   updateRepository: vi.fn(),
@@ -81,7 +80,6 @@ const storeState = {
   activeEmbeddingConfig: '',
   repositories: [repository],
   enterSimilarView: vi.fn(),
-  aiConfigs: [],
 };
 
 describe('RepositoryCard README lazy boundary', () => {

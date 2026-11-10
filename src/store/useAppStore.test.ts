@@ -947,6 +947,31 @@ describe('useAppStore holds no browser-side credential', () => {
     }
   });
 
+  it('v18 migration and hydration drop saved provider configs so no AI key stays in browser state', async () => {
+    const legacy = {
+      user,
+      aiConfigs: [{ id: 'c1', name: 'Old', apiKey: 'sk-old-provider-key', baseUrl: 'https://api.example.com', model: 'm' }],
+      activeAIConfig: 'c1',
+    } as never;
+
+    const migrated = await persistenceOptions().migrate!(legacy, 17) as Record<string, unknown>;
+    expect(migrated).not.toHaveProperty('aiConfigs');
+    expect(migrated).not.toHaveProperty('activeAIConfig');
+
+    const hydrated = normalizePersistedState(legacy, useAppStore.getState());
+    expect(hydrated).not.toHaveProperty('aiConfigs');
+    expect(hydrated).not.toHaveProperty('activeAIConfig');
+    expect(JSON.stringify(hydrated)).not.toContain('sk-old-provider-key');
+    expect(useAppStore.getState()).not.toHaveProperty('aiConfigs');
+  });
+
+  it('never partializes any AI provider field into storage', () => {
+    const persisted = persistenceOptions().partialize({ ...useAppStore.getState() }) as Record<string, unknown>;
+    expect(persisted).not.toHaveProperty('aiConfigs');
+    expect(persisted).not.toHaveProperty('activeAIConfig');
+    expect((useAppStore.persist.getOptions() as { version?: number }).version).toBe(18);
+  });
+
   it('logout clears the in-memory token and any legacy storage', () => {
     window.localStorage.setItem(LEGACY_AUTH_KEY, '{}');
     useAppStore.getState().setGitHubToken('server');

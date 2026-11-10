@@ -89,8 +89,6 @@ const baseStoreState = () => ({
   searchFilters: { ...defaultSearchFilters },
   repositories: [] as Repository[],
   releaseSubscriptions: new Set<number>(),
-  aiConfigs: [],
-  activeAIConfig: null,
   language: 'zh',
   setSearchFilters: vi.fn(),
   setSearchResults: vi.fn(),

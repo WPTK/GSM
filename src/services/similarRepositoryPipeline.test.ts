@@ -77,15 +77,7 @@ const cases = (readFixture(
   fixturePath(import.meta.url, '__fixtures__/similar-repository-cases.json'),
 ) as { cases: SimilarityCase[] }).cases;
 
-const parser = new AIService({
-  id: 'parser',
-  name: 'parser',
-  apiType: 'openai',
-  baseUrl: 'http://localhost:0',
-  apiKey: '',
-  model: 'gpt-test',
-  isActive: true,
-} as never, 'en');
+const parser = new AIService('en');
 
 describe('similarRepositoryPipeline', () => {
   it.each(cases)('$name', async (item) => {

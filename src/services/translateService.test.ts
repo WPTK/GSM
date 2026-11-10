@@ -3,8 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const { mockStoreState } = vi.hoisted(() => ({
   mockStoreState: {
     translationEngine: 'microsoft' as 'microsoft' | 'google' | 'ai',
-    aiConfigs: [] as Array<{ id: string; name: string }>,
-    activeAIConfig: null as string | null,
     language: 'zh' as 'zh' | 'en',
   },
 }));
@@ -18,6 +16,7 @@ vi.mock('./aiService', () => ({
 }));
 
 import { translateText, translateBatch } from './translateService';
+import { AIService } from './aiService';
 
 interface MockFetchOptions {
   /** 模拟响应体：json() 的返回值（针对微软引擎）。 */
@@ -56,8 +55,6 @@ const installFetch = (options: MockFetchOptions | ((url: string, init: RequestIn
 describe('translateService', () => {
   beforeEach(() => {
     mockStoreState.translationEngine = 'microsoft';
-    mockStoreState.aiConfigs = [];
-    mockStoreState.activeAIConfig = null;
     mockStoreState.language = 'zh';
   });
 
@@ -229,16 +226,19 @@ describe('translateService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it('ai engine without an active AI config fails with a setup hint', async () => {
-    vi.useFakeTimers();
+  it('ai engine translates through the server-side Claude service and never uses the direct endpoints', async () => {
     mockStoreState.translationEngine = 'ai';
+    const translateTexts = vi.fn(async (texts: string[]) => texts.map((text) => `zh:${text}`));
+    vi.mocked(AIService).mockImplementation(function () {
+      return { translateTexts } as unknown as AIService;
+    });
     const fetchMock = installFetch({ msBody: [] });
 
-    const promise = translateText({ text: 'Hello', to: 'zh', from: 'en' });
-    const assertion = expect(promise).rejects.toThrow('AI 翻译引擎未就绪');
-    await vi.advanceTimersByTimeAsync(3_000);
-    await assertion;
+    const result = await translateText({ text: 'Hello', to: 'zh', from: 'en' });
 
+    expect(result.translatedText).toBe('zh:Hello');
+    expect(AIService).toHaveBeenCalledWith('zh');
+    expect(translateTexts).toHaveBeenCalledWith(['Hello'], 'zh', 'en', expect.anything());
     // AI 引擎不走直连接口
     expect(fetchMock).not.toHaveBeenCalled();
   });

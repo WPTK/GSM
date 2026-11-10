@@ -136,8 +136,6 @@ const baseStoreState = () => ({
   releaseLatestMode: 'all' as const,
   setReleaseLatestMode: vi.fn(),
   
-  aiConfigs: [] as Array<{ id: string }>,
-  activeAIConfig: null as string | null,
 });
 
 const createStoreState = (overrides: Partial<ReturnType<typeof baseStoreState>> = {}) => ({

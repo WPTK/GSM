@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   unstarRepository: vi.fn(),
   getRepositoryReadme: vi.fn(),
   loggerInfo: vi.fn(),
+  claude: { connected: true },
+  confirmSpend: vi.fn(),
 }));
 
 vi.mock('../../../store/useAppStore', () => ({
@@ -33,7 +35,15 @@ vi.mock('../../../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: mocks.confirm }),
 }));
 
-vi.mock('../../../services/aiAnalysisHelper', () => ({
+vi.mock('../../../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: mocks.claude.connected }),
+}));
+
+vi.mock('../../../hooks/useClaudeSpendConfirm', () => ({
+  useClaudeSpendConfirm: () => mocks.confirmSpend,
+}));
+
+vi.mock('../../../services/claudeJobs', () => ({
   analyzeRepository: mocks.analyzeRepository,
   createFailedAnalysisResult: mocks.createFailedAnalysisResult,
 }));
@@ -95,7 +105,6 @@ const createStoreState = () => ({
   releaseSubscriptions: new Set<number>(),
   analyzingRepositoryIds: new Set<number>(),
   githubToken: 'github-token',
-  activeAIConfig: 'ai-config',
   setAnalyzingRepository: vi.fn(),
   language: 'zh' as const,
   updateRepository: vi.fn(),
@@ -122,13 +131,6 @@ const createStoreState = () => ({
   activeEmbeddingConfig: 'embedding-config',
   repositories: [repository],
   enterSimilarView: vi.fn(),
-  aiConfigs: [{
-    id: 'ai-config',
-    name: 'Test AI',
-    baseUrl: 'https://example.com/v1',
-    apiKey: 'ai-key',
-    model: 'ai-model',
-  }],
   toggleReleaseSubscription: vi.fn(),
 });
 

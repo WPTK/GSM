@@ -9,9 +9,7 @@ import type { Repository } from '../types';
 const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
   toast: vi.fn(),
-  analyzeRepositoriesPipelined: vi.fn(),
-  abort: vi.fn(),
-  getStats: vi.fn(() => ({ averageResponseTime: 1 })),
+  runClaudeAnalysis: vi.fn(),
   unstarRepository: vi.fn(),
   forceSyncToBackend: vi.fn(),
 }));
@@ -38,16 +36,17 @@ vi.mock('../services/aiService', () => ({
   AIService: vi.fn(),
 }));
 
-vi.mock('../services/aiAnalysisOptimizer', () => ({
-  AIAnalysisOptimizer: vi.fn(function AIAnalysisOptimizer() {
-    return {
-      analyzeRepositoriesPipelined: mocks.analyzeRepositoriesPipelined,
-      abort: mocks.abort,
-      getStats: mocks.getStats,
-      pause: vi.fn(),
-      resume: vi.fn(),
-    };
-  }),
+vi.mock('../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: true }),
+}));
+
+const confirmSpendStub = vi.fn();
+vi.mock('../hooks/useClaudeSpendConfirm', () => ({
+  useClaudeSpendConfirm: () => confirmSpendStub,
+}));
+
+vi.mock('../services/claudeJobs', () => ({
+  runClaudeAnalysis: mocks.runClaudeAnalysis,
 }));
 
 vi.mock('../services/autoSync', () => ({
@@ -96,8 +95,6 @@ vi.mock('./BulkRestoreModal', () => ({
 
 type StoreState = {
   githubToken: string | null;
-  aiConfigs: Array<Record<string, unknown>>;
-  activeAIConfig: string | null;
   isLoading: boolean;
   setLoading: (loading: boolean) => void;
   updateRepository: ReturnType<typeof vi.fn>;
@@ -168,8 +165,6 @@ beforeEach(() => {
   mocks.confirm.mockResolvedValue(true);
   storeState = {
     githubToken: 'github-token',
-    aiConfigs: [{ id: 'ai-config', baseUrl: 'https://ai.example.com', apiKey: 'api-key', model: 'test-model', concurrency: 1 }],
-    activeAIConfig: 'ai-config',
     isLoading: false,
     setLoading: (isLoading) => setStoreState({ isLoading }),
     updateRepository: vi.fn(),
@@ -211,16 +206,10 @@ describe('RepositoryList repository workflow contracts', () => {
       custom_category: '已锁定',
       category_locked: true,
     });
-    mocks.analyzeRepositoriesPipelined.mockImplementation(async (...args: unknown[]) => {
-      const onResult = args[6] as (result: Record<string, unknown>) => void;
-      onResult({
-        success: true,
-        repo: lockedRepository,
-        summary: 'AI summary',
-        tags: ['ai-tag'],
-        platforms: ['web'],
-      });
-      onResult({ success: false, repo: failedRepository, error: new Error('AI unavailable') });
+    mocks.runClaudeAnalysis.mockImplementation(async (_request: unknown, options: { onItem?: (item: Record<string, unknown>, job: unknown) => void }) => {
+      options.onItem?.({ repoId: lockedRepository.id, status: 'done', result: { summary: 'AI summary', tags: ['ai-tag'], platforms: ['web'] } }, {});
+      options.onItem?.({ repoId: failedRepository.id, status: 'failed', error: 'AI unavailable' }, {});
+      return { estimate: {}, job: { status: 'done', items: [] }, declined: false, cancelled: false };
     });
 
     const user = userEvent.setup();
@@ -306,21 +295,16 @@ describe('RepositoryList repository workflow contracts', () => {
 
   it('retains completed AI results after the user stops a running batch', async () => {
     const repository = createRepository(1, { custom_description: 'User description' });
-    let finishPipeline: (() => void) | undefined;
-    mocks.analyzeRepositoriesPipelined.mockImplementation((...args: unknown[]) => {
-      const onResult = args[6] as (result: Record<string, unknown>) => void;
-      onResult({
-        success: true,
-        repo: repository,
-        summary: 'Completed before stop',
-        tags: ['done'],
-        platforms: ['cli'],
-      });
-      return new Promise<void>((resolve) => {
-        finishPipeline = resolve;
+    let aborted = false;
+    mocks.runClaudeAnalysis.mockImplementation((_request: unknown, options: { signal: AbortSignal; onItem?: (item: Record<string, unknown>, job: unknown) => void }) => {
+      options.onItem?.({ repoId: repository.id, status: 'done', result: { summary: 'Completed before stop', tags: ['done'], platforms: ['cli'] } }, {});
+      return new Promise((resolve) => {
+        options.signal.addEventListener('abort', () => {
+          aborted = true;
+          resolve({ estimate: {}, job: { status: 'cancelled', items: [] }, declined: false, cancelled: true });
+        }, { once: true });
       });
     });
-    mocks.abort.mockImplementation(() => finishPipeline?.());
 
     const user = userEvent.setup();
     renderWithRepositories([repository]);
@@ -334,7 +318,7 @@ describe('RepositoryList repository workflow contracts', () => {
     })));
     await user.click(await screen.findByRole('button', { name: '停止' }));
 
-    await waitFor(() => expect(mocks.abort).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(aborted).toBe(true));
     expect(storeState.updateRepository).toHaveBeenCalledWith(expect.objectContaining({
       id: repository.id,
       ai_summary: 'Completed before stop',

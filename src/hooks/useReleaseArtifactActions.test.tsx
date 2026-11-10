@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   useAppStore: vi.fn(),
   toast: vi.fn(),
   analyzeReleaseSummary: vi.fn(),
+  claude: { connected: true },
+}));
+
+vi.mock('./useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: mocks.claude.connected }),
 }));
 
 vi.mock('../store/useAppStore', () => ({
@@ -25,14 +30,6 @@ vi.mock('../services/aiService', () => ({
 
 const createStoreState = () => ({
   language: 'zh' as const,
-  aiConfigs: [{
-    id: 'ai-config',
-    name: 'Test AI',
-    baseUrl: 'https://example.com/v1',
-    apiKey: 'ai-key',
-    model: 'ai-model',
-  }],
-  activeAIConfig: 'ai-config' as string | null,
 });
 
 let storeState = createStoreState();
@@ -66,13 +63,14 @@ describe('useReleaseArtifactActions.generateSummary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storeState = createStoreState();
+    mocks.claude.connected = true;
   });
 
-  it('toasts without writing state when no AI config is active', async () => {
-    storeState.aiConfigs = [];
+  it('toasts without writing state when Claude is not connected', async () => {
+    mocks.claude.connected = false;
     const { result } = renderHook(() => useReleaseArtifactActions());
     await act(async () => { await result.current.generateSummary(release); });
-    expect(mocks.toast).toHaveBeenCalledWith('请先在设置中配置 AI 服务。', 'error');
+    expect(mocks.toast).toHaveBeenCalledWith('Claude 未连接。请让服务器所有者添加 Anthropic API 密钥。', 'error');
     expect(result.current.summaries[100]).toBeUndefined();
     expect(mocks.analyzeReleaseSummary).not.toHaveBeenCalled();
   });

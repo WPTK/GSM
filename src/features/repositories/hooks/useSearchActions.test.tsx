@@ -19,12 +19,17 @@ const mocks = vi.hoisted(() => ({
   searchRepositoriesWithSelection: vi.fn(),
   getAllStarredRepositories: vi.fn(),
   forceSyncToBackend: vi.fn(),
+  claude: { connected: true },
 }));
 
 vi.mock('../../../store/useAppStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../store/useAppStore')>();
   return { ...actual, useAppStore: mocks.useAppStore };
 });
+
+vi.mock('../../../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: mocks.claude.connected }),
+}));
 
 vi.mock('../../../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: vi.fn() }),
@@ -95,14 +100,6 @@ const baseRepo = (overrides: Partial<Repository> & { id: number; full_name: stri
 
 const createStoreState = () => ({
   repositories: [] as Repository[],
-  aiConfigs: [{
-    id: 'ai-config',
-    name: 'Test AI',
-    baseUrl: 'https://example.com/v1',
-    apiKey: 'ai-key',
-    model: 'ai-model',
-  }],
-  activeAIConfig: 'ai-config',
   language: 'zh' as const,
   setSearchFilters: vi.fn(),
   setSearchResults: vi.fn(),
@@ -138,6 +135,7 @@ const identity = <T,>(repos: T[]): T[] => repos;
 // 泄漏进后续用例，形成用例顺序依赖。
 const setupStoreMocks = () => {
   storeState = createStoreState();
+  mocks.claude.connected = true;
   mocks.runVectorSearchPipeline.mockResolvedValue(null);
   mockUseAppStore.mockImplementation((selector?: (state: typeof storeState) => unknown) =>
     selector ? selector(storeState) : storeState);
@@ -487,8 +485,8 @@ describe('useSearchActions.keywordSearch', () => {
     expect(result.current.isSearching).toBe(true);
   });
 
-  it('uses basic text search directly when no AI config exists', async () => {
-    storeState.aiConfigs = [];
+  it('uses basic text search directly when Claude is not connected', async () => {
+    mocks.claude.connected = false;
     storeState.repositories = [
       baseRepo({ id: 1, full_name: 'owner/foo-repo' }),
       baseRepo({ id: 2, full_name: 'owner/bar-repo' }),

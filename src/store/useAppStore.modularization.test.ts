@@ -7,7 +7,7 @@ import {
 import { useBulkRepositoryActions } from '../features/repositories/hooks/useBulkRepositoryActions';
 import { useRepositoryAnalysisJob } from '../features/repositories/hooks/useRepositoryAnalysisJob';
 import { useRepositoryCardActions } from '../features/repositories/hooks/useRepositoryCardActions';
-import { useAIConfigActions } from '../features/settings/hooks/useAIConfigActions';
+import { useClaudePanelActions } from '../features/settings/hooks/useClaudePanelActions';
 import { useBackendSettingsActions } from '../features/settings/hooks/useBackendSettingsActions';
 import { useDiagnosticBackendActions } from '../features/settings/hooks/useDiagnosticBackendActions';
 import { useMcpActions } from '../features/settings/hooks/useMcpActions';
@@ -47,8 +47,6 @@ const currentPersistedKeys = [
   'repositories',
   'lastSync',
   'themeTokens',
-  'aiConfigs',
-  'activeAIConfig',
   'repositoryChatSettings',
   'embeddingConfigs',
   'activeEmbeddingConfig',
@@ -146,7 +144,7 @@ describe('PR-07 Store modularization compatibility', () => {
     const persisted = partialize({});
 
 
-    expect(options.version).toBe(17);
+    expect(options.version).toBe(18);
     expect(Object.keys(persisted)).toEqual(currentPersistedKeys);
 
     for (const transientKey of [
@@ -288,7 +286,7 @@ describe('PR-07 Store modularization compatibility', () => {
       useRepositoryCardActions,
       useRepositoryAnalysisJob,
       useBulkRepositoryActions,
-      useAIConfigActions,
+      useClaudePanelActions,
       useBackendSettingsActions,
       useDiagnosticBackendActions,
       useMcpActions,

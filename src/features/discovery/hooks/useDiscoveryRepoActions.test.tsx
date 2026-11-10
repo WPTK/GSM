@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   forceSyncToBackend: vi.fn(),
   starRepository: vi.fn(),
   unstarRepository: vi.fn(),
+  claude: { connected: true },
 }));
 
 vi.mock('../../../store/useAppStore', () => ({
@@ -27,7 +28,15 @@ vi.mock('../../../hooks/useDialog', () => ({
   useDialog: () => ({ toast: mocks.toast, confirm: vi.fn() }),
 }));
 
-vi.mock('../../../services/aiAnalysisHelper', () => ({
+vi.mock('../../../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: mocks.claude.connected }),
+}));
+
+vi.mock('../../../hooks/useClaudeSpendConfirm', () => ({
+  useClaudeSpendConfirm: () => vi.fn(),
+}));
+
+vi.mock('../../../services/claudeJobs', () => ({
   analyzeRepository: mocks.analyzeRepository,
   createFailedAnalysisResult: mocks.createFailedAnalysisResult,
 }));
@@ -65,14 +74,6 @@ const repo: DiscoveryRepo = {
 
 const createStoreState = () => ({
   githubToken: 'github-token' as string | null,
-  aiConfigs: [{
-    id: 'ai-config',
-    name: 'Test AI',
-    baseUrl: 'https://example.com/v1',
-    apiKey: 'ai-key',
-    model: 'ai-model',
-  }] as Array<{ id: string; name: string; baseUrl?: string; apiKey?: string; model?: string; apiKeyStatus?: 'ok' | 'decrypt_failed' | 'empty' }>,
-  activeAIConfig: 'ai-config',
   language: 'zh' as const,
   customCategories: [],
   repositories: [] as { id: number; full_name: string }[],
@@ -91,36 +92,14 @@ describe('useDiscoveryRepoActions.analyze', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storeState = createStoreState();
+    mocks.claude.connected = true;
   });
 
-  it('runs the four validations in order with the card-specific wording', async () => {
-    storeState.githubToken = null;
-    const { result, rerender } = renderHook(() => useDiscoveryRepoActions({ repo }));
+  it('toasts and does not call the service when Claude is not connected', async () => {
+    mocks.claude.connected = false;
+    const { result } = renderHook(() => useDiscoveryRepoActions({ repo }));
     await act(async () => { await result.current.analyze(); });
-    expect(mocks.toast).toHaveBeenNthCalledWith(1, 'GitHub Token 未找到，请重新登录。', 'error');
-
-    storeState.githubToken = 'github-token';
-    storeState.aiConfigs = [];
-    rerender();
-    await act(async () => { await result.current.analyze(); });
-    expect(mocks.toast).toHaveBeenNthCalledWith(2, '请先在设置中配置AI服务。', 'error');
-
-    storeState.aiConfigs = [{
-      id: 'ai-config',
-      name: 'Broken',
-      baseUrl: 'https://example.com/v1',
-      apiKey: 'ai-key',
-      model: 'ai-model',
-      apiKeyStatus: 'decrypt_failed',
-    }];
-    rerender();
-    await act(async () => { await result.current.analyze(); });
-    expect(mocks.toast).toHaveBeenNthCalledWith(3, 'AI服务的API密钥无法解密或为空，请在设置中重新输入并保存该配置。', 'error');
-
-    storeState.aiConfigs = [{ id: 'ai-config', name: 'Incomplete', baseUrl: '', apiKey: '', model: '' }];
-    rerender();
-    await act(async () => { await result.current.analyze(); });
-    expect(mocks.toast).toHaveBeenNthCalledWith(4, 'AI服务配置不完整，请检查API端点、密钥和模型名称。', 'error');
+    expect(mocks.toast).toHaveBeenCalledWith('Claude 未连接。请让服务器所有者添加 Anthropic API 密钥。', 'error');
     expect(mocks.analyzeRepository).not.toHaveBeenCalled();
     expect(mocks.forceSyncToBackend).not.toHaveBeenCalled();
   });

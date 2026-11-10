@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AIConfig, Repository } from '../types';
+import type { Repository } from '../types';
 import type { RepositoryChatSession } from '../types/repositoryChat';
 
 const mocks = vi.hoisted(() => ({
@@ -22,8 +22,6 @@ vi.mock('./aiService', () => ({
     generateWithTools = mocks.generateWithTools;
   },
   isAIStreamUnsupportedError: (error: unknown): boolean => error instanceof Error && error.name === 'AIStreamUnsupportedError',
-  isAIToolCallUnsupportedError: (error: unknown): boolean => error instanceof Error && error.name === 'AIToolCallUnsupportedError',
-  supportsChatToolCalls: (): boolean => true,
 }));
 
 vi.mock('./githubApiFactory', () => ({
@@ -66,23 +64,12 @@ const session: RepositoryChatSession = {
   updatedAt: '2026-08-26T00:00:00.000Z',
 };
 
-const aiConfig: AIConfig = {
-  id: 'ai-1',
-  name: 'Test AI',
-  apiType: 'openai',
-  baseUrl: 'https://example.com/v1',
-  apiKey: 'test-key',
-  model: 'test-model',
-  isActive: true,
-};
-
 const turnInput = (question: string) => ({
   repository,
   session,
   messages: [],
   question,
   githubToken: 'github-token',
-  aiConfig,
   language: 'en' as const,
   maxToolsPerTurn: 12,
   // 本套件覆盖原生工具循环自身的决策行为；README 快速路径由 loop.fastPath.test.ts 覆盖。

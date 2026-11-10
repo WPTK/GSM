@@ -30,16 +30,6 @@ import { fixturePath, readFixture, shouldUpdateFixtures, writeFixture } from '..
  */
 const FIXTURE_FILE = fixturePath(import.meta.url, '__fixtures__/ai-prompts.snapshot.json');
 
-const makeConfig = () => ({
-  id: 'fixture-config',
-  name: 'fixture',
-  apiType: 'openai' as const,
-  baseUrl: 'http://localhost:0',
-  apiKey: 'fixture-key',
-  model: 'gpt-fixture',
-  isActive: true,
-});
-
 const makeRepo = (partial: Partial<Repository> & Pick<Repository, 'id' | 'name' | 'full_name'>): Repository => ({
   description: 'A sample repository for fixture snapshots',
   html_url: `https://github.com/${partial.full_name}`,
@@ -70,7 +60,7 @@ const installFetchStub = (): void => {
       parsed = null;
     }
     capturedCalls.push({ url: String(url), body: parsed });
-    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+    return new Response(JSON.stringify({ text: 'ok', usage: { inputTokens: 1, outputTokens: 1, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 }, stopReason: 'end_turn' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -83,8 +73,9 @@ const captureRequests = async (run: () => Promise<unknown>): Promise<Array<{ rol
     // 请求已捕获；解析失败/重试耗尽等错误与快照无关
   });
   return capturedCalls.map((call) => {
-    const body = call.body as { messages?: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: string }> };
-    return body?.messages ?? body?.input ?? [];
+    // The client sends { purpose, system, messages }; snapshots keep the [system, ...messages] view.
+    const body = call.body as { system?: string; messages?: Array<{ role: string; content: string }> } | null;
+    return [...(body?.system ? [{ role: 'system', content: body.system }] : []), ...(body?.messages ?? [])];
   });
 };
 
@@ -103,7 +94,6 @@ const makeChatInput = (language: 'zh' | 'en', question: string): RepositoryChatT
   ],
   question,
   githubToken: 'fixture-token',
-  aiConfig: makeConfig() as never,
   language,
   maxToolsPerTurn: 3,
   taskDepth: 'default',
@@ -131,15 +121,11 @@ const UNDERSTANDING = {
 } as never;
 
 const buildAIServiceFixtures = async (language: 'zh' | 'en') => {
-  const makeService = () => new AIService(makeConfig() as never, language);
+  const makeService = () => new AIService(language);
   const repo = makeRepo({ id: 42, name: 'sample-app', full_name: 'acme/sample-app' });
   const repoB = makeRepo({ id: 43, name: 'sample-cli', full_name: 'acme/sample-cli' });
-  const customCategoryHint = language === 'zh' ? '自定义分类（custom,自定义）' : 'Custom (custom,customized)';
-  const customCategories = [language === 'zh' ? '自定义分类' : 'Custom'];
   const result: Record<string, unknown> = {};
 
-  result.analyzeRepository = await captureRequests(() =>
-    makeService().analyzeRepository(repo, README, customCategories, customCategoryHint));
   result.analyzeReleaseSummary = await captureRequests(() =>
     makeService().analyzeReleaseSummary('## Changes\n\n- Added feature A\n- Fixed bug B', {
       repoName: 'acme/sample-app',
@@ -173,15 +159,6 @@ const buildAIServiceFixtures = async (language: 'zh' | 'en') => {
     makeService().searchRepositoriesWithSelection([repo, repoB], 'react state management'));
   result.translateTexts = await captureRequests(() =>
     makeService().translateTexts(['Hello world', 'Install the app'], language === 'zh' ? 'en' : 'zh', undefined));
-
-  const customConfig = {
-    ...makeConfig(),
-    customPrompt: 'Analyze {LANGUAGE}.\n{REPO_INFO}\n{CATEGORIES_INFO}\nCategories hint: {CATEGORIES_HINT}',
-  };
-  const customService = new AIService(customConfig as never, language);
-  result.createCustomAnalysisPrompt = (customService as unknown as {
-    createCustomAnalysisPrompt: (repo: Repository, readme: string, cats: string[], hints: string) => string;
-  }).createCustomAnalysisPrompt(repo, README, customCategories, customCategoryHint);
 
   return result;
 };

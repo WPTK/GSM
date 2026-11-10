@@ -208,11 +208,10 @@ describe('backendAdapter same-origin transport and cookie auth', () => {
     await expect(backend.authStatus()).resolves.toEqual({ authenticated: true, githubConfigured: false });
   });
 
-  it('config requests do not ask the server to decrypt secrets', async () => {
-    adapter._backendUrl = '/api';
-    vi.mocked(window.fetch).mockResolvedValue(makeJsonResponse([]));
-    await backend.fetchAIConfigs();
-    expect(String(vi.mocked(window.fetch).mock.calls[0][0])).not.toContain('decrypt');
+  it('no longer exposes provider-key or AI-config transport', () => {
+    // Claude is reached through /api/ai only; the adapter has no proxy or AI config routes left.
+    const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(backend));
+    expect(methods.filter((name) => /AIConfigs|proxyAI/.test(name))).toEqual([]);
   });
 });
 

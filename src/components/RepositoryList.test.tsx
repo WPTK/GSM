@@ -57,8 +57,6 @@ const searchFilters: SearchFilters = {
 
 const storeState = {
   githubToken: null,
-  aiConfigs: [],
-  activeAIConfig: null,
   isLoading: false,
   setLoading: vi.fn(),
   updateRepository: vi.fn(),

@@ -29,7 +29,7 @@ vi.mock('../store/useAppStore', () => ({
 vi.mock('./settings', () => ({
   AppearancePanel: () => <div data-testid="AppearancePanel-content" />,
   GeneralPanel: () => <div data-testid="GeneralPanel-content" />,
-  AIConfigPanel: () => <div data-testid="AIConfigPanel-content" />,
+  ClaudePanel: () => <div data-testid="ClaudePanel-content" />,
   BackendPanel: () => <div data-testid="BackendPanel-content" />,
   CategoryPanel: () => <div data-testid="CategoryPanel-content" />,
   DataManagementPanel: () => <div data-testid="DataManagementPanel-content" />,

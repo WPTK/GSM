@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../store/useAppStore', () => ({
-  useAppStore: { getState: () => ({ translationEngine: 'microsoft', aiConfigs: [], activeAIConfig: null, language: 'zh' }) },
+  useAppStore: { getState: () => ({ translationEngine: 'microsoft', language: 'zh' }) },
 }));
 vi.mock('./aiService', () => ({ AIService: vi.fn() }));
 

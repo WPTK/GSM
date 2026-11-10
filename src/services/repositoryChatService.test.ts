@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AIConfig, Repository } from '../types';
+import type { Repository } from '../types';
 import type { RepositoryChatSession, RepositoryChatToolEvent } from '../types/repositoryChat';
 
 const mocks = vi.hoisted(() => ({
@@ -28,8 +28,6 @@ vi.mock('./aiService', () => ({
     generateWithTools = mocks.generateWithTools;
   },
   isAIStreamUnsupportedError: (error: unknown): boolean => error instanceof Error && error.name === 'AIStreamUnsupportedError',
-  isAIToolCallUnsupportedError: (error: unknown): boolean => error instanceof Error && error.name === 'AIToolCallUnsupportedError',
-  supportsChatToolCalls: (): boolean => true,
 }));
 
 vi.mock('./githubApiFactory', () => ({
@@ -81,23 +79,12 @@ const session: RepositoryChatSession = {
   updatedAt: '2026-08-26T00:00:00.000Z',
 };
 
-const aiConfig: AIConfig = {
-  id: 'ai-1',
-  name: 'Test AI',
-  apiType: 'claude',
-  baseUrl: 'https://example.com/v1',
-  apiKey: 'test-key',
-  model: 'test-model',
-  isActive: true,
-};
-
 const turnInput = (question = 'What does this project do?') => ({
   repository,
   session,
   messages: [],
   question,
   githubToken: 'github-token',
-  aiConfig,
   language: 'en' as const,
   maxToolsPerTurn: 12,
   // 本套件覆盖完整取证循环的确定性行为；README 快速路径由 loop.fastPath.test.ts 单独覆盖。
@@ -1304,21 +1291,6 @@ describe('runRepositoryChatTurn meta sources (releases / issues)', () => {
     expect(mocks.getRepositoryReleases).toHaveBeenCalledTimes(1);
     expect(events.some((event) => event.toolName === 'escalate_to_meta')).toBe(true);
     expect(events.some((event) => event.toolName === 'read_releases' && event.status === 'success')).toBe(true);
-    expect(result.content).toContain(overviewRef);
-  });
-
-  it('falls back to the orchestrated loop when the endpoint rejects native tool calling', async () => {
-    mocks.generateWithTools.mockRejectedValue(Object.assign(new Error('tools not supported'), { name: 'AIToolCallUnsupportedError' }));
-    mocks.generateChatText
-      .mockResolvedValueOnce(understanding())
-      .mockResolvedValueOnce(plan(target('README.md', ['Overview'], 'project overview')))
-      .mockResolvedValueOnce(gate({ sufficient: true, requirements: [requirement('project overview', 'verified', [overviewRef])], nextAction: 'answer' }))
-      .mockResolvedValueOnce(answer('The project is a documented example for repository research.', overviewRef, 'Overview'));
-
-    const result = await runRepositoryChatTurn({ ...turnInput(), enableAgentToolLoop: true });
-
-    expect(mocks.generateWithTools).toHaveBeenCalledTimes(1);
-    expect(mocks.generateChatText).toHaveBeenCalledTimes(4);
     expect(result.content).toContain(overviewRef);
   });
 });

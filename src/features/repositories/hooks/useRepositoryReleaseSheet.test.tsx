@@ -13,9 +13,12 @@ const mocks = vi.hoisted(() => ({
   analyzeReleaseSummary: vi.fn(),
   store: {
     language: 'zh' as const,
-    aiConfigs: [] as Array<{ id: string; name: string; baseUrl: string; apiKey: string; model: string }>,
-    activeAIConfig: null as string | null,
   },
+  claude: { connected: true },
+}));
+
+vi.mock('../../../hooks/useClaudeStatus', () => ({
+  useClaudeStatus: () => ({ connected: mocks.claude.connected }),
 }));
 
 vi.mock('../../../services/backendAdapter', () => ({ backend: mocks.backend }));
@@ -146,8 +149,7 @@ describe('useRepositoryReleaseSheet', () => {
   });
 
   it('keeps an in-flight AI summary alive across unrelated state updates', async () => {
-    mocks.store.aiConfigs = [{ id: 'ai-config', name: 'Test AI', baseUrl: 'https://example.com/v1', apiKey: 'k', model: 'm' }];
-    mocks.store.activeAIConfig = 'ai-config';
+    mocks.claude.connected = true;
     // abort 感知 mock：真实 fetch 在 signal 中止时会以 AbortError 拒绝
     let resolveSummary!: (value: string) => void;
     mocks.analyzeReleaseSummary.mockImplementation((_b: string, _m: unknown, signal: AbortSignal) =>

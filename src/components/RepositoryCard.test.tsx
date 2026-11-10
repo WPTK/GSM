@@ -89,7 +89,6 @@ const storeState = {
   analyzingRepositoryIds: new Set<number>(),
   toggleReleaseSubscription: vi.fn(),
   githubToken: null,
-  activeAIConfig: null,
   setAnalyzingRepository: vi.fn(),
   language: 'zh' as const,
   // 卡片可见字段（开发守则 §14）：默认全开，单个用例里按需改
@@ -119,7 +118,6 @@ const storeState = {
   activeEmbeddingConfig: 'embedding',
   repositories: [repository],
   enterSimilarView: vi.fn(),
-  aiConfigs: [],
 };
 
 const mockUseAppStore = vi.mocked(useAppStore);

@@ -430,15 +430,7 @@ describe('vectorSearchPipeline', () => {
     const aiService = {
       analyzeVectorSearchQuery: vi.fn().mockResolvedValue(item.analysis),
       rerankRepositoriesGraded: vi.fn().mockImplementation(async (candidates: Repository[]): Promise<GradedRerankResult | null> => {
-        const parser = new AIService({
-          id: 'parser',
-          name: 'parser',
-          apiType: 'openai',
-          baseUrl: 'http://localhost:0',
-          apiKey: '',
-          model: 'gpt-test',
-          isActive: true,
-        } as never, 'en');
+        const parser = new AIService('en');
         return parser.parseGradedRerankResult(item.llmResponse, candidates);
       }),
     } as unknown as AIService;

@@ -6,47 +6,27 @@ import {
   isAbortError,
   isRateLimitedError,
   getRetryAfterMsFromError,
-  isAIToolCallUnsupportedError,
-  supportsChatToolCalls,
   type AIToolLoopMessage,
 } from './aiService';
-import { isToolCallCapableApiType } from '../constants/aiCapabilities';
-import { logger } from './logger';
 
-// Minimal AIConfig that lets AIService construct without a real token.
-const makeConfig = () => ({
-  id: 'test',
-  name: 'test',
-  apiType: 'openai' as const,
-  baseUrl: 'http://localhost:0',
-  apiKey: '',
-  model: 'gpt-test',
-  isActive: true,
-});
+/** Reply in the shape POST /api/ai/messages returns. */
+const claudeReply = (text: string, extra: Record<string, unknown> = {}) => new Response(JSON.stringify({
+  text,
+  usage: { inputTokens: 1, outputTokens: 1, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 },
+  stopReason: 'end_turn',
+  ...extra,
+}), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
-it('redacts plugin AI request details from debug logs', () => {
-  const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
-  const isDebugMode = vi.spyOn(logger, 'isDebugMode').mockReturnValue(true);
-  try {
-    const service = new AIService(makeConfig() as never, 'en', true);
-    const logRequest = service as unknown as { logAIRequestDebug: (
-      startTime: number,
-      context: { apiType: string; model: string; configId: string },
-      result: { responseLength: number },
-      details: Record<string, unknown>,
-    ) => void };
-    logRequest.logAIRequestDebug(Date.now(), { apiType: 'openai', model: 'example', configId: 'test' },
-      { responseLength: 5 }, { url: 'https://secret.example/key', requestBody: 'private prompt', responseBody: 'private answer', status: 200 });
-    expect(debug).toHaveBeenCalledOnce();
-    const metadata = debug.mock.calls[0][2];
-    expect(metadata).toEqual(expect.objectContaining({ status: 200, responseLength: 5 }));
-    expect(JSON.stringify(metadata)).not.toContain('private');
-    expect(JSON.stringify(metadata)).not.toContain('secret.example');
-  } finally {
-    debug.mockRestore();
-    isDebugMode.mockRestore();
-  }
-});
+/** The request body the client sends, viewed as [system, ...messages] with max_tokens, as the prompts were asserted before. */
+const legacyBody = (raw: unknown) => {
+  const body = JSON.parse(String(raw)) as { system?: string; messages: Array<{ role: string; content: string }>; maxTokens: number; temperature?: number; purpose: string };
+  return {
+    purpose: body.purpose,
+    max_tokens: body.maxTokens,
+    temperature: body.temperature,
+    messages: [...(body.system ? [{ role: 'system', content: body.system }] : []), ...body.messages],
+  };
+};
 
 function makeRepo(partial: Partial<Repository> & Pick<Repository, 'id' | 'name' | 'full_name'>): Repository {
   return {
@@ -91,7 +71,7 @@ describe('AIService.searchRepositoriesWithSelection — 词法兜底', () => {
       license: 'Apache-2.0',
     });
 
-    const service = new AIService(makeConfig() as never, 'en');
+    const service = new AIService('en');
     const results = await service.searchRepositoriesWithSelection([repoA, repoB], 'react mit');
 
     const ids = results.map((r) => r.id);
@@ -113,7 +93,7 @@ describe('AIService.searchRepositoriesWithSelection — 词法兜底', () => {
       license: { spdx_id: 'MIT', key: 'MIT', name: 'MIT License', url: 'https://api.github.com/licenses/mit' } as never,
     });
 
-    const service = new AIService(makeConfig() as never, 'en');
+    const service = new AIService('en');
     // Should resolve the license object to 'MIT' and rank the repo — not throw.
     const results = await service.searchRepositoriesWithSelection([repoA], 'mit');
     expect(results.map((r) => r.id)).toEqual([3]);
@@ -143,7 +123,7 @@ describe('AIService.searchRepositoriesWithSelection — 词法兜底', () => {
       custom_tags: ['技能'],
     });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = service['performEnhancedBasicSearch']([repo], '技能', ['技能']);
     expect(results.map((r) => r.id)).toEqual([6]);
   });
@@ -151,7 +131,7 @@ describe('AIService.searchRepositoriesWithSelection — 词法兜底', () => {
   it('扩展词与查询词相同时不重复计分（词级剔除）', async () => {
     const repo = makeRepo({ id: 20, name: 'markdown', full_name: 'acme/markdown' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const scored = service['scoreRepositoriesByKeywords']([repo], 'markdown editor', ['Markdown', 'acme']);
 
     // 'Markdown' 等于查询词 'markdown'，剔除后不再对 name/fullName 重复计分；
@@ -168,7 +148,7 @@ describe('AIService.searchRepositoriesWithSelection — 词法兜底', () => {
       description: '管理 GitHub 星标仓库的工具',
     });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     // "星标仓库"无空格切不出词，整串也不在描述里；bigram "星标"/"仓库" 命中描述
     const scored = service['scoreRepositoriesByKeywords']([repo], '星标仓库', []);
     expect(scored).toHaveLength(1);
@@ -177,14 +157,13 @@ describe('AIService.searchRepositoriesWithSelection — 词法兜底', () => {
 });
 
 describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const chatResponse = (content: string) => fetchJson({ choices: [{ message: { content } }] });
+  const chatResponse = (content: string) => claudeReply(content);
   const mockFetch = () => {
     const fetchMock = window.fetch as ReturnType<typeof vi.fn>;
     fetchMock.mockReset();
     return fetchMock;
   };
-  const captureBody = async (init?: RequestInit) => JSON.parse(String(init?.body)) as Record<string, unknown>;
+  const captureBody = async (init?: RequestInit) => legacyBody(init?.body) as Record<string, unknown>;
 
   it('扩展查询后把候选摘要交给 LLM 精选，并按模型排序返回（携带意图说明）', async () => {
     const fetchMock = mockFetch();
@@ -201,7 +180,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
     const repoA = makeRepo({ id: 880000001, name: 'quick-md', full_name: 'acme/quick-md', description: 'a markdown editor', stargazers_count: 900 });
     const repoB = makeRepo({ id: 880000002, name: 'random-tool', full_name: 'acme/random-tool', description: 'unrelated', stargazers_count: 5000 });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([repoA, repoB], 'markdown 编辑器');
 
     expect(results.map((r) => r.id)).toEqual([880000002, 880000001]);
@@ -223,7 +202,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
     const repoA = makeRepo({ id: 730000001, name: 'alpha', full_name: 'acme/alpha' });
     const repoB = makeRepo({ id: 730000002, name: 'beta', full_name: 'acme/beta' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([repoA, repoB], 'anything');
 
     expect(results.map((r) => r.id)).toEqual([730000002, 730000001]);
@@ -236,7 +215,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
 
     const repoA = makeRepo({ id: 740000001, name: 'foo-tool', full_name: 'acme/foo-tool' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([repoA], '不存在的东西');
 
     expect(results).toEqual([]);
@@ -258,7 +237,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
     const pads = Array.from({ length: 159 }, (_, i) =>
       makeRepo({ id: 900002 + i, name: `junk-${i}`, full_name: `acme/junk-${i}`, stargazers_count: i }));
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([target, ...pads], 'thing');
 
     const selectionPrompt = String((requests[1].messages as Array<{ content: string }>)[1].content);
@@ -275,7 +254,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
 
     const repoA = makeRepo({ id: 750000001, name: 'foo-tool', full_name: 'acme/foo-tool' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     // 取消 ≠ AI 失败：不能把词法兜底结果当作搜索结果返回
     await expect(
       service.searchRepositoriesWithSelection([repoA], 'foo', { signal: controller.signal }),
@@ -295,7 +274,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
     });
 
     const repo = makeRepo({ id: 760000001, name: 'foo-tool', full_name: 'acme/foo-tool' });
-    const service = new AIService({ ...makeConfig(), reasoningEffort: 'high' } as never, 'zh');
+    const service = new AIService('zh');
     await service.searchRepositoriesWithSelection([repo], 'foo');
 
     // 扩展请求给思考模型留足余量；精选请求复用重排序的 4096 预算（推理 token 共享预算）
@@ -312,7 +291,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
 
     const repoA = makeRepo({ id: 770000001, name: 'foo-tool', full_name: 'acme/foo-tool' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([repoA], 'foo', { onFallback });
 
     // 端点抖动/配置问题时：回调说明原因，结果退到词法命中而非空
@@ -328,7 +307,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
 
     const repo = makeRepo({ id: 780000001, name: 'foo-tool', full_name: 'acme/foo-tool' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([repo], '完全无关的查询', { onFallback });
 
     expect(onFallback).toHaveBeenCalledWith('ai_empty');
@@ -343,7 +322,7 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
 
     const repo = makeRepo({ id: 790000001, name: 'foo-tool', full_name: 'acme/foo-tool' });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSelection([repo], 'foo', { onFallback });
 
     // 幻觉 ID ≠ 模型判空：不能把无效响应当成"无相关结果"呈现空态
@@ -353,7 +332,6 @@ describe('AIService.searchRepositoriesWithSelection — LLM 精选', () => {
 });
 
 describe('AIService.searchRepositoriesWithSemanticReranking — 行号兜底', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
   beforeEach(() => {
     (window.fetch as ReturnType<typeof vi.fn>).mockReset();
@@ -364,10 +342,10 @@ describe('AIService.searchRepositoriesWithSemanticReranking — 行号兜底', (
     const repoA = makeRepo({ id: 730000001, name: 'alpha', full_name: 'acme/alpha', stargazers_count: 10 });
     const repoB = makeRepo({ id: 730000002, name: 'beta', full_name: 'acme/beta', stargazers_count: 5 });
     (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-      fetchJson({ choices: [{ message: { content: '[2, 1]' } }] }),
+      claudeReply('[2, 1]'),
     );
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSemanticReranking([repoA, repoB], 'anything');
 
     expect(results.map((r) => r.id)).toEqual([730000002, 730000001]);
@@ -378,10 +356,10 @@ describe('AIService.searchRepositoriesWithSemanticReranking — 行号兜底', (
     const repoB = makeRepo({ id: 730000002, name: 'beta', full_name: 'acme/beta' });
     const repoC = makeRepo({ id: 730000003, name: 'gamma', full_name: 'acme/gamma' });
     (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
-      fetchJson({ choices: [{ message: { content: '[730000003, 1]' } }] }),
+      claudeReply('[730000003, 1]'),
     );
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const results = await service.searchRepositoriesWithSemanticReranking([repoA, repoB, repoC], 'anything');
 
     // 730000003 按真实 ID 命中；1 在候选范围内按行号解析为 repoA；repoB 未被排到，追加在末尾
@@ -414,120 +392,14 @@ describe('AIRequestError / 限流辅助函数', () => {
 });
 
 
-describe('AIService.generateWithTools — native function calling', () => {
-  // generateWithTools / supportsChatToolCalls 均要求显式勾选 supportsToolCalls。
-  const toolCallConfig = { ...makeConfig(), supportsToolCalls: true as const };
-  const tools = [
-    { name: 'read_documentation', description: 'Read docs', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
-  ];
-  const messages: AIToolLoopMessage[] = [
-    { role: 'user', content: 'Question: What is this repo?' },
-    { role: 'assistant', content: null, toolCalls: [{ id: 'call_1', name: 'read_documentation', arguments: '{"path":"README.md"}' }] },
-    { role: 'tool', toolCallId: 'call_1', content: 'SOURCE: /README.md - 1-5' },
-  ];
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-
-  beforeEach(() => {
-    (window.fetch as ReturnType<typeof vi.fn>).mockReset();
-  });
-
-  it('sends the tools payload with tool results and parses returned tool calls', async () => {
-    const service = new AIService(toolCallConfig);
-    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(fetchJson({
-      choices: [{
-        message: {
-          content: '',
-          tool_calls: [{ id: 'call_2', type: 'function', function: { name: 'ready_to_answer', arguments: '{"missing":[]}' } }],
-        },
-      }],
-    }));
-
-    const result = await service.generateWithTools({ system: 'agent rules', messages, tools, temperature: 0, maxTokens: 1_200 });
-
-    const [, init] = (window.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    const requestBody = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(Array.isArray(requestBody.tools)).toBe(true);
-    expect(requestBody.tool_choice).toBe('auto');
-    const sentMessages = requestBody.messages as Array<Record<string, unknown>>;
-    expect(sentMessages[0]).toEqual({ role: 'system', content: 'agent rules' });
-    expect(sentMessages[2]).toMatchObject({ role: 'assistant', tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_documentation' } }] });
-    // content 为空时必须整体省略：显式 null / 空字符串在部分网关上会被拒绝。
-    expect(sentMessages[2]).not.toHaveProperty('content');
-    expect(sentMessages[3]).toEqual({ role: 'tool', tool_call_id: 'call_1', content: 'SOURCE: /README.md - 1-5' });
-    expect(result.content).toBe('');
-    expect(result.toolCalls).toEqual([{ id: 'call_2', name: 'ready_to_answer', arguments: '{"missing":[]}' }]);
-  });
-
-  it('converts endpoint rejection of tools into AIToolCallUnsupportedError', async () => {
-    const service = new AIService(toolCallConfig);
-    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(fetchJson({ error: { message: 'tools is not supported by this model' } }, 400));
-
-    await expect(service.generateWithTools({ system: 'rules', messages, tools }))
-      .rejects.toSatisfy(isAIToolCallUnsupportedError);
-  });
-
-  it('throws AIToolCallUnsupportedError for protocol families without tool support', async () => {
-    const service = new AIService({ ...makeConfig(), apiType: 'claude' });
-    await expect(service.generateWithTools({ system: 'rules', messages, tools }))
-      .rejects.toSatisfy(isAIToolCallUnsupportedError);
-    expect(window.fetch).not.toHaveBeenCalled();
-    // 能力判定 = 协议族支持 且 显式勾选；两者缺一不可。
-    expect(supportsChatToolCalls({ apiType: 'openai-compatible', supportsToolCalls: true })).toBe(true);
-    expect(supportsChatToolCalls({ apiType: 'openai-compatible' })).toBe(false);
-    expect(supportsChatToolCalls({ apiType: 'gemini', supportsToolCalls: true })).toBe(false);
-    expect(isToolCallCapableApiType('openai-compatible')).toBe(true);
-    expect(isToolCallCapableApiType('claude')).toBe(false);
-  });
-});
-
-describe('AIService.analyzeRepository language following', () => {
-  const extractMessages = (body: unknown): Array<{ role: string; content: string }> => {
-    const parsed = body as { messages?: Array<{ role: string; content: string }>; input?: Array<{ role: string; content: string }> };
-    return parsed.messages ?? parsed.input ?? [];
-  };
-
-  const lastMessages = (): Array<{ role: string; content: string }> => {
-    const calls = (window.fetch as ReturnType<typeof vi.fn>).mock.calls;
-    const lastCall = calls[calls.length - 1] as [string, RequestInit] | undefined;
-    return extractMessages(JSON.parse(String(lastCall?.[1]?.body)));
-  };
-
-  beforeEach(() => {
-    (window.fetch as ReturnType<typeof vi.fn>).mockReset();
-    (window.fetch as ReturnType<typeof vi.fn>).mockImplementation(async () => new Response(
-      JSON.stringify({ choices: [{ message: { content: '{"summary":"A sample analysis of the repository.","tags":["tool"],"platforms":["web"]}' } }] }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    ));
-  });
-
-  it('keeps the English user prompt verbatim for en', async () => {
-    const service = new AIService(makeConfig() as never, 'en');
-    await service.analyzeRepository(makeRepo({ id: 1, name: 'sample', full_name: 'acme/sample' }), '# readme');
-    const joined = lastMessages().map((message) => message.content).join('\n');
-    expect(joined).toContain('A concise English overview');
-    expect(joined).toContain('"summary": "English overview"');
-    expect(joined).not.toContain('Write ALL user-facing output');
-  });
-
-  it('does not force English output when the UI language is Japanese', async () => {
-    const service = new AIService(makeConfig() as never, 'ja');
-    await service.analyzeRepository(makeRepo({ id: 1, name: 'sample', full_name: 'acme/sample' }), '# readme');
-    const joined = lastMessages().map((message) => message.content).join('\n');
-    expect(joined).not.toContain('A concise English overview');
-    expect(joined).not.toContain('"summary": "English overview"');
-    expect(joined).toContain('Write ALL user-facing output in Japanese (日本語)');
-  });
-});
-
 describe('AIService.expandSearchQuery — 查询扩展公开方法', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const chatResponse = (content: string) => fetchJson({ choices: [{ message: { content } }] });
+  const chatResponse = (content: string) => claudeReply(content);
   const mockFetch = () => {
     const fetchMock = window.fetch as ReturnType<typeof vi.fn>;
     fetchMock.mockReset();
     return fetchMock;
   };
-  const captureBody = async (init?: RequestInit) => JSON.parse(String(init?.body)) as Record<string, unknown>;
+  const captureBody = async (init?: RequestInit) => legacyBody(init?.body) as Record<string, unknown>;
 
   it('解析模型返回的意图与关键词（keywords/categories/synonyms 合并去重）', async () => {
     const fetchMock = mockFetch();
@@ -537,7 +409,7 @@ describe('AIService.expandSearchQuery — 查询扩展公开方法', () => {
       return chatResponse('{"intent":"找 markdown 编辑器","keywords":["markdown","editor"],"categories":["cli"],"synonyms":["md","markdown"]}');
     });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const result = await service.expandSearchQuery('markdown 编辑器');
 
     expect(result.intent).toBe('找 markdown 编辑器');
@@ -551,21 +423,20 @@ describe('AIService.expandSearchQuery — 查询扩展公开方法', () => {
     const fetchMock = mockFetch();
     fetchMock.mockImplementationOnce(async () => chatResponse(''));
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     // requestText 对空 content 统一抛错，扩展阶段（重构前后）同样不会拿到空结果
     await expect(service.expandSearchQuery('anything')).rejects.toThrow('No content received from AI service');
   });
 });
 
 describe('AIService.selectRelevantRepositories — evidence 证据行', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const chatResponse = (content: string) => fetchJson({ choices: [{ message: { content } }] });
+  const chatResponse = (content: string) => claudeReply(content);
   const mockFetch = () => {
     const fetchMock = window.fetch as ReturnType<typeof vi.fn>;
     fetchMock.mockReset();
     return fetchMock;
   };
-  const captureBody = async (init?: RequestInit) => JSON.parse(String(init?.body)) as Record<string, unknown>;
+  const captureBody = async (init?: RequestInit) => legacyBody(init?.body) as Record<string, unknown>;
 
   it('不传 evidence 时精选提示词与 searchRepositoriesWithSelection 逐字节一致；传 evidence（全网发现）切换宽松排序提示词并追加证据行', async () => {
     const repoA = makeRepo({ id: 910000001, name: 'md-tool', full_name: 'acme/md-tool', description: 'a markdown tool' });
@@ -582,7 +453,7 @@ describe('AIService.selectRelevantRepositories — evidence 证据行', () => {
       baselinePrompt = String((body.messages as Array<{ content: string }>)[1].content);
       return chatResponse('[]');
     });
-    const pipelineService = new AIService(makeConfig() as never, 'zh');
+    const pipelineService = new AIService('zh');
     await pipelineService.searchRepositoriesWithSelection([repoA, repoB], query);
 
     // 直调（无 evidence）：与基线逐字节一致
@@ -592,7 +463,7 @@ describe('AIService.selectRelevantRepositories — evidence 证据行', () => {
       expect(directPrompt).toBe(baselinePrompt);
       return chatResponse('[]');
     });
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     await service.selectRelevantRepositories([repoA, repoB], query, intent);
     expect(baselinePrompt).not.toBe('');
     expect(baselinePrompt).not.toContain('matches=');
@@ -637,7 +508,7 @@ describe('AIService.selectRelevantRepositories — evidence 证据行', () => {
       enPrompt = String((body.messages as Array<{ content: string }>)[1].content);
       return chatResponse('[]');
     });
-    const enService = new AIService(makeConfig() as never, 'en');
+    const enService = new AIService('en');
     await enService.selectRelevantRepositories(
       [repoA],
       'markdown editor',
@@ -652,14 +523,13 @@ describe('AIService.selectRelevantRepositories — evidence 证据行', () => {
 });
 
 describe('AIService.expandSearchQuery — 多语言关键词约束（multilingual）', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const chatResponse = (content: string) => fetchJson({ choices: [{ message: { content } }] });
+  const chatResponse = (content: string) => claudeReply(content);
   const mockFetch = () => {
     const fetchMock = window.fetch as ReturnType<typeof vi.fn>;
     fetchMock.mockReset();
     return fetchMock;
   };
-  const captureBody = async (init?: RequestInit) => JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> };
+  const captureBody = async (init?: RequestInit) => legacyBody(init?.body) as { messages: Array<{ content: string }> };
 
   it('multilingual: true 时用户提示词追加双语约束；默认调用不追加（仓库页提示词逐字节不变）', async () => {
     const fetchMock = mockFetch();
@@ -669,7 +539,7 @@ describe('AIService.expandSearchQuery — 多语言关键词约束（multilingua
       return chatResponse('{"intent":"i","keywords":["k"],"synonyms":[]}');
     });
 
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     await service.expandSearchQuery('markdown 编辑器', undefined);
     await service.expandSearchQuery('markdown 编辑器', undefined, { multilingual: true });
 
@@ -685,14 +555,13 @@ describe('AIService.expandSearchQuery — 多语言关键词约束（multilingua
 });
 
 describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const chatResponse = (content: string) => fetchJson({ choices: [{ message: { content } }] });
+  const chatResponse = (content: string) => claudeReply(content);
   const mockFetch = () => {
     const fetchMock = window.fetch as ReturnType<typeof vi.fn>;
     fetchMock.mockReset();
     return fetchMock;
   };
-  const captureBody = async (init?: RequestInit) => JSON.parse(String(init?.body)) as {
+  const captureBody = async (init?: RequestInit) => legacyBody(init?.body) as {
     messages: Array<{ content: string }>;
     temperature: number;
     max_tokens: number;
@@ -723,7 +592,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
       return chatResponse(content);
     });
 
-    const result = await new AIService(makeConfig() as never, 'zh')
+    const result = await new AIService('zh')
       .generateRepoSearchQueries('终端文件管理器', '找终端文件管理器');
 
     expect(result).toEqual([
@@ -750,7 +619,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
     ].join('\n');
     fetchMock.mockResolvedValueOnce(chatResponse(content));
 
-    await expect(new AIService(makeConfig() as never, 'zh').generateRepoSearchQueries('终端文件管理器', 'i'))
+    await expect(new AIService('zh').generateRepoSearchQueries('终端文件管理器', 'i'))
       .resolves.toEqual([{ terms: ['terminal manager'], scope: 'metadata' }]);
   });
 
@@ -759,14 +628,11 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
     const content = `{ stray\n${JSON.stringify({ queries: [{ terms: ['terminal manager'], scope: 'metadata' }] })}`;
     fetchMock.mockResolvedValueOnce(chatResponse(content));
 
-    await expect(new AIService(makeConfig() as never, 'zh').generateRepoSearchQueries('q', 'i'))
+    await expect(new AIService('zh').generateRepoSearchQueries('q', 'i'))
       .resolves.toEqual([{ terms: ['terminal manager'], scope: 'metadata' }]);
   });
 
-  it.each([
-    ['普通端点', makeConfig()],
-    ['reasoning 兼容端点', { ...makeConfig(), reasoningEffort: 'medium' }],
-  ])('%s统一使用 4096 max_tokens', async (_label, config) => {
+  it('统一使用 4096 max_tokens', async () => {
     const fetchMock = mockFetch();
     let maxTokens: number | undefined;
     fetchMock.mockImplementationOnce(async (_url, init) => {
@@ -774,7 +640,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
       return chatResponse('{"queries":[{"terms":["x"],"scope":"any"}]}');
     });
 
-    await new AIService(config as never, 'zh').generateRepoSearchQueries('q', 'i');
+    await new AIService('zh').generateRepoSearchQueries('q', 'i');
     expect(maxTokens).toBe(4096);
   });
 
@@ -784,7 +650,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
       .mockResolvedValueOnce(chatResponse('{"queries":"not-an-array"}'))
       .mockResolvedValueOnce(chatResponse('not json at all'))
       .mockRejectedValueOnce(new Error('network down'));
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
 
     await expect(service.generateRepoSearchQueries('q', 'i')).resolves.toEqual([]);
     await expect(service.generateRepoSearchQueries('q', 'i')).resolves.toEqual([]);
@@ -794,7 +660,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
   it('abort 向上传播；en 提示词包含同等语法槽约束', async () => {
     const fetchMock = mockFetch();
     fetchMock.mockRejectedValueOnce(new DOMException('aborted', 'AbortError'));
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     await expect(service.generateRepoSearchQueries('q', 'i')).rejects.toSatisfy(isAbortError);
 
     let enPrompt = '';
@@ -803,7 +669,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
       enPrompt = body.messages[1].content;
       return chatResponse('{"queries":[{"terms":["x"],"scope":"any"}]}');
     });
-    await new AIService(makeConfig() as never, 'en').generateRepoSearchQueries('q', 'i');
+    await new AIService('en').generateRepoSearchQueries('q', 'i');
     expect(enPrompt).toContain('At least 2 metadata queries');
     expect(enPrompt).toContain('at least 1 readme query');
     expect(enPrompt).toContain('never use only generic words');
@@ -811,11 +677,7 @@ describe('AIService.generateRepoSearchQueries — GitHub 语法槽', () => {
 });
 
 describe('AIService vector query analysis and graded reranking', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-  const chatResponse = (content: string) => fetchJson({ choices: [{ message: { content } }] });
+  const chatResponse = (content: string) => claudeReply(content);
 
   beforeEach(() => {
     (window.fetch as ReturnType<typeof vi.fn>).mockReset();
@@ -837,7 +699,7 @@ describe('AIService vector query analysis and graded reranking', () => {
   "lowConfidenceFacets": []
 }
 \`\`\``));
-    const result = await new AIService(makeConfig() as never, 'zh').analyzeVectorSearchQuery('优化 readme');
+    const result = await new AIService('zh').analyzeVectorSearchQuery('优化 readme');
 
     expect(result?.intent).toHaveLength(200);
     expect(result?.idealDescription).toHaveLength(600);
@@ -848,7 +710,7 @@ describe('AIService vector query analysis and graded reranking', () => {
   it('returns null for malformed analysis or wrong field types', async () => {
     const fetch = window.fetch as ReturnType<typeof vi.fn>;
     fetch.mockResolvedValueOnce(chatResponse('not json'));
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     await expect(service.analyzeVectorSearchQuery('x')).resolves.toBeNull();
 
     fetch.mockResolvedValueOnce(chatResponse(JSON.stringify({
@@ -905,10 +767,10 @@ describe('AIService vector query analysis and graded reranking', () => {
       ai_tags: ['skill'],
       stargazers_count: 99999,
     });
-    const result = await new AIService(makeConfig() as never, 'zh')
+    const result = await new AIService('zh')
       .analyzeSimilarRepositorySource(repo, '# README mention', undefined);
     const [, init] = (window.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    const messages = JSON.parse(String(init.body)).messages as Array<{ content: string }>;
+    const messages = legacyBody(init.body).messages as Array<{ content: string }>;
     const prompt = messages.map(message => message.content).join('\n');
 
     expect(result?.idealDescription).toContain('peer agent skill');
@@ -921,7 +783,7 @@ describe('AIService vector query analysis and graded reranking', () => {
       makeRepo({ id: 101, name: 'a', full_name: 'acme/a' }),
       makeRepo({ id: 202, name: 'b', full_name: 'acme/b' }),
     ];
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
 
     expect(service.parseGradedRerankResult('{"grades":[{"id":202,"grade":2},{"id":1,"grade":1}]}', repos))
       .toEqual({ status: 'complete', grades: new Map([[202, 2], [101, 1]]) });
@@ -939,7 +801,7 @@ describe('AIService vector query analysis and graded reranking', () => {
       makeRepo({ id: 101, name: 'a', full_name: 'acme/a' }),
       makeRepo({ id: 202, name: 'b', full_name: 'acme/b' }),
     ];
-    const result = new AIService(makeConfig() as never, 'zh').parseGradedRerankResult(content, repos);
+    const result = new AIService('zh').parseGradedRerankResult(content, repos);
     expect(result.status).toBe('invalid');
   });
 
@@ -951,13 +813,13 @@ describe('AIService vector query analysis and graded reranking', () => {
       makeRepo({ id: 101, name: 'a', full_name: 'acme/a', stargazers_count: 99999 }),
       makeRepo({ id: 202, name: 'b', full_name: 'acme/b' }),
     ];
-    const result = await new AIService(makeConfig() as never, 'zh').rerankRepositoriesGraded(
+    const result = await new AIService('zh').rerankRepositoriesGraded(
       repos,
       'query',
       null,
     );
     const [, init] = (window.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    const messages = JSON.parse(String(init.body)).messages as Array<{ content: string }>;
+    const messages = legacyBody(init.body).messages as Array<{ content: string }>;
     const prompt = messages.map(message => message.content).join('\n');
 
     expect(result?.status).toBe('complete');
@@ -967,7 +829,7 @@ describe('AIService vector query analysis and graded reranking', () => {
   });
 
   it('returns empty for no candidates without calling the LLM', async () => {
-    const result = await new AIService(makeConfig() as never, 'zh').rerankRepositoriesGraded(
+    const result = await new AIService('zh').rerankRepositoriesGraded(
       [],
       'query',
       null,
@@ -985,7 +847,7 @@ describe('AIService vector query analysis and graded reranking', () => {
       makeRepo({ id: 101, name: 'a', full_name: 'acme/a', stargazers_count: 99999 }),
       makeRepo({ id: 202, name: 'b', full_name: 'acme/b' }),
     ];
-    const result = await new AIService(makeConfig() as never, 'zh').rerankSimilarRepositoriesGraded(
+    const result = await new AIService('zh').rerankSimilarRepositoriesGraded(
       makeRepo({ id: 999, name: 'private-brand', full_name: 'source-owner/private-brand' }),
       repos,
       {
@@ -1004,7 +866,7 @@ describe('AIService vector query analysis and graded reranking', () => {
       undefined,
     );
     const [, init] = (window.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    const messages = JSON.parse(String(init.body)).messages as Array<{ content: string }>;
+    const messages = legacyBody(init.body).messages as Array<{ content: string }>;
     const prompt = messages.map(message => message.content).join('\n');
 
     expect(result?.status).toBe('complete');
@@ -1022,297 +884,70 @@ describe('AIService vector query analysis and graded reranking', () => {
       makeRepo({ id: 101, name: 'a', full_name: 'acme/a' }),
       makeRepo({ id: 202, name: 'b', full_name: 'acme/b' }),
     ];
-    const result = await new AIService(makeConfig() as never, 'zh').rerankRepositoriesGraded(repos, 'query', null);
+    const result = await new AIService('zh').rerankRepositoriesGraded(repos, 'query', null);
     expect(result?.status).toBe('invalid');
     expect(result?.grades.get(101)).toBe(2);
   });
 
   it('keeps the private lexical delegate identical to the public static implementation', () => {
     const repo = makeRepo({ id: 4, name: 'skill-pack', full_name: 'acme/skill-pack', custom_tags: ['技能'] });
-    const service = new AIService(makeConfig() as never, 'zh');
+    const service = new AIService('zh');
     const publicResult = AIService.rankLexicalCandidates([repo], '技能', ['skill']);
     const privateResult = service['scoreRepositoriesByKeywords']([repo], '技能', ['skill']);
     expect(privateResult).toEqual(publicResult);
   });
 });
 
-describe('AIService — 慢/限流 OpenAI 兼容网关的防御性解析', () => {
-  const fetchJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const mockFetch = () => {
-    const fetchMock = window.fetch as ReturnType<typeof vi.fn>;
-    fetchMock.mockReset();
-    return fetchMock;
-  };
 
-  it('HTTP 200 携带 429/throttling 错误体时转为限流 AIRequestError', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { message: 'max connections reached', type: 'throttling_error', code: '429' },
+describe('AIService.generateWithTools — Claude tool use via /api/ai/messages', () => {
+  const tools = [
+    { name: 'read_documentation', description: 'Read docs', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+  ];
+  const messages: AIToolLoopMessage[] = [
+    { role: 'user', content: 'Question: What is this repo?' },
+    { role: 'assistant', content: null, toolCalls: [{ id: 'call_1', name: 'read_documentation', arguments: '{"path":"README.md"}' }] },
+    { role: 'tool', toolCallId: 'call_1', content: 'SOURCE: /README.md - 1-5' },
+  ];
+
+  beforeEach(() => {
+    (window.fetch as ReturnType<typeof vi.fn>).mockReset();
+  });
+
+  it('posts purpose "tools" with Claude tool blocks and parses returned tool calls', async () => {
+    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(claudeReply('', {
+      toolCalls: [{ id: 'call_2', name: 'ready_to_answer', input: { missing: [] } }],
+      stopReason: 'tool_use',
     }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    const aiError = error as AIRequestError;
-    expect(aiError.status).toBe(429);
-    expect(aiError.isRateLimit).toBe(true);
-    expect(isRateLimitedError(aiError)).toBe(true);
-    expect(aiError.message).toContain('max connections reached');
+
+    const result = await new AIService('en').generateWithTools({ system: 'agent rules', messages, tools, temperature: 0, maxTokens: 1_200 });
+
+    const [url, init] = (window.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/ai/messages');
+    expect(init.credentials).toBe('same-origin');
+    const body = JSON.parse(String(init.body)) as Record<string, unknown> & { messages: Array<{ role: string; content: unknown }> };
+    expect(body.purpose).toBe('tools');
+    expect(body.system).toBe('agent rules');
+    expect(body).not.toHaveProperty('model');
+    expect(body.tools).toEqual([{ name: 'read_documentation', description: 'Read docs', input_schema: tools[0].parameters }]);
+    expect(body.messages[1]).toEqual({ role: 'assistant', content: [{ type: 'tool_use', id: 'call_1', name: 'read_documentation', input: { path: 'README.md' } }] });
+    expect(body.messages[2]).toMatchObject({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call_1', content: 'SOURCE: /README.md - 1-5' }] });
+    expect(result.content).toBe('');
+    expect(result.toolCalls).toEqual([{ id: 'call_2', name: 'ready_to_answer', arguments: '{"missing":[]}' }]);
   });
 
-  it('HTTP 200 错误体 message 含 rate-limit 字样时也转为限流 AIRequestError', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { message: 'rate-limit exceeded' },
-    }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(429);
-    expect(isRateLimitedError(error)).toBe(true);
+  it('clamps maxTokens to the per-purpose cap before sending', async () => {
+    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(claudeReply('ok'));
+    await new AIService('en').generateWithTools({ system: 'rules', messages, tools, maxTokens: 50_000 });
+    const [, init] = (window.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    expect((JSON.parse(String(init.body)) as { maxTokens: number }).maxTokens).toBe(8192);
   });
 
-  it('HTTP 200 字符串错误内容为明确限流短语时转为 429', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: 'rate-limit exceeded',
-    }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(429);
-    expect(isRateLimitedError(error)).toBe(true);
-  });
-
-  it('HTTP 200 错误体 message 仅包含 rate_limit 字样但不表示限流时仍为 502', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { type: 'invalid_request_error', message: 'invalid parameter: rate_limit must be positive' },
-    }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(502);
-    expect(isRateLimitedError(error)).toBe(false);
-  });
-
-  it('HTTP 200 非限流网关错误即使消息含 rate limit 也不触发限流判定', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { type: 'upstream_error', message: 'upstream rate limit hit for key' },
-    }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(502);
-    expect((error as AIRequestError).isRateLimit).toBe(false);
-    expect(isRateLimitedError(error)).toBe(false);
-  });
-
-  it('真实 HTTP 503 错误详情含限流短语时仍判定为限流', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({ error: 'rate limit exceeded' }, 503));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(503);
-    expect((error as AIRequestError).fromGatewayBody).toBe(false);
-    expect(isRateLimitedError(error)).toBe(true);
-  });
-
-  it('HTTP 200 携带非限流网关错误体时转为 502 AIRequestError', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { message: 'upstream unavailable', code: 'bad_gateway' },
-    }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.expandSearchQuery('anything').then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    const aiError = error as AIRequestError;
-    expect(aiError.status).toBe(502);
-    expect(aiError.isRateLimit).toBe(false);
-    expect(aiError.message).toContain('upstream unavailable');
-  });
-
-  it('普通 openai 兼容配置的连接测试在 30s 才超时（不再 10s 判“渠道不可用”）', async () => {
-    vi.useFakeTimers();
-    try {
-      const service = new AIService(makeConfig() as never);
-      mockFetch().mockImplementation((_url, init) => new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
-      }));
-      let settled = false;
-      let result: unknown;
-      const pending = service.testConnection().then((value) => { result = value; settled = true; }, () => { settled = true; });
-      await vi.advanceTimersByTimeAsync(29999);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(settled).toBe(true);
-      await pending;
-      expect(result).toMatchObject({ success: false, errorType: 'timeout' });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('analyzeRepository 遇到 AbortError 不记“AI analysis failed”日志但仍抛出', async () => {
-    mockFetch().mockRejectedValue(new DOMException('signal is aborted without reason', 'AbortError'));
-    const errorFromLogger = vi.spyOn(logger, 'errorFromError').mockImplementation(() => {});
-    try {
-      const service = new AIService(makeConfig() as never, 'zh');
-      await expect(service.analyzeRepository(makeRepo({ id: 1, name: 'sample', full_name: 'acme/sample' }), '# readme'))
-        .rejects.toSatisfy(isAbortError);
-      expect(errorFromLogger).not.toHaveBeenCalled();
-    } finally {
-      errorFromLogger.mockRestore();
-    }
-  });
-
-  it('analyzeRepository 非 AbortError 仍照常记录失败日志', async () => {
-    mockFetch().mockRejectedValue(new Error('network down'));
-    const errorFromLogger = vi.spyOn(logger, 'errorFromError').mockImplementation(() => {});
-    try {
-      const service = new AIService(makeConfig() as never, 'zh');
-      await expect(service.analyzeRepository(makeRepo({ id: 1, name: 'sample', full_name: 'acme/sample' }), '# readme'))
-        .rejects.toThrow('network down');
-      expect(errorFromLogger).toHaveBeenCalledWith('ai', 'AI analysis failed', expect.any(Error), expect.anything());
-    } finally {
-      errorFromLogger.mockRestore();
-    }
-  });
-
-  it('testConnection 对 HTTP 200 网关错误体按映射状态码分类', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { message: 'max connections reached', code: '429' },
-    }));
-    const service = new AIService(makeConfig() as never);
-    const result = await service.testConnection();
-    expect(result).toMatchObject({ success: false, statusCode: 429, errorType: 'unknown' });
-    expect(result.message).toContain('HTTP 429');
-  });
-
-  it('testConnection 映射状态码优先于消息中的 network 关键词', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { message: 'network capacity exceeded', code: '429' },
-    }));
-    const service = new AIService(makeConfig() as never);
-    const result = await service.testConnection();
-    expect(result).toMatchObject({ success: false, statusCode: 429, errorType: 'unknown' });
-    expect(result.message).toContain('HTTP 429');
-  });
-
-  it('testConnection 普通错误消息含网络关键词与 IP 地址时归类为 network', async () => {
-    mockFetch().mockRejectedValueOnce(new Error('network request failed to 127.0.0.1'));
-    const service = new AIService(makeConfig() as never);
-    const result = await service.testConnection();
-    expect(result).toMatchObject({ success: false, errorType: 'network' });
-  });
-
-  it('testConnection 已映射状态码的 AIRequestError 不因消息含 abort 关键词被归类为超时', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({
-      error: { message: 'connection aborted by gateway', code: '429' },
-    }));
-    const service = new AIService(makeConfig() as never);
-    const result = await service.testConnection();
-    expect(result).toMatchObject({ success: false, statusCode: 429, errorType: 'unknown' });
-    expect(result.message).toContain('HTTP 429');
-  });
-
-  it('analyzeRepository 信号已中止但请求抛出普通 Error 时不记录失败日志', async () => {
-    mockFetch().mockRejectedValue(new Error('network down'));
-    const errorFromLogger = vi.spyOn(logger, 'errorFromError').mockImplementation(() => {});
-    try {
-      const controller = new AbortController();
-      controller.abort();
-      const service = new AIService(makeConfig() as never, 'zh');
-      await expect(service.analyzeRepository(makeRepo({ id: 1, name: 'sample', full_name: 'acme/sample' }), '# readme', undefined, undefined, controller.signal))
-        .rejects.toThrow('network down');
-      expect(errorFromLogger).not.toHaveBeenCalled();
-    } finally {
-      errorFromLogger.mockRestore();
-    }
-  });
-
-  it('requestTextStream 缺失 Content-Type 的 HTTP 200 限流错误体转为 429 AIRequestError', async () => {
-    mockFetch().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      text: async () => JSON.stringify({ error: { message: 'max connections reached', type: 'throttling_error', code: '429' } }),
-    });
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: () => {} }).then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(429);
-    expect(isRateLimitedError(error)).toBe(true);
-  });
-
-  it('requestTextStream application/json 的 HTTP 200 网关错误体转为 502 AIRequestError', async () => {
-    mockFetch().mockResolvedValueOnce(fetchJson({ error: { message: 'bad gateway', type: 'bad_gateway' } }, 200));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: () => {} }).then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(502);
-  });
-
-  it('requestTextStream SSE 帧携带网关错误体时转为 429 AIRequestError', async () => {
-    mockFetch().mockResolvedValueOnce(new Response(
-      'data: {"error":{"message":"max connections reached","type":"throttling_error","code":"429"}}\n\n',
-      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+  it('surfaces a server error code on AIRequestError', async () => {
+    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(new Response(
+      JSON.stringify({ error: 'credit low', code: 'AI_CREDIT_LOW' }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } },
     ));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: () => {} }).then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(429);
-  });
-
-  it('requestTextStream 增量后接 SSE 错误帧时整体抛出 429 AIRequestError', async () => {
-    const chunks: string[] = [];
-    mockFetch().mockResolvedValueOnce(new Response(
-      'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'
-      + 'data: {"error":{"message":"max connections reached","type":"throttling_error","code":"429"}}\n\n',
-      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
-    ));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: (delta) => chunks.push(delta) }).then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(429);
-    expect(chunks).toEqual(['partial']);
-  });
-
-  it('requestTextStream SSE 错误帧后连接挂起时也立即抛出 429', async () => {
-    const encoder = new TextEncoder();
-    const hangingBody = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode('data: {"error":{"message":"max connections reached","type":"throttling_error","code":"429"}}\n\n'));
-        // 故意不关闭流：模拟网关发送错误帧后保持连接。
-      },
-    });
-    mockFetch().mockResolvedValueOnce(new Response(hangingBody, {
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-    }));
-    const service = new AIService(makeConfig() as never, 'zh');
-    const error: unknown = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: () => {} }).then(() => null, e => e);
-    expect(error).toBeInstanceOf(AIRequestError);
-    expect((error as AIRequestError).status).toBe(429);
-  }, 2000);
-
-  it('requestTextStream 缺失 Content-Type 时纯文本中的 data: 行不被误判为网关错误帧', async () => {
-    const plainText = 'Sure!\ndata: {"error":{"message":"not really","code":"bad_gateway"}}\nDone';
-    mockFetch().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      text: async () => plainText,
-    });
-    const service = new AIService(makeConfig() as never, 'zh');
-    const result = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: () => {} });
-    expect(result).toBe(plainText);
-  });
-
-  it('requestTextStream 缺失 Content-Type 时 id 前缀的普通文本行不被误判为 SSE 帧', async () => {
-    const plainText = 'identity check\ndata: {"error":{"message":"x","code":"429"}}';
-    mockFetch().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      text: async () => plainText,
-    });
-    const service = new AIService(makeConfig() as never, 'zh');
-    const result = await service.generateChatTextStream({ system: 's', user: 'u', onChunk: () => {} });
-    expect(result).toBe(plainText);
+    await expect(new AIService('en').generateWithTools({ system: 'rules', messages, tools }))
+      .rejects.toMatchObject({ status: 402, code: 'AI_CREDIT_LOW' });
   });
 });

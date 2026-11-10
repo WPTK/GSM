@@ -216,7 +216,7 @@ vi.mock('./components/ReleaseCard', () => ({ default: () => null }));
 vi.mock('./components/settings', () => ({
   AppearancePanel: () => <div data-testid="AppearancePanel-content" />,
   GeneralPanel: () => <div data-testid="GeneralPanel-content" />,
-  AIConfigPanel: () => <div data-testid="AIConfigPanel-content" />,
+  ClaudePanel: () => <div data-testid="ClaudePanel-content" />,
   WebDAVPanel: () => <div data-testid="WebDAVPanel-content" />,
   BackupPanel: () => <div data-testid="BackupPanel-content" />,
   BackendPanel: () => <div data-testid="BackendPanel-content" />,
