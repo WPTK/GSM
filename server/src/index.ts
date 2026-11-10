@@ -1,3 +1,4 @@
+import './preflight.js';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -180,9 +181,6 @@ async function startServer(): Promise<void> {
     startBatchPoller();
     resumeCreditProbeSchedule();
     resumeJobsOnBoot();
-    if (!config.apiSecret) {
-      logger.warn('server.auth', 'Running without API_SECRET — auth is disabled');
-    }
   });
 
   // Graceful shutdown

@@ -6,8 +6,8 @@ import { config } from '../config.js';
  * Stateless, HMAC-signed session cookie.
  *
  * Token = base64url(JSON payload) + '.' + base64url(HMAC-SHA256(key, payload part)).
- * The signing key is derived from API_SECRET (or ENCRYPTION_KEY when no API_SECRET is
- * set), so there is no extra secret to manage, and changing API_SECRET invalidates
+ * The signing key is derived from API_SECRET (required at startup), so there is no
+ * extra secret to manage, and changing API_SECRET invalidates
  * every existing session. The cookie never contains the secret itself.
  */
 export const SESSION_COOKIE_NAME = 'gsm_session';
@@ -16,8 +16,7 @@ export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const KEY_CONTEXT = 'gsm-session-cookie-v1';
 
 function deriveKey(): Buffer {
-  const material = config.apiSecret ?? config.encryptionKey;
-  return crypto.createHmac('sha256', material).update(KEY_CONTEXT).digest();
+  return crypto.createHmac('sha256', config.apiSecret).update(KEY_CONTEXT).digest();
 }
 
 function sign(payloadPart: string): Buffer {

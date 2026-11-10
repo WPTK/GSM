@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readSecret, missingSecretsMessage } from './secrets.js';
 
 interface Config {
   port: number;
-  apiSecret: string | null;
+  apiSecret: string;
   encryptionKey: string;
   dbPath: string;
   nodeEnv: string;
@@ -47,44 +48,37 @@ export function normalizeEncryptionKey(key: string): string {
 }
 
 /**
- * Resolve the AES-256 encryption key from env var, key file, or auto-generation.
- * All non-standard formats are normalized to a 64-char hex string (32 bytes).
+ * Resolve the AES-256 encryption key from ENCRYPTION_KEY or ENCRYPTION_KEY_FILE.
+ * It is required: there is no auto-generated fallback. All non-standard formats
+ * are normalized to a 64-char hex string (32 bytes).
  */
 function resolveEncryptionKey(dataDir: string): string {
-  const envKey = process.env.ENCRYPTION_KEY;
-  if (envKey) {
-    return normalizeEncryptionKey(envKey);
+  const key = readSecret('ENCRYPTION_KEY');
+  if (!key) {
+    throw new Error(missingSecretsMessage(['ENCRYPTION_KEY']));
   }
 
-  const keyFilePath = path.join(dataDir, '.encryption-key');
-  if (fs.existsSync(keyFilePath)) {
-    const fileKey = fs.readFileSync(keyFilePath, 'utf-8').trim();
-    const normalized = normalizeEncryptionKey(fileKey);
-    // Persist normalized key so future startups (even without normalization) use the correct format
-    if (normalized !== fileKey) {
-      fs.writeFileSync(keyFilePath, normalized, { mode: 0o600 });
-      console.log('[config] Normalized encryption key written back to data/.encryption-key');
-    }
-    return normalized;
+  // Older versions auto-generated this file. It is never read or deleted now.
+  if (fs.existsSync(path.join(dataDir, '.encryption-key'))) {
+    console.warn('[config] data/.encryption-key exists but is no longer read: move its value into ENCRYPTION_KEY (or ENCRYPTION_KEY_FILE); the file was not deleted.');
   }
-
-  const newKey = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(keyFilePath, newKey, { mode: 0o600 });
-  console.log('Generated new encryption key and saved to data/.encryption-key');
-  return newKey;
+  return normalizeEncryptionKey(key);
 }
 
 /** Load all server configuration from environment variables and defaults. */
 function loadConfig(): Config {
   const dataDir = resolveDataDir();
+  const apiSecret = readSecret('API_SECRET');
+  if (!apiSecret) {
+    throw new Error(missingSecretsMessage(['API_SECRET']));
+  }
 
   return {
     port: parseInt(process.env.PORT || '3000', 10),
-    apiSecret: process.env.API_SECRET || null,
+    apiSecret,
     encryptionKey: resolveEncryptionKey(dataDir),
     dbPath: process.env.DB_PATH || path.join(dataDir, 'data.db'),
     nodeEnv: process.env.NODE_ENV || 'development',
   };
 }
-
 export const config = loadConfig();

@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import { readSecret } from '../secrets.js';
 
 /**
  * The GitHub token lives only on the server, in the environment:
@@ -8,19 +8,7 @@ import fs from 'node:fs';
 let cached: string | null | undefined;
 
 function readToken(): string | null {
-  const direct = process.env.GITHUB_TOKEN?.trim();
-  if (direct) return direct;
-
-  const file = process.env.GITHUB_TOKEN_FILE?.trim();
-  if (file) {
-    try {
-      const fromFile = fs.readFileSync(file, 'utf8').trim();
-      if (fromFile) return fromFile;
-    } catch {
-      // An unreadable file is the same as "not configured"; the path is not logged.
-    }
-  }
-  return null;
+  return readSecret('GITHUB_TOKEN');
 }
 
 /** Returns the configured GitHub token, or null. Read once, then cached. */

@@ -258,7 +258,8 @@ describe('relay limits', () => {
 
   it('the app gives /api/ai a 2 MB body limit', async () => {
     const { createApp } = await import('../../src/index.js');
-    const res = await request(createApp()).post('/api/ai/messages').send({ ...base, purpose: 'chat', system: 'x'.repeat(3 * 1024 * 1024) });
+    const { config } = await import('../../src/config.js');
+    const res = await request(createApp()).post('/api/ai/messages').set('Authorization', 'Bearer ' + config.apiSecret).send({ ...base, purpose: 'chat', system: 'x'.repeat(3 * 1024 * 1024) });
     expect(res.status).toBe(413);
   });
 });

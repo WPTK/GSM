@@ -1,4 +1,4 @@
-import fs from 'node:fs';
+import { readSecret } from '../secrets.js';
 
 /**
  * Claude settings come from the environment only:
@@ -17,19 +17,7 @@ let cachedKey: string | null | undefined;
 let modelsVerified = false;
 
 function readKey(): string | null {
-  const direct = process.env.ANTHROPIC_API_KEY?.trim();
-  if (direct) return direct;
-
-  const file = process.env.ANTHROPIC_API_KEY_FILE?.trim();
-  if (file) {
-    try {
-      const fromFile = fs.readFileSync(file, 'utf8').trim();
-      if (fromFile) return fromFile;
-    } catch {
-      // An unreadable file is the same as "not configured"; the path is not logged.
-    }
-  }
-  return null;
+  return readSecret('ANTHROPIC_API_KEY');
 }
 
 /** The configured Anthropic key, or null. Read once, then cached. */

@@ -18,7 +18,7 @@ describe('session cookie auth', () => {
   let request: typeof import('supertest').default;
   let createApp: () => import('express').Express;
   let closeDb: () => void;
-  let config: { apiSecret: string | null };
+  let config: { apiSecret: string };
   let sessionCookie: typeof import('../../src/services/sessionCookie.js');
   let githubToken: typeof import('../../src/services/githubToken.js');
   let app: import('express').Express;
@@ -284,14 +284,15 @@ describe('session cookie auth', () => {
     });
   });
 
-  describe('dev mode (no API_SECRET)', () => {
-    it('lets requests through and issues no cookie', async () => {
-      config.apiSecret = null;
-      await request(app).get('/api/logs').expect(200);
-      const res = await request(app).post('/api/auth/session').send({ secret: 'anything' }).expect(204);
+  describe('no dev mode', () => {
+    it('rejects unauthenticated requests to protected routes and issues no cookie for a wrong secret', async () => {
+      await request(app).get('/api/logs').expect(401);
+      await request(app).get('/api/repositories').expect(401);
+      await request(app).post('/api/sync/export').expect(401);
+      const res = await request(app).post('/api/auth/session').send({ secret: 'anything' }).expect(401);
       expect(res.headers['set-cookie']).toBeUndefined();
       const status = await request(app).get('/api/auth/status');
-      expect(status.body.authenticated).toBe(true);
+      expect(status.body.authenticated).toBe(false);
     });
   });
 

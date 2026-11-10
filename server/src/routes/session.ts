@@ -39,12 +39,6 @@ export function createSessionRouter(options: SessionRouterOptions = {}): Router 
       return;
     }
 
-    // Dev mode (no API_SECRET): nothing to log in to, nothing to sign.
-    if (!config.apiSecret) {
-      res.status(204).end();
-      return;
-    }
-
     const secret = (req.body as { secret?: unknown } | undefined)?.secret;
     if (typeof secret !== 'string' || !secretsMatch(secret, config.apiSecret)) {
       res.status(401).json({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
@@ -74,7 +68,7 @@ export function createSessionRouter(options: SessionRouterOptions = {}): Router 
 
   // GET /api/auth/status  ->  { authenticated, githubConfigured }  (no auth needed)
   router.get('/api/auth/status', (req, res) => {
-    const authenticated = !config.apiSecret || hasValidBearer(req) || hasValidSessionCookie(req);
+    const authenticated = hasValidBearer(req) || hasValidSessionCookie(req);
     res.set('Cache-Control', 'no-store').json({ authenticated, githubConfigured: isGithubConfigured() });
   });
 

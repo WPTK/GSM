@@ -1,9 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
-import { logger } from '../services/logger.js';
 import { hasValidSessionCookie, secretsMatch } from '../services/sessionCookie.js';
-
-let warnedOnce = false;
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -28,7 +25,7 @@ export function originMatchesHost(req: Request): boolean {
 /** True when the Authorization header carries the correct Bearer API secret. */
 export function hasValidBearer(req: Request): boolean {
   const authHeader = req.headers.authorization;
-  if (!config.apiSecret || !authHeader || !authHeader.startsWith('Bearer ')) return false;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return false;
   return secretsMatch(authHeader.slice(7), config.apiSecret);
 }
 
@@ -38,15 +35,6 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  // Dev mode: no API_SECRET set
-  if (!config.apiSecret) {
-    if (!warnedOnce) {
-      logger.warn('server.auth', 'API_SECRET not set: auth disabled (dev mode)');
-      warnedOnce = true;
-    }
-    next();
-    return;
-  }
 
   // Bearer token: not an ambient credential, so no CSRF check.
   if (req.headers.authorization) {
