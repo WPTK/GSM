@@ -20,7 +20,7 @@ let db: ReturnType<typeof freshDb>;
 beforeEach(() => {
   resetAiEnv();
   resetClaudeConfigForTests();
-  process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-zzzz-1234';
+  process.env.ANTHROPIC_API_KEY = 'fake-anthropic-key-zzzz-1234';
   db = freshDb();
   markModelsVerified();
   clearEstimatesForTests();

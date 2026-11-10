@@ -9,7 +9,7 @@ import { ClaudeStartupError, validateModels, validateModelsOrExit } from '../../
 import { logger } from '../../src/services/logger.js';
 import { makeFakeClient, resetAiEnv, HttpError } from './helpers.js';
 
-const SECRET = 'sk-ant-api03-SECRETVALUE-7f3a';
+const SECRET = 'fake-anthropic-key-SECRETVALUE-7f3a';
 
 describe('claude config', () => {
   beforeEach(() => { resetAiEnv(); resetClaudeConfigForTests(); });

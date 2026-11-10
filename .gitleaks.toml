@@ -19,9 +19,8 @@ paths = [
   '''^src/services/logger\.test\.ts$''',
   '''^src/services/githubApi\.test\.ts$''',
   '''^tests/fixtures/sanitization-vectors\.json$''',
-  '''^server/tests/middleware/csp\.test\.ts$''',
-  '''^server/tests/mcp/routes\.test\.ts$''',
-  '''^server/tests/services/config\.test\.ts$''',
+  # Any server test file: still only the exact fake constants below are exempt.
+  '''^server/tests/.+\.test\.ts$''',
 ]
 regexes = [
   # Each entry is an exact synthetic constant from the fixtures — not a

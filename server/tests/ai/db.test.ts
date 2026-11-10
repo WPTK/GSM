@@ -78,7 +78,7 @@ describe('sync export', () => {
   beforeEach(() => { freshDb(); });
 
   it('never contains an AI key in the clear or encrypted', async () => {
-    const secret = 'sk-ant-api03-THISMUSTNOTLEAK-abcd';
+    const secret = 'fake-anthropic-key-THISMUSTNOTLEAK-abcd';
     testDb().prepare(
       "INSERT INTO ai_configs (id, name, api_type, base_url, api_key_encrypted, model, is_active) VALUES ('c1','My','claude','https://api.anthropic.com',?, 'm', 1)",
     ).run(encrypt(secret, config.encryptionKey));

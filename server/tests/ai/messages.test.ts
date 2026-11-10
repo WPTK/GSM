@@ -25,7 +25,7 @@ let fake: FakeClient;
 beforeEach(() => {
   resetAiEnv();
   resetClaudeConfigForTests();
-  process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-abcdefgh-9z8y';
+  process.env.ANTHROPIC_API_KEY = 'fake-anthropic-key-abcdefgh-9z8y';
   freshDb();
   markModelsVerified();
   fake = makeFakeClient();
