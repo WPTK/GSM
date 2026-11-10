@@ -146,7 +146,17 @@ describe('useDiscoveryRepoActions.analyze', () => {
       analysis_failed: true,
       analysis_error: 'network down',
     });
-    expect(mocks.toast).toHaveBeenCalledWith('AI分析失败，请检查AI配置。', 'error');
+    expect(mocks.toast).toHaveBeenCalledWith('AI分析失败，请检查 Claude 连接。', 'error');
+  });
+
+  it('writes no failure and shows no toast when the owner declines the spend dialog', async () => {
+    mocks.analyzeRepository.mockRejectedValue(new DOMException('Analysis declined', 'AbortError'));
+    const { result } = renderHook(() => useDiscoveryRepoActions({ repo }));
+    await act(async () => { await result.current.analyze(); });
+
+    expect(storeState.updateDiscoveryRepo).not.toHaveBeenCalled();
+    expect(mocks.toast).not.toHaveBeenCalled();
+    expect(result.current.isAnalyzing).toBe(false);
   });
 
   it('stays silent after unmount aborts an in-flight analysis', async () => {

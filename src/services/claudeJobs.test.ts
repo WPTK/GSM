@@ -177,6 +177,109 @@ describe('runClaudeAnalysis', () => {
     expect(outcome.job?.status).toBe('cancelled');
   });
 
+  it('still cancels the server job when the abort lands during an in-flight poll fetch', async () => {
+    const controller = new AbortController();
+    installFetch((url, init) => {
+      if (url.endsWith('/analysis/estimate')) return json(estimate());
+      if (url.endsWith('/cancel')) return json({ job: job('cancelled', [item(1, 'pending')]) });
+      if (url.endsWith('/analysis/jobs')) return json({ job: job('running', [item(1, 'pending')]) });
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+        queueMicrotask(() => controller.abort());
+      });
+    });
+
+    const outcome = await runClaudeAnalysis(
+      { repoIds: [1], language: 'en' },
+      { confirmSpend: vi.fn(), signal: controller.signal, pollIntervalMs: 1 },
+    );
+
+    expect(calls.some((c) => c.url === '/api/ai/analysis/jobs/job-1/cancel')).toBe(true);
+    expect(outcome).toMatchObject({ cancelled: true });
+  });
+
+  it('cancels the job it learned about when the abort lands during the create request', async () => {
+    const controller = new AbortController();
+    installFetch((url) => {
+      if (url.endsWith('/analysis/estimate')) return json(estimate());
+      if (url.endsWith('/cancel')) return json({ job: job('cancelled', [item(1, 'pending')]) });
+      controller.abort();
+      return json({ job: job('running', [item(1, 'pending')]) });
+    });
+
+    const outcome = await runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend: vi.fn(), signal: controller.signal });
+
+    expect(calls.filter((c) => c.url.endsWith('/cancel'))).toHaveLength(1);
+    expect(calls.filter((c) => c.url.endsWith('/analysis/jobs/job-1'))).toHaveLength(0);
+    expect(outcome.cancelled).toBe(true);
+  });
+
+  it('retries transient poll failures and finishes the job', async () => {
+    let polls = 0;
+    installFetch((url) => {
+      if (url.endsWith('/analysis/estimate')) return json(estimate());
+      if (url.endsWith('/analysis/jobs')) return json({ job: job('running', [item(1, 'pending')]) });
+      polls += 1;
+      if (polls === 1) return json({ error: 'busy', code: 'AI_UPSTREAM_ERROR' }, 503);
+      if (polls === 2) return Promise.reject(new TypeError('network down'));
+      return json({ job: job('completed', [done1]) });
+    });
+
+    const outcome = await runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend: vi.fn(), pollIntervalMs: 1 });
+
+    expect(polls).toBe(3);
+    expect(outcome.job?.status).toBe('completed');
+  });
+
+  it('gives up after more than the retry limit of consecutive poll failures', async () => {
+    let polls = 0;
+    installFetch((url) => {
+      if (url.endsWith('/analysis/estimate')) return json(estimate());
+      if (url.endsWith('/analysis/jobs')) return json({ job: job('running', [item(1, 'pending')]) });
+      polls += 1;
+      return json({ error: 'down', code: 'AI_UPSTREAM_ERROR' }, 502);
+    });
+
+    await expect(runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend: vi.fn(), pollIntervalMs: 1, pollRetryLimit: 3 }))
+      .rejects.toMatchObject({ status: 502 });
+    expect(polls).toBe(4);
+  });
+
+  it('does not retry a permanent poll failure such as a missing job', async () => {
+    let polls = 0;
+    installFetch((url) => {
+      if (url.endsWith('/analysis/estimate')) return json(estimate());
+      if (url.endsWith('/analysis/jobs')) return json({ job: job('running', [item(1, 'pending')]) });
+      polls += 1;
+      return json({ error: 'nope', code: 'AI_JOB_NOT_FOUND' }, 404);
+    });
+
+    await expect(runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend: vi.fn(), pollIntervalMs: 1 }))
+      .rejects.toMatchObject({ status: 404 });
+    expect(polls).toBe(1);
+  });
+
+  it('backs off while the job is paused', async () => {
+    vi.useFakeTimers();
+    try {
+      let polls = 0;
+      installFetch((url) => {
+        if (url.endsWith('/analysis/estimate')) return json(estimate());
+        if (url.endsWith('/analysis/jobs')) return json({ job: job('paused', [item(1, 'pending')]) });
+        polls += 1;
+        return json({ job: job('completed', [done1]) });
+      });
+      const run = runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend: vi.fn(), pollIntervalMs: 10, pausedPollIntervalMs: 10_000 });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(polls).toBe(0);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await run;
+      expect(polls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses the batch poll interval for batch jobs', async () => {
     vi.useFakeTimers();
     try {

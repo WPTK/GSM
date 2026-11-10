@@ -6,6 +6,7 @@ import { useAppStore, getAllCategories } from '../../../store/useAppStore';
 import { analyzeRepository, createFailedAnalysisResult } from '../../../services/claudeJobs';
 import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
 import { useClaudeSpendConfirm } from '../../../hooks/useClaudeSpendConfirm';
+import { isAbortError } from '../../../services/aiService';
 import { forceSyncToBackend } from '../../../services/autoSync';
 import { createGitHubApiService } from '../../../services/githubApiFactory';
 import { useDialog } from '../../../hooks/useDialog';
@@ -206,7 +207,8 @@ export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions
         onAnalyzed(updatedRepo);
       }
     } catch (error) {
-      if (!controller.signal.aborted) {
+      // Declined spend or a stop: nothing failed, so no failure patch and no toast.
+      if (!controller.signal.aborted && !isAbortError(error)) {
         console.error('AI analysis error:', error);
         const errorMsg = error instanceof Error && error.message
           ? error.message

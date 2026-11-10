@@ -244,8 +244,21 @@ describe('useRepositoryCardActions', () => {
       analysis_failed: true,
       analysis_error: 'model unavailable',
     }));
-    expect(mocks.toast).toHaveBeenCalledWith('AI分析失败，请检查AI配置和网络连接。', 'error');
+    expect(mocks.toast).toHaveBeenCalledWith('AI分析失败，请检查 Claude 连接和网络。', 'error');
     expect(mocks.forceSyncToBackend).not.toHaveBeenCalled();
+  });
+
+  it('writes no failure and shows no toast when the owner declines the spend dialog', async () => {
+    mocks.analyzeRepository.mockRejectedValue(new DOMException('Analysis declined', 'AbortError'));
+    const { result } = renderActions();
+
+    await act(async () => {
+      await result.current.analyze();
+    });
+
+    expect(storeState.updateRepository).not.toHaveBeenCalled();
+    expect(mocks.toast).not.toHaveBeenCalled();
+    expect(result.current.isAnalyzing).toBe(false);
   });
 
   it('stores the PR-03 success patch without triggering a backend sync', async () => {

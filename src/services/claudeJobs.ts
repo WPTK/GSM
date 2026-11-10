@@ -44,6 +44,10 @@ export interface ClaudeAnalysisOptions {
   pollIntervalMs?: number;
   /** Poll interval in ms for batch jobs, which take minutes to hours. Default 30000. */
   batchPollIntervalMs?: number;
+  /** Poll interval in ms while the job is paused (credit low). Default 10000. */
+  pausedPollIntervalMs?: number;
+  /** Consecutive transient poll failures tolerated before giving up. Default 3. */
+  pollRetryLimit?: number;
 }
 
 export interface ClaudeAnalysisOutcome {
@@ -82,6 +86,14 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((
 const isCode = (error: unknown, code: string): boolean =>
   error instanceof AIRequestError && error.code === code;
 
+const isAbort = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';
+
+/** Network failures and 5xx/429 are worth another poll; a 404 or 4xx is not. */
+const isTransientPollError = (error: unknown): boolean => {
+  if (error instanceof AIRequestError) return error.status >= 500 || error.status === 429;
+  return error instanceof TypeError;
+};
+
 export async function runClaudeAnalysis(
   request: ClaudeAnalysisRequest,
   options: ClaudeAnalysisOptions,
@@ -104,7 +116,7 @@ export async function runClaudeAnalysis(
 
   let job: AnalysisJob;
   try {
-    job = await createAnalysisJob(estimate.estimateId, confirmed, signal);
+    job = await createAnalysisJob(estimate.estimateId, confirmed);
   } catch (error) {
     if (isCode(error, 'AI_ESTIMATE_NOT_FOUND')) {
       // Estimates live 30 minutes in server memory: ask again and use the fresh id.
@@ -115,14 +127,14 @@ export async function runClaudeAnalysis(
         }
         confirmed = true;
       }
-      job = await createAnalysisJob(estimate.estimateId, confirmed, signal);
+      job = await createAnalysisJob(estimate.estimateId, confirmed);
     } else if (isCode(error, 'AI_SPEND_CONFIRM_REQUIRED') && !confirmed) {
       // The server guard disagreed with the estimate flag: ask now instead of failing.
       if (!(await options.confirmSpend(estimate))) {
         return { estimate, job: null, declined: true, cancelled: false };
       }
       confirmed = true;
-      job = await createAnalysisJob(estimate.estimateId, true, signal);
+      job = await createAnalysisJob(estimate.estimateId, true);
     } else {
       throw error;
     }
@@ -139,23 +151,39 @@ export async function runClaudeAnalysis(
   };
   report(job);
 
+  // Created without the abort signal on purpose: if the request were aborted mid-flight the
+  // client would never learn the job id and the server job would run (and bill) unseen.
   let cancelled = false;
-  while (!isTerminal(job)) {
-    const interval = job.mode === 'batch' ? options.batchPollIntervalMs ?? 30_000 : options.pollIntervalMs ?? 2_000;
-    await sleep(interval, signal);
-    if (signal?.aborted) {
-      cancelled = true;
-      try {
-        job = await cancelAnalysisJob(job.id);
-      } catch {
-        // The job may already be finished or the server unreachable; the last known state stands.
-      }
-      report(job);
-      break;
+  const cancelJob = async () => {
+    cancelled = true;
+    try {
+      job = await cancelAnalysisJob(job.id);
+    } catch {
+      // The job may already be finished or the server unreachable; the last known state stands.
     }
-    job = await fetchAnalysisJob(job.id, signal);
+    report(job);
+  };
+
+  const retryLimit = options.pollRetryLimit ?? 3;
+  let failures = 0;
+  while (!isTerminal(job) && !signal?.aborted) {
+    const base = job.mode === 'batch' ? options.batchPollIntervalMs ?? 30_000 : options.pollIntervalMs ?? 2_000;
+    // A paused job waits for the owner to top up credit: poll slowly instead of hammering the server.
+    const interval = job.status === 'paused' ? Math.max(base, options.pausedPollIntervalMs ?? 10_000) : base;
+    await sleep(interval, signal);
+    if (signal?.aborted) break;
+    try {
+      job = await fetchAnalysisJob(job.id, signal);
+      failures = 0;
+    } catch (error) {
+      if (signal?.aborted || isAbort(error)) break;
+      failures += 1;
+      if (!isTransientPollError(error) || failures > retryLimit) throw error;
+      continue;
+    }
     report(job);
   }
+  if (signal?.aborted && !isTerminal(job)) await cancelJob();
 
   return { estimate, job, declined: false, cancelled: cancelled || job.status === 'cancelled' };
 }

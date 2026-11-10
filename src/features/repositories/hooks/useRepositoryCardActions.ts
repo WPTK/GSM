@@ -202,7 +202,8 @@ export const useRepositoryCardActions = ({
         'success',
       );
     } catch (error) {
-      if (!controller.signal.aborted) {
+      // Declined spend or a stop: nothing failed, so no failure patch and no toast.
+      if (!controller.signal.aborted && !isAbortError(error)) {
         console.error('AI analysis failed:', error);
 
         const errorMessage = error instanceof Error && error.message
