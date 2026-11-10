@@ -2,6 +2,7 @@ import queryString from 'query-string';
 import { createCombinedAbortController } from '../utils/abortUtils';
 import { useAppStore } from '../store/useAppStore';
 import { AIService } from './aiService';
+import { getClaudeStatusSnapshot, refreshClaudeStatus } from './claudeStatusStore';
 import type { TranslationEngine } from '../types';
 
 export interface TranslateResult {
@@ -351,6 +352,16 @@ const translateWithAI = async (
   from: string | undefined,
   signal: AbortSignal | undefined
 ): Promise<string[]> => {
+  // Same gate as the other AI paths: no Claude connection, no AI translation.
+  // We refuse instead of silently falling back to a third-party engine.
+  if (!getClaudeStatusSnapshot().status) await refreshClaudeStatus();
+  if (!getClaudeStatusSnapshot().status?.connected) {
+    // status 412 keeps withTranslateRetry from retrying a state that will not change
+    throw Object.assign(
+      new Error('Claude is not connected: connect it in Settings to use the AI translation engine'),
+      { status: 412 }
+    );
+  }
   const { language } = useAppStore.getState();
   const aiService = new AIService(language);
   const results: string[] = [];

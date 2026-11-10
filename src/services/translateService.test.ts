@@ -15,6 +15,15 @@ vi.mock('./aiService', () => ({
   AIService: vi.fn(),
 }));
 
+const { claudeState } = vi.hoisted(() => ({
+  claudeState: { status: { connected: true } as { connected: boolean } | null },
+}));
+
+vi.mock('./claudeStatusStore', () => ({
+  getClaudeStatusSnapshot: () => ({ status: claudeState.status, loading: false, error: null }),
+  refreshClaudeStatus: vi.fn(async () => undefined),
+}));
+
 import { translateText, translateBatch } from './translateService';
 import { AIService } from './aiService';
 
@@ -241,6 +250,22 @@ describe('translateService', () => {
     expect(translateTexts).toHaveBeenCalledWith(['Hello'], 'zh', 'en', expect.anything());
     // AI 引擎不走直连接口
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ai engine refuses to translate while Claude is not connected', async () => {
+    mockStoreState.translationEngine = 'ai';
+    claudeState.status = { connected: false };
+    const translateTexts = vi.fn();
+    vi.mocked(AIService).mockImplementation(function () {
+      return { translateTexts } as unknown as AIService;
+    });
+    const fetchMock = installFetch({ msBody: [] });
+
+    await expect(translateText({ text: 'Hello', to: 'zh', from: 'en' })).rejects.toThrow('Claude is not connected');
+
+    expect(translateTexts).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    claudeState.status = { connected: true };
   });
 
   it('empty batch returns immediately without any request', async () => {
