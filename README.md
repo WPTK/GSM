@@ -350,8 +350,8 @@ npm run dev
 #### Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `API_SECRET` | No | Bearer token for API authentication. If unset, auth is disabled. |
-| `ENCRYPTION_KEY` | No | AES-256 key for encrypting stored secrets. Auto-generated if unset. |
+| `API_SECRET` | Yes | Bearer token and login secret. The server refuses to start without it (or `API_SECRET_FILE`). |
+| `ENCRYPTION_KEY` | Yes | AES-256 key for encrypting stored secrets. No longer auto-generated; the server refuses to start without it (or `ENCRYPTION_KEY_FILE`). |
 | `PORT` | No | Server port (default: 3000) |
 | `CSP_CONNECT_SRC` | No | Comma-separated extra origins appended to the `connect-src` CSP directive, for custom AI provider / vector-search worker endpoints called directly from the browser (e.g. `https://ai.example.com,https://worker.example.org`). |
 | `CSP_UPGRADE_INSECURE_REQUESTS` | No | Defaults to on, which sends `upgrade-insecure-requests`. Set to `false` when the full-stack image is served over plain HTTP (e.g. `http://<lan-ip>:3000`); otherwise the browser rewrites the SPA's own assets to `https://` and the page stays blank. Only disable it for HTTP deployments you do not intend to put behind TLS. |
