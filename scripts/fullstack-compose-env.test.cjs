@@ -55,3 +55,7 @@ test('the port is published on 127.0.0.1 only', () => {
     assert.match(p, /^127\.0\.0\.1:/, `port mapping ${p} must bind to 127.0.0.1`);
   }
 });
+
+test('the backups bind resolves at the repo root: default ../backups is relative to deploy/', () => {
+  assert.match(compose, /^      - \$\{GSM_BACKUP_DIR:-\.\.\/backups\}:\/backups\s*$/m);
+});

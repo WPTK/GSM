@@ -43,16 +43,20 @@ services:
       AI_SPEND_CONFIRM_USD: ${AI_SPEND_CONFIRM_USD:-2}
       OUTBOUND_ALLOWLIST: ${OUTBOUND_ALLOWLIST:-}
       # `uniquelocal` trusts the Docker bridge gateway that tailscale serve arrives through, so
-      # X-Forwarded-Proto is honoured and the session cookie gets Secure. Safe only because the
-      # port above is published on 127.0.0.1.
+      # X-Forwarded-Proto is honoured and the session cookie gets Secure. This is safe when Docker
+      # Engine is 28 or newer (CERES runs 29.8.1): a port published on 127.0.0.1 is not reachable
+      # from the LAN. Any local process, or any container on the gsm network, is trusted too; the
+      # impact is limited to the login rate limiter and the forwarded-proto check.
       TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
       # The page is served over https by tailscale serve, so upgrade insecure requests.
       CSP_UPGRADE_INSECURE_REQUESTS: ${CSP_UPGRADE_INSECURE_REQUESTS:-true}
     volumes:
       - gsm-data:/app/data
-      # Phase 5 writes backups here. The container user is node (uid 1000), so the host
-      # directory must be owned by uid 1000: sudo chown 1000:1000 backups
-      - ${GSM_BACKUP_DIR:-./backups}:/backups
+      # Phase 5 writes backups here. Compose resolves a relative path against this file's
+      # directory (deploy/), so the default is <repo>/backups whatever directory you run from.
+      # The container user is node (uid 1000), so the host directory must be owned by uid 1000:
+      # sudo chown 1000:1000 backups   (up.sh creates it and warns if the owner is wrong)
+      - ${GSM_BACKUP_DIR:-../backups}:/backups
 
 volumes:
   gsm-data:

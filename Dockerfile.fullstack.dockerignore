@@ -17,3 +17,15 @@ assets
 templates
 *.md
 .DS_Store
+
+# Deploy files, secrets and runtime state never belong in the build context.
+# Nothing in the Dockerfile copies from deploy/.
+deploy
+**/.env
+**/.env.*
+!**/.env.example
+backups
+data
+server/data
+**/*.db
+**/*.db-*

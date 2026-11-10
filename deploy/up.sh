@@ -2,6 +2,8 @@
 # Build the image from this checkout, start the gsm container, wait until it is healthy.
 # Safe to run from any directory. Never prints secret values.
 set -euo pipefail
+# Secret values are held in shell variables below, so `bash -x` would print them. Keep tracing off.
+set +x
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ENV_FILE=deploy/.env
@@ -21,6 +23,9 @@ for var in API_SECRET ENCRYPTION_KEY ANTHROPIC_API_KEY GITHUB_TOKEN; do
   if [ -z "$value" ] || [[ "$value" == \<*\> ]]; then
     echo "$var is empty or still a placeholder in $ENV_FILE" >&2
     missing=1
+  elif { [ "$var" = API_SECRET ] || [ "$var" = ENCRYPTION_KEY ]; } && [ "${#value}" -lt 16 ]; then
+    echo "$var in $ENV_FILE is shorter than 16 characters; use: openssl rand -hex 32" >&2
+    missing=1
   fi
 done
 [ "$missing" -eq 0 ] || exit 1
@@ -28,6 +33,22 @@ done
 # Pick up a custom GSM_PORT for the final message only.
 custom_port="$(grep -E '^GSM_PORT=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
 [ -n "$custom_port" ] && PORT_HOST="$custom_port"
+
+# The backups bind mount. Compose resolves a relative path against deploy/ (the compose file's
+# directory), so the default is <repo>/backups. Create it if missing; never use sudo here.
+backup_dir="$(grep -E '^GSM_BACKUP_DIR=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+backup_dir="${backup_dir%\"}"; backup_dir="${backup_dir#\"}"; backup_dir="${backup_dir%\'}"; backup_dir="${backup_dir#\'}"
+backup_dir="${backup_dir:-../backups}"
+case "$backup_dir" in
+  /*) backup_path="$backup_dir" ;;
+  *)  backup_path="deploy/$backup_dir" ;;
+esac
+mkdir -p "$backup_path"
+backup_owner="$(stat -c %u "$backup_path" 2>/dev/null || stat -f %u "$backup_path" 2>/dev/null || echo unknown)"
+if [ "$backup_owner" != "1000" ]; then
+  echo "Warning: $backup_path is owned by uid $backup_owner, not 1000, so the container cannot write backups there." >&2
+  echo "  Fix with: sudo chown 1000:1000 $backup_path" >&2
+fi
 
 echo "Building image gsm-fullstack:local ..."
 "${COMPOSE[@]}" build
