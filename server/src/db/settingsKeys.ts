@@ -7,9 +7,13 @@ export const CUSTOM_ANALYSIS_PROMPT_KEY = 'ai.customAnalysisPrompt';
 /** Server-owned AI state (credit_low flag and probe time). Never served, exported or imported. */
 export const AI_STATE_SETTING_KEY = 'ai.state';
 
+/** MCP admin state: the endpoint token (encrypted) and on/off switch. Per-install; never travels in a backup or sync. */
+export const MCP_SETTING_KEYS = ['mcp_enabled', 'mcp_token'] as const;
+
 /** Settings keys that are server-side configuration and never leave through the API. */
 export const EXCLUDED_SETTING_KEYS: ReadonlySet<string> = new Set([
   'github_token',
   AI_STATE_SETTING_KEY,
+  ...MCP_SETTING_KEYS,
   ...LEGACY_SETTING_KEYS,
 ]);
