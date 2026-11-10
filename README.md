@@ -320,9 +320,9 @@ https://github.com/AmintaCCCP/GithubStarsManager/releases
 
 This fork (hardened branch) runs as one container built from this checkout. Nothing is pulled from a public image registry. The app listens on `127.0.0.1` only; you reach it from your own devices through Tailscale. Everything below is spelled out in [deploy/README.md](deploy/README.md).
 
-1. **Run it.** Copy `deploy/.env.example` to `deploy/.env`, fill in the four required values (login secret, encryption key, Anthropic key, GitHub token; the file explains how to make each), then run `./deploy/up.sh`.
-2. **Update it.** Run `./deploy/update.sh`. It shows what changed upstream and asks you to type `yes` before it merges anything, then re-runs the checks and restarts.
-3. **Back it up.** Your data lives in the `gsm-data` Docker volume. Nightly backups to the `backups` folder arrive in a later phase.
+1. **Run it.** Copy `deploy/.env.example` to `deploy/.env`, fill in the four required values (login secret, encryption key, Anthropic key, GitHub token; the file explains how to make each), then run `./deploy/up.sh` (needs only Docker; it creates the `backups` folder next to `deploy/` and warns if it is not owned by uid 1000).
+2. **Update it.** Run `./deploy/update.sh`. It shows what changed upstream and asks you to type `yes` before it merges anything, then re-runs the checks and restarts. It needs Node 22+ and npm on the host, because it runs the merged tree's npm scripts and tests there. Add the fetch-only `upstream` remote once: `git remote add upstream https://github.com/AmintaCCCP/GithubStarsManager.git && git remote set-url --push upstream DISABLED` (update.sh adds it if it is missing).
+3. **Back it up.** Your data lives in the `gsm-data` Docker volume. Nightly backups to the `backups` folder (in the repository root, or `GSM_BACKUP_DIR`) arrive in a later phase.
 4. **Restore it.** Phase 5 adds `deploy/RESTORE.md`.
 5. **Change a secret.** Edit `deploy/.env`, then run the restart command in deploy/README.md. Changing `ENCRYPTION_KEY` makes already-stored encrypted values unreadable.
 
@@ -350,8 +350,8 @@ npm run dev
 #### Environment Variables
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `API_SECRET` | Yes | Bearer token and login secret. The server refuses to start without it (or `API_SECRET_FILE`). |
-| `ENCRYPTION_KEY` | Yes | AES-256 key for encrypting stored secrets. No longer auto-generated; the server refuses to start without it (or `ENCRYPTION_KEY_FILE`). |
+| `API_SECRET` | Yes | Bearer token and login secret. The server refuses to start without it (or `API_SECRET_FILE`; the file wins if both are set). |
+| `ENCRYPTION_KEY` | Yes | AES-256 key for encrypting stored secrets. No longer auto-generated; the server refuses to start without it (or `ENCRYPTION_KEY_FILE`; the file wins if both are set). |
 | `PORT` | No | Server port (default: 3000) |
 | `CSP_CONNECT_SRC` | No | Comma-separated extra origins appended to the `connect-src` CSP directive, for custom AI provider / vector-search worker endpoints called directly from the browser (e.g. `https://ai.example.com,https://worker.example.org`). |
 | `CSP_UPGRADE_INSECURE_REQUESTS` | No | Defaults to on, which sends `upgrade-insecure-requests`. Set to `false` when the full-stack image is served over plain HTTP (e.g. `http://<lan-ip>:3000`); otherwise the browser rewrites the SPA's own assets to `https://` and the page stays blank. Only disable it for HTTP deployments you do not intend to put behind TLS. |
