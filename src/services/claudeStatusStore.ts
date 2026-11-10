@@ -33,7 +33,8 @@ export function refreshClaudeStatus(): Promise<void> {
   inflight = fetchAiStatus()
     .then((status) => emit({ status, loading: false, error: null }))
     .catch((error: unknown) => emit({
-      status: null,
+      // Keep the last good status: one failed poll must not flip every AI feature to "not connected".
+      status: snapshot.status,
       loading: false,
       error: error instanceof Error ? error.message : String(error),
     }))

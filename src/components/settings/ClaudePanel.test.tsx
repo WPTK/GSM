@@ -139,4 +139,25 @@ describe('ClaudePanel', () => {
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining('无法保存分析提示词'), 'error'));
     expect(field).toHaveValue('Focus on CLI tools!');
   });
+
+  it('locks the prompt field and offers a retry when the stored prompt cannot be read', async () => {
+    const user = userEvent.setup();
+    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(json({ error: 'down', code: 'AI_UPSTREAM_ERROR' }, 502));
+    render(<ClaudePanel t={t} />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('无法读取已保存的分析提示词');
+    const field = screen.getByRole('textbox', { name: '自定义分析提示词' });
+    expect(field).toBeDisabled();
+    expect(screen.getByRole('button', { name: '保存提示词' })).toBeDisabled();
+
+    (window.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(json({ customAnalysisPrompt: 'Stored prompt' }));
+    await user.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() => expect(field).toHaveValue('Stored prompt'));
+    expect(field).not.toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const puts = (window.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT');
+    expect(puts).toHaveLength(0);
+  });
 });

@@ -9,6 +9,9 @@ export interface ClaudePanelActions {
   loading: boolean;
   saving: boolean;
   dirty: boolean;
+  /** True when the stored prompt could not be read; the field stays locked so Save cannot wipe it. */
+  loadFailed: boolean;
+  retry: () => void;
   save: () => Promise<void>;
 };
 
@@ -20,24 +23,32 @@ export const useClaudePanelActions = (): ClaudePanelActions => {
   const [saved, setSaved] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoading(true);
+    setLoadFailed(false);
     fetchAiSettings(controller.signal)
       .then((settings) => {
         setValue(settings.customAnalysisPrompt);
         setSaved(settings.customAnalysisPrompt);
       })
       .catch(() => {
-        // Left empty: the field stays editable and the save toast reports a real failure.
+        // Locked, not empty: saving an empty field would overwrite the stored prompt.
+        if (!controller.signal.aborted) setLoadFailed(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [attempt]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const save = useCallback(async () => {
+    if (loadFailed) return;
     setSaving(true);
     try {
       const result = await saveAiSettings(value);
@@ -49,7 +60,7 @@ export const useClaudePanelActions = (): ClaudePanelActions => {
     } finally {
       setSaving(false);
     }
-  }, [t, toast, value]);
+  }, [loadFailed, t, toast, value]);
 
-  return { value, setValue, loading, saving, dirty: value !== saved, save };
+  return { value, setValue, loading, saving, dirty: value !== saved, loadFailed, retry, save };
 };

@@ -81,13 +81,19 @@ export const ClaudePanel: React.FC<ClaudePanelProps> = ({ t }) => {
           value={prompt.value}
           maxLength={MAX_CUSTOM_ANALYSIS_PROMPT_CHARS}
           rows={8}
-          disabled={prompt.loading}
+          disabled={prompt.loading || prompt.loadFailed}
           onChange={(event) => prompt.setValue(event.target.value)}
           className="mt-3 w-full font-mono text-sm"
         />
+        {prompt.loadFailed && (
+          <div role="alert" className="mt-3 flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <span>{t('claudePanel.prompt-load-failed')}</span>
+            <Button variant="outline" size="sm" onClick={prompt.retry}>{t('claudePanel.prompt-retry')}</Button>
+          </div>
+        )}
         <div className="mt-3 flex items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">{prompt.value.length}/{MAX_CUSTOM_ANALYSIS_PROMPT_CHARS}</span>
-          <Button onClick={() => { void prompt.save(); }} disabled={!prompt.dirty || prompt.saving || prompt.loading}>
+          <Button onClick={() => { void prompt.save(); }} disabled={!prompt.dirty || prompt.saving || prompt.loading || prompt.loadFailed}>
             {t('claudePanel.prompt-save')}
           </Button>
         </div>
