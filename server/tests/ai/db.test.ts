@@ -78,7 +78,7 @@ describe('sync export', () => {
   beforeEach(() => { freshDb(); });
 
   it('exports no trace of a legacy AI key: no ciphertext, last 4, mask, or api_key fields', async () => {
-    const secret = 'fake-anthropic-key-THISMUSTNOTLEAK-wxyz';
+    const secret = 'sk-xyz987654321098765432';
     const cipher = encrypt(secret, config.encryptionKey);
     testDb().prepare(
       "INSERT INTO ai_configs (id, name, api_type, base_url, api_key_encrypted, model, is_active) VALUES ('c1','My','claude','https://api.anthropic.com',?, 'm', 1)",
@@ -86,9 +86,9 @@ describe('sync export', () => {
     const res = await request(app()).post('/api/sync/export').expect(200);
     const text = JSON.stringify(res.body);
     expect(res.body.ai_configs).toHaveLength(1);
-    expect(text).not.toContain('THISMUSTNOTLEAK');
+    expect(text).not.toContain('xyz987654321098765432');
     expect(text).not.toContain(cipher);
-    expect(text).not.toContain('wxyz');
+    expect(text).not.toContain('5432');
     expect(text).not.toContain('***');
     expect(text).not.toMatch(/api_key/);
     expect(res.body.ai_configs[0].name).toBe('My');

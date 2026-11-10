@@ -57,7 +57,7 @@ describe('config: no key file, API_SECRET and ENCRYPTION_KEY required', () => {
   });
 
   it('an existing data/.encryption-key logs one line, is not read, not printed, not deleted', async () => {
-    const legacyContents = 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
+    const legacyContents = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdee';
     fs.mkdirSync(path.join(cwd, 'data'));
     const keyFile = path.join(cwd, 'data', '.encryption-key');
     fs.writeFileSync(keyFile, legacyContents);

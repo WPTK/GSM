@@ -30,7 +30,7 @@ describe('claude config', () => {
   it('ANTHROPIC_API_KEY_FILE wins over ANTHROPIC_API_KEY; an unreadable file is missing, not a fallback', () => {
     const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-key-')), 'key');
     fs.writeFileSync(file, `${SECRET}\n`);
-    process.env.ANTHROPIC_API_KEY = 'plain-variable-value-000000';
+    process.env.ANTHROPIC_API_KEY = 'key-abcdef123456';
     process.env.ANTHROPIC_API_KEY_FILE = file;
     expect(getAnthropicKey()).toBe(SECRET);
     resetClaudeConfigForTests();
