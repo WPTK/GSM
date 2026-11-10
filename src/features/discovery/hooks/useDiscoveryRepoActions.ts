@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { DiscoveryRepo, Repository } from '../../../types';
 import { useAppStore, getAllCategories } from '../../../store/useAppStore';
-import { analyzeRepository, createFailedAnalysisResult } from '../../../services/aiAnalysisHelper';
+import { analyzeRepository, createFailedAnalysisResult } from '../../../services/claudeJobs';
+import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
+import { useClaudeSpendConfirm } from '../../../hooks/useClaudeSpendConfirm';
 import { forceSyncToBackend } from '../../../services/autoSync';
 import { createGitHubApiService } from '../../../services/githubApiFactory';
 import { useDialog } from '../../../hooks/useDialog';
@@ -38,8 +40,6 @@ export const discoveryRepoToRepository = (repo: DiscoveryRepo, starredAt: string
 export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions): DiscoveryRepoActions => {
   const {
     githubToken,
-    aiConfigs,
-    activeAIConfig,
     language,
     customCategories,
     repositories,
@@ -48,8 +48,6 @@ export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions
     deleteRepository,
   } = useAppStore(useShallow((state) => ({
     githubToken: state.githubToken,
-    aiConfigs: state.aiConfigs,
-    activeAIConfig: state.activeAIConfig,
     language: state.language,
     customCategories: state.customCategories,
     repositories: state.repositories,
@@ -59,7 +57,10 @@ export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions
   })));
 
   const { toast } = useDialog();
+  const { connected: claudeConnected } = useClaudeStatus();
+  const confirmSpend = useClaudeSpendConfirm();
 
+  const tApp = useT('app');
   const t = useT('discovery');
 
   const [isStarring, setIsStarring] = useState(false);
@@ -165,24 +166,8 @@ export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions
 
   // 单卡 AI 分析（无 forceSync、成功无 toast、重新分析无 confirm——与 RepositoryCard 不同，勿"补齐"）
   const analyze = useCallback(async (onAnalyzed?: (repo: DiscoveryRepo) => void) => {
-    if (!githubToken) {
-      toast(t('useDiscoveryRepoActions.github-token-not-found-please-login-again'), 'error');
-      return;
-    }
-
-    const activeConfig = aiConfigs.find(c => c.id === activeAIConfig);
-    if (!activeConfig) {
-      toast(t('useDiscoveryRepoActions.please-configure-ai-service-in-settings-first'), 'error');
-      return;
-    }
-
-    if (activeConfig.apiKeyStatus === 'decrypt_failed' || activeConfig.apiKeyStatus === 'empty') {
-      toast(t('useDiscoveryRepoActions.the-ai-service-api-key-could-not-be-decrypted-or'), 'error');
-      return;
-    }
-
-    if (!activeConfig.baseUrl || !activeConfig.apiKey || !activeConfig.model) {
-      toast(t('useDiscoveryRepoActions.ai-service-configuration-is-incomplete-please-ch'), 'error');
+    if (!claudeConnected) {
+      toast(tApp('claudePanel.not-connected'), 'error');
       return;
     }
 
@@ -199,8 +184,8 @@ export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions
 
       const result = await analyzeRepository({
         repository: repo,
-        githubToken,
-        aiConfig: activeConfig,
+        stored: false,
+        confirmSpend,
         language,
         categories: allCategories,
         signal: controller.signal,
@@ -240,7 +225,7 @@ export const useDiscoveryRepoActions = ({ repo }: UseDiscoveryRepoActionsOptions
         setIsAnalyzing(false);
       }
     }
-  }, [githubToken, aiConfigs, activeAIConfig, language, repo, isAnalyzing, customCategories, updateDiscoveryRepo, t, toast]);
+  }, [claudeConnected, confirmSpend, language, repo, isAnalyzing, customCategories, updateDiscoveryRepo, t, tApp, toast]);
 
   return useMemo(() => ({
     analyze,

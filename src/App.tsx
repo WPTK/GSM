@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect, useMemo, useCallback } from 'react';
 import { LoginScreen } from './components/LoginScreen';
 import { Header } from './components/Header';
+import { CreditLowBanner } from './components/CreditLowBanner';
 import { SearchBar } from './components/SearchBar';
 import { RepositoryList } from './components/RepositoryList';
 import { CategorySidebar } from './components/CategorySidebar';
@@ -299,6 +300,7 @@ function App() {
   return (
     <div className="ui-shell min-h-screen transition-colors duration-200">
       <Header />
+      <CreditLowBanner />
       <main className="app-main">
         {currentViewContent}
       </main>

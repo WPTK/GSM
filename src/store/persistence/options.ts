@@ -19,7 +19,7 @@ import { debouncedPersistStorage } from './storage';
 
 export const appPersistenceOptions: PersistOptions<AppStoreState, PersistedAppState> = {
   name: 'github-stars-manager',
-  version: 17,
+  version: 18,
   storage: debouncedPersistStorage as PersistStorage<PersistedAppState>,
 partialize: (state) => ({
   // 持久化用户信息和认证状态
@@ -35,9 +35,7 @@ partialize: (state) => ({
   themeTokens: state.themeTokens,
 
 
-  // 持久化AI配置
-  aiConfigs: state.aiConfigs,
-  activeAIConfig: state.activeAIConfig,
+  // Repository chat prefs only; the Claude key lives on the server.
   repositoryChatSettings: state.repositoryChatSettings,
 
   // 持久化Embedding配置
@@ -302,10 +300,11 @@ stateRecord.mcpConfig = normalizeMcpConfig(stateRecord.mcpConfig);
     }
   }
 
-  // v16→v17: the browser holds no secret; drop credentials and egress prefs from old snapshots
+  // v16→v17: the browser holds no secret; drop credentials and egress prefs from old snapshots.
+  // v17→v18: Claude runs on the server, so saved provider configs (with their keys) go too.
   if (state) {
     const stateRecord = state as Record<string, unknown>;
-    for (const key of ['githubToken', 'backendApiSecret', 'proxyConfig', 'rpcDownloadConfig', 'routeMode', 'pluginCustomIcons']) {
+    for (const key of ['githubToken', 'backendApiSecret', 'proxyConfig', 'rpcDownloadConfig', 'routeMode', 'pluginCustomIcons', 'aiConfigs', 'activeAIConfig']) {
       delete stateRecord[key];
     }
   }

@@ -2,7 +2,7 @@ import { translateBackendError } from '../utils/backendErrors';
 import { logger } from './logger';
 import { notifySessionExpired } from './sessionEvents';
 
-import { Repository, Release, AIConfig, EmbeddingConfig, VectorSearchConfig } from '../types';
+import { Repository, Release, EmbeddingConfig, VectorSearchConfig } from '../types';
 import { isReadmeCandidateItem, type GitHubReadmeCandidateItem } from '../utils/readmeVariants';
 
 interface GitHubContentResponse {
@@ -546,60 +546,6 @@ class BackendAdapter {
     return { remaining: data.rate.remaining, reset: data.rate.reset };
   }
 
-  // === AI Proxy ===
-
-  async proxyAIRequest(configId: string, body: object, signal?: AbortSignal): Promise<unknown> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/proxy/ai`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({ configId, body }),
-      signal,
-    }, 120000);
-    if (!res.ok) await this.throwTranslatedError(res, 'AI proxy error');
-    return res.json();
-  }
-
-  async proxyAIRequestWithConfig(aiConfig: { apiType?: string; baseUrl: string; apiKey: string; model: string; reasoningEffort?: string }, body: object, signal?: AbortSignal): Promise<unknown> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/proxy/ai`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({ config: aiConfig, body }),
-      signal,
-    }, 120000);
-    if (!res.ok) await this.throwTranslatedError(res, 'AI proxy error');
-    return res.json();
-  }
-
-  async proxyAIRequestWithFallback(configId: string, aiConfig: { apiType?: string; baseUrl: string; apiKey: string; model: string; reasoningEffort?: string }, body: object, signal?: AbortSignal): Promise<unknown> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    // Try configId lookup first to avoid sending API key inline
-    if (configId) {
-      try {
-        const res = await this.fetchWithTimeout(`${this._backendUrl}/proxy/ai`, {
-          method: 'POST',
-          headers: this.getAuthHeaders(),
-          body: JSON.stringify({ configId, body }),
-          signal,
-        }, 120000);
-        if (res.ok) return res.json();
-        // Fall through to inline config on 404 (config not synced yet)
-        if (res.status !== 404) await this.throwTranslatedError(res, 'AI proxy error');
-      } catch (err) {
-        // Rethrow non-404 errors; fall through to inline config on config-not-found
-        const e = err as Error & { statusCode?: number; code?: string };
-        if (e.statusCode !== 404 && e.code !== 'AI_CONFIG_NOT_FOUND') throw err;
-      }
-    }
-
-    // Fallback: send full config inline
-    return this.proxyAIRequestWithConfig(aiConfig, body, signal);
-  }
-
   // === Data Sync ===
 
   async syncRepositories(repos: Repository[]): Promise<void> {
@@ -653,46 +599,6 @@ class BackendAdapter {
     }, 120000, 3);
     if (!res.ok) await this.throwTranslatedError(res, 'Fetch error');
     return res.json() as Promise<{ releases: Release[]; total: number }>;
-  }
-
-  async syncAIConfigs(configs: AIConfig[]): Promise<void> {
-    if (!this._backendUrl) return;
-
-    // Pre-sync validation: warn about configs that will likely be skipped
-    for (const c of configs) {
-      if (!c.apiKey) {
-        logger.warn('backendAdapter', 'AI config has empty apiKey, will be skipped', { name: c.name, id: c.id });
-      }
-    }
-
-    const res = await this.fetchWithRetry(`${this._backendUrl}/configs/ai/bulk`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({ configs })
-    }, 30000, 3);
-    if (!res.ok) await this.throwTranslatedError(res, 'Sync AI configs error');
-
-    // Parse response and throw on partial failure so callers don't clear pending changes
-    try {
-      const data = await res.json() as { synced?: number; skipped?: number; errors?: Array<{ id: string; name: string; reason: string }> };
-      if (data.skipped && data.skipped > 0) {
-        const reasons = data.errors?.map(e => `${e.name}: ${e.reason}`).join('; ') ?? '';
-        throw new Error(`Sync AI configs partial failure: ${data.skipped} skipped${reasons ? ` (${reasons})` : ''}`);
-      }
-    } catch (err) {
-      // Re-throw our own errors; ignore JSON parse errors from empty responses
-      if (err instanceof Error && err.message.startsWith('Sync AI configs partial failure')) throw err;
-    }
-  }
-
-  async fetchAIConfigs(): Promise<AIConfig[]> {
-    if (!this._backendUrl) throw new Error('Backend not available');
-
-    const res = await this.fetchWithTimeout(`${this._backendUrl}/configs/ai`, {
-      headers: this.getAuthHeaders()
-    });
-    if (!res.ok) await this.throwTranslatedError(res, 'Fetch AI configs error');
-    return res.json() as Promise<AIConfig[]>;
   }
 
   // === Embedding Configs ===

@@ -29,7 +29,7 @@ import { useBackendAvailability } from '../features/settings/hooks/useBackendAva
 import {
   AppearancePanel,
   GeneralPanel,
-  AIConfigPanel,
+  ClaudePanel,
   BackendPanel,
   CategoryPanel,
   DataManagementPanel,
@@ -395,7 +395,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         case 'appearance':
           return <AppearancePanel t={t} />;
         case 'ai':
-          return <AIConfigPanel t={t} />;
+          return <ClaudePanel t={t} />;
         case 'backend':
           return <BackendPanel t={t} />;
         case 'category':

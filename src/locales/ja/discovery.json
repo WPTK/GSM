@@ -112,10 +112,6 @@
     "failed-to-unstar-repository-please-check-your-ne": "スターのキャンセルに失敗しました。ネットワーク接続または GitHub トークンの権限を確認してください。",
     "successfully-starred": "スターが正常に追加されました",
     "failed-to-star-repository-please-check-your-netw": "スター操作に失敗しました。ネットワーク接続または GitHub トークンの権限を確認してください。",
-    "github-token-not-found-please-login-again": "GitHub トークンが見つかりません。再度ログインしてください。",
-    "please-configure-ai-service-in-settings-first": "まず設定でAIサービスを設定してください。",
-    "the-ai-service-api-key-could-not-be-decrypted-or": "AI サービスの API キーが復号化できない、または空です。設定に再入力して構成を保存してください。",
-    "ai-service-configuration-is-incomplete-please-ch": "AI サービスの構成が不完全です。API エンドポイント、キー、モデル名を確認してください。",
     "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。AI の構成とネットワーク接続を確認してください。",
     "ai-analysis-failed-please-check-your-ai-configur": "AI 分析に失敗しました。AI の構成を確認してください。"
   },

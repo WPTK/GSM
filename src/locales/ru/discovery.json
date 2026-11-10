@@ -112,10 +112,6 @@
     "failed-to-unstar-repository-please-check-your-ne": "Не удалось отменить подписку Star. Проверьте сетевое соединение или разрешения токена GitHub.",
     "successfully-starred": "Звезда успешно добавлена",
     "failed-to-star-repository-please-check-your-netw": "Не удалось выполнить операцию Star. Проверьте сетевое соединение или разрешения токена GitHub.",
-    "github-token-not-found-please-login-again": "Токен GitHub не найден. Войдите снова.",
-    "please-configure-ai-service-in-settings-first": "Пожалуйста, сначала настройте службу AI в настройках.",
-    "the-ai-service-api-key-could-not-be-decrypted-or": "API-ключ службы AI не может быть расшифрован или пуст. Пожалуйста, введите его повторно в настройках и сохраните конфигурацию.",
-    "ai-service-configuration-is-incomplete-please-ch": "Конфигурация службы AI не завершена. Проверьте конечную точку API, ключ и название модели.",
     "ai-analysis-failed-please-check-ai-configuration": "Анализ AI не удался. Проверьте конфигурацию AI и сетевое соединение.",
     "ai-analysis-failed-please-check-your-ai-configur": "Анализ AI не удался, проверьте конфигурацию AI."
   },

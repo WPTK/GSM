@@ -165,7 +165,7 @@ export const runToolLoopRepositoryChatTurn = async (input: RepositoryChatTurnInp
   if (!input.question.trim()) throw new Error(input.language === 'zh' ? '请输入问题。' : 'Enter a question.');
 
   const { budget, answerMaxTokens } = resolveTurnLimits(input);
-  const ai = new AIService(input.aiConfig, input.language);
+  const ai = new AIService(input.language);
   const ctx = createEvidenceToolbox(input, budget, ai);
   const state = { rounds: 0 };
   try {

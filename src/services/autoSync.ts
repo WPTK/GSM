@@ -36,7 +36,6 @@ const POLL_INTERVAL = 5000;
 const _lastHash = {
   repos: '',
   releases: '',
-  ai: '',
   embedding: '',
   vectorSearch: '',
   settings: '',
@@ -79,7 +78,6 @@ if (typeof backend.registerBeforeInitHook === 'function') {
 export function resetSyncHashes(): void {
   _lastHash.repos = '';
   _lastHash.releases = '';
-  _lastHash.ai = '';
   _lastHash.embedding = '';
   _lastHash.vectorSearch = '';
   _lastHash.settings = '';
@@ -247,10 +245,9 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
   const startTime = Date.now();
   try {
     const repositoriesBeforeFetch = useAppStore.getState().repositories;
-    const [reposResult, releasesResult, aiResult, embeddingResult, vectorSearchResult, settingsResult] = await Promise.allSettled([
+    const [reposResult, releasesResult, embeddingResult, vectorSearchResult, settingsResult] = await Promise.allSettled([
       backend.fetchRepositories(),
       backend.fetchReleases(),
-      backend.fetchAIConfigs(),
       backend.fetchEmbeddingConfigs(),
       backend.fetchVectorSearchConfig(),
       backend.fetchSettings(),
@@ -286,7 +283,7 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
     }
 
     const changed = {
-      repos: false, releases: false, ai: false,
+      repos: false, releases: false,
       embedding: false, vectorSearch: false, settings: false,
     };
 
@@ -308,13 +305,6 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
       }
     }
 
-    if (aiResult.status === 'fulfilled') {
-      const hash = quickHash(aiResult.value);
-      if (options.force || hash !== _lastHash.ai) {
-        hashes.ai = hash;
-        changed.ai = true;
-      }
-    }
 
     if (embeddingResult.status === 'fulfilled') {
       const hash = quickHash(embeddingResult.value);
@@ -381,26 +371,6 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
         _lastHash.releases = hashes.releases;
       }
     }
-    if (changed.ai && aiResult.status === 'fulfilled') {
-      // Filter out configs with decrypt_failed status — preserve local apiKey values
-      // to prevent backend decryption failures from overwriting valid local data.
-      const backendConfigs = aiResult.value;
-      const localConfigs = state.aiConfigs;
-      const mergedConfigs = backendConfigs.map(bc => {
-        if (bc.apiKeyStatus === 'decrypt_failed' || !bc.apiKey) {
-          const local = localConfigs.find(lc => lc.id === bc.id);
-          if (local && local.apiKey) {
-            logger.warn('sync.decryptFailed', `Backend decrypt_failed for AI config "${bc.name}", preserving local apiKey`);
-            return { ...bc, apiKey: local.apiKey, apiKeyStatus: 'ok' as const };
-          }
-        }
-        return bc;
-      });
-      state.setAIConfigs(mergedConfigs);
-      // Store raw backend hash so change detection compares against the same payload.
-      // Using mergedConfigs would cause a mismatch and re-trigger on every poll.
-      _lastHash.ai = hashes.ai;
-    }
     if (changed.embedding && embeddingResult.status === 'fulfilled') {
       const backendConfigs = embeddingResult.value;
       const localConfigs = state.embeddingConfigs;
@@ -444,9 +414,6 @@ export async function syncFromBackend(options: { force?: boolean } = {}): Promis
     // Sync active selections from settings
     if (changed.settings && settingsResult.status === 'fulfilled') {
       const settings = settingsResult.value;
-      if (typeof settings.activeAIConfig === 'string' || settings.activeAIConfig === null) {
-        state.setActiveAIConfig(settings.activeAIConfig as string | null);
-      }
       if (typeof settings.activeEmbeddingConfig === 'string' || settings.activeEmbeddingConfig === null) {
         state.setActiveEmbeddingConfig(settings.activeEmbeddingConfig as string | null);
       }
@@ -570,11 +537,9 @@ async function pushToBackend(): Promise<boolean> {
     const results = await Promise.allSettled([
       backend.syncRepositories(state.repositories),
       backend.syncReleases(state.releases),
-      backend.syncAIConfigs(state.aiConfigs),
       backend.syncEmbeddingConfigs(state.embeddingConfigs),
       backend.syncVectorSearchConfig(state.vectorSearchConfig),
       backend.syncSettings({
-        activeAIConfig: state.activeAIConfig,
         activeEmbeddingConfig: state.activeEmbeddingConfig,
         hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
         categoryOrder: state.categoryOrder,
@@ -585,7 +550,7 @@ async function pushToBackend(): Promise<boolean> {
         collapsedSidebarCategoryCount: state.collapsedSidebarCategoryCount,
       }),
     ]);
-    const [reposSync, releasesSync, aiSync, embeddingSync, vectorSearchSync, settingsSync] = results;
+    const [reposSync, releasesSync, embeddingSync, vectorSearchSync, settingsSync] = results;
 
     const failures = results.filter(r => r.status === 'rejected');
     if (failures.length > 0) {
@@ -601,12 +566,10 @@ async function pushToBackend(): Promise<boolean> {
     // projection and doesn't re-apply setRepositories after a push.
     if (reposSync.status === 'fulfilled') _lastHash.repos = quickHash(stripLocalRepositoryFields(state.repositories));
     if (releasesSync.status === 'fulfilled') _lastHash.releases = quickHash(state.releases);
-    if (aiSync.status === 'fulfilled') _lastHash.ai = quickHash(state.aiConfigs);
     if (embeddingSync.status === 'fulfilled') _lastHash.embedding = quickHash(state.embeddingConfigs);
     if (vectorSearchSync.status === 'fulfilled') _lastHash.vectorSearch = vectorSearchFingerprint(state.vectorSearchConfig);
     if (settingsSync.status === 'fulfilled') {
       _lastHash.settings = quickHash({
-        activeAIConfig: state.activeAIConfig,
         activeEmbeddingConfig: state.activeEmbeddingConfig,
         hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
         categoryOrder: state.categoryOrder,
@@ -681,10 +644,8 @@ export function startAutoSync(): () => void {
     const changed =
       state.repositories !== prevState.repositories ||
       state.releases !== prevState.releases ||
-      state.aiConfigs !== prevState.aiConfigs ||
       state.embeddingConfigs !== prevState.embeddingConfigs ||
       state.vectorSearchConfig !== prevState.vectorSearchConfig ||
-      state.activeAIConfig !== prevState.activeAIConfig ||
       state.activeEmbeddingConfig !== prevState.activeEmbeddingConfig ||
       state.hiddenDefaultCategoryIds !== prevState.hiddenDefaultCategoryIds ||
       state.categoryOrder !== prevState.categoryOrder ||

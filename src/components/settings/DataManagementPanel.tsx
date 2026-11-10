@@ -58,7 +58,6 @@ import { IncludeKeysToggle } from './IncludeKeysToggle';
 import type { 
   Repository, 
   Release, 
-  AIConfig, 
   Category, 
   AssetFilter,
   DiscoveryRepo,
@@ -79,7 +78,6 @@ interface DataManagementPanelProps {
 type DeleteOperation =
   | 'repositories'
   | 'releases'
-  | 'aiConfigs'
   | 'categorySettings'
   | 'assetFilters'
   | 'discoveryData'
@@ -109,7 +107,7 @@ interface ExportData {
   data: {
     repositories?: Repository[];
     releases?: Release[];
-    aiConfigs?: AIConfig[];
+    aiConfigs?: LegacyBackupAIConfig[];
     customCategories?: Category[];
     assetFilters?: AssetFilter[];
     discoveryRepos?: Record<string, DiscoveryRepo[]>;
@@ -155,9 +153,17 @@ interface DataCleanupSuggestion {
 
 const MASKED_SECRET = '***';
 
-const isRealSecret = (value: unknown): value is string => (
-  typeof value === 'string' && value.length > 0 && value !== MASKED_SECRET
-);
+/**
+ * Shape of an AI config inside an older backup file. The browser no longer holds AI configs
+ * (Claude is configured on the server), so these are read for the import preview only and are
+ * never written into browser state.
+ */
+interface LegacyBackupAIConfig {
+  id: string;
+  name?: string;
+  apiKey?: string;
+  [key: string]: unknown;
+}
 
 const hasMaskedSecrets = (data: ExportData['data']): boolean => {
   return !!(
@@ -231,7 +237,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     user,
     repositories,
     releases,
-    aiConfigs,
     customCategories,
     defaultCategoryOverrides,
     hiddenDefaultCategoryIds,
@@ -248,7 +253,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     user: state.user,
     repositories: state.repositories,
     releases: state.releases,
-    aiConfigs: state.aiConfigs,
     customCategories: state.customCategories,
     defaultCategoryOverrides: state.defaultCategoryOverrides,
     hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
@@ -283,7 +287,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
   const exportItems = useMemo(() => [
     { key: 'repositories', label: t('dataManagementPanel.repositories') },
     { key: 'releases', label: t('dataManagementPanel.releases') },
-    { key: 'aiConfigs', label: t('dataManagementPanel.ai-configs') },
     { key: 'customCategories', label: t('dataManagementPanel.categories') },
     { key: 'assetFilters', label: t('dataManagementPanel.asset-filters') },
     { key: 'discoveryRepos', label: t('dataManagementPanel.discovery-data') },
@@ -385,24 +388,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     } catch (error) {
       addLog(
         t('dataManagementPanel.delete-release-records'),
-        false,
-        String(error)
-      );
-      showError(t('dataManagementPanel.delete-failed-please-try-again'));
-      throw error;
-    }
-  };
-
-  const deleteAIConfigs = async () => {
-    try {
-      const store = useAppStore.getState();
-      store.setAIConfigs([]);
-      store.setActiveAIConfig(null);
-      addLog(t('dataManagementPanel.delete-ai-service-configs'), true);
-      showSuccess(t('dataManagementPanel.ai-service-configs-deleted'));
-    } catch (error) {
-      addLog(
-        t('dataManagementPanel.delete-ai-service-configs'),
         false,
         String(error)
       );
@@ -591,11 +576,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
       if (selectedTypes.includes('releases')) {
         exportDataObj.data.releases = store.releases;
       }
-      if (selectedTypes.includes('aiConfigs')) {
-        exportDataObj.data.aiConfigs = includeKeys
-          ? store.aiConfigs
-          : store.aiConfigs.map(cfg => ({ ...cfg, apiKey: cfg.apiKey ? MASKED_SECRET : '' }));
-      }
       if (selectedTypes.includes('customCategories')) {
         exportDataObj.data.customCategories = store.customCategories;
         exportDataObj.data.hiddenDefaultCategoryIds = store.hiddenDefaultCategoryIds;
@@ -687,22 +667,12 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     try {
       const store = useAppStore.getState();
       const importedData = importPreview.data.data;
-      // Legacy compatibility: treat missing flag as true (older exports contained keys)
-      const wasIncluded = importedData.includeKeysInBackup ?? true;
-
       if (mode === 'replace') {
         if (selectedTypes.includes('repositories') && importedData.repositories) {
           store.setRepositories(importedData.repositories, { allowEmpty: true });
         }
         if (selectedTypes.includes('releases') && importedData.releases) {
           store.setReleases(importedData.releases, { allowEmpty: true });
-        }
-        if (selectedTypes.includes('aiConfigs') && importedData.aiConfigs) {
-          const restoredConfigs = importedData.aiConfigs.map(cfg => ({
-            ...cfg,
-            apiKey: wasIncluded && isRealSecret(cfg.apiKey) ? cfg.apiKey : store.aiConfigs.find(c => c.id === cfg.id)?.apiKey || ''
-          }));
-          store.setAIConfigs(restoredConfigs);
         }
         if (selectedTypes.includes('customCategories')) {
           if (importedData.customCategories) {
@@ -815,16 +785,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
           const existingIds = new Set(store.releases.map(r => r.id));
           const newReleases = importedData.releases.filter(r => !existingIds.has(r.id));
           store.setReleases([...store.releases, ...newReleases]);
-        }
-        if (selectedTypes.includes('aiConfigs') && importedData.aiConfigs) {
-          const existingIds = new Set(store.aiConfigs.map(c => c.id));
-          const newConfigs = importedData.aiConfigs
-            .filter(c => !existingIds.has(c.id))
-            .map(cfg => ({
-              ...cfg,
-              apiKey: wasIncluded && isRealSecret(cfg.apiKey) ? cfg.apiKey : ''
-            }));
-          store.setAIConfigs([...store.aiConfigs, ...newConfigs]);
         }
         if (selectedTypes.includes('customCategories')) {
           if (importedData.customCategories) {
@@ -1167,10 +1127,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         releaseSubscriptions: new Set<number>(),
         readReleases: new Set<number>(),
 
-        // AI 配置
-        aiConfigs: [],
-        activeAIConfig: null,
-
         // 分类设置
         customCategories: [],
         hiddenDefaultCategoryIds: [],
@@ -1237,9 +1193,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         case 'releases':
           await deleteReleases();
           break;
-        case 'aiConfigs':
-          await deleteAIConfigs();
-          break;
         case 'categorySettings':
           await deleteCategorySettings();
           break;
@@ -1288,8 +1241,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         return t('dataManagementPanel.this-will-delete-all-stars-repository-data-inclu');
       case 'releases':
         return t('dataManagementPanel.this-will-delete-all-release-records-including-r');
-      case 'aiConfigs':
-        return t('dataManagementPanel.this-will-delete-all-ai-service-configs-includin');
       case 'categorySettings':
         return t('dataManagementPanel.this-will-delete-all-category-display-settings-i');
       case 'assetFilters':
@@ -1315,8 +1266,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         return t('dataManagementPanel.delete-stars-repositories-2');
       case 'releases':
         return t('dataManagementPanel.delete-release-records-2');
-      case 'aiConfigs':
-        return t('dataManagementPanel.delete-ai-service-configs-2');
       case 'categorySettings':
         return t('dataManagementPanel.delete-category-display-settings-2');
       case 'assetFilters':
@@ -1371,15 +1320,6 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
       description: t('dataManagementPanel.release-version-info-for-subscribed-repos-includ'),
       count: releases.length,
       icon: <Tag className="w-5 h-5" />,
-      color: 'text-muted-foreground dark:text-muted-foreground',
-      bgColor: 'bg-muted dark:bg-muted/40',
-    },
-    {
-      key: 'aiConfigs',
-      label: t('dataManagementPanel.ai-service-configs'),
-      description: t('dataManagementPanel.ai-analysis-service-configs-including-api-keys-m'),
-      count: aiConfigs.length,
-      icon: <Bot className="w-5 h-5" />,
       color: 'text-muted-foreground dark:text-muted-foreground',
       bgColor: 'bg-muted dark:bg-muted/40',
     },

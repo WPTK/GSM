@@ -112,10 +112,6 @@
     "failed-to-unstar-repository-please-check-your-ne": "L'annulation de Star a échoué, veuillez vérifier la connexion réseau ou les autorisations du jeton GitHub.",
     "successfully-starred": "Étoile ajoutée avec succès",
     "failed-to-star-repository-please-check-your-netw": "L'opération Star a échoué, veuillez vérifier la connexion réseau ou les autorisations du jeton GitHub.",
-    "github-token-not-found-please-login-again": "Jeton GitHub introuvable, veuillez vous reconnecter.",
-    "please-configure-ai-service-in-settings-first": "Veuillez d'abord configurer le service AI dans les paramètres.",
-    "the-ai-service-api-key-could-not-be-decrypted-or": "La clé API du service AI ne peut pas être déchiffrée ou est vide. Veuillez le saisir à nouveau dans les paramètres et enregistrer la configuration.",
-    "ai-service-configuration-is-incomplete-please-ch": "La configuration du service AI est incomplète, veuillez vérifier le point de terminaison de l'API, la clé et le nom du modèle.",
     "ai-analysis-failed-please-check-ai-configuration": "L'analyse de l'IA a échoué. Veuillez vérifier la configuration de l'IA et la connexion réseau.",
     "ai-analysis-failed-please-check-your-ai-configur": "L'analyse de l'IA a échoué, veuillez vérifier la configuration de l'IA."
   },

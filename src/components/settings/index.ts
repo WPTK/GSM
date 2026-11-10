@@ -1,4 +1,4 @@
-export { AIConfigPanel } from './AIConfigPanel';
+export { ClaudePanel } from './ClaudePanel';
 export { BackendPanel } from './BackendPanel';
 export { CategoryPanel } from './CategoryPanel';
 export { GeneralPanel } from './GeneralPanel';

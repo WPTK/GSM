@@ -44,8 +44,6 @@ export const PERSISTENCE_SHARD_FIELDS: Record<PersistenceShardName, readonly str
     'user',
     'isAuthenticated',
     'themeTokens',
-    'aiConfigs',
-    'activeAIConfig',
     'repositoryChatSettings',
     'embeddingConfigs',
     'activeEmbeddingConfig',

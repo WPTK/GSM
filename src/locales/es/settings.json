@@ -1,19 +1,15 @@
 {
-  "useAIConfigActions": {
-    "ai-service-connection-successful": "¡La conexión del servicio de IA fue exitosa!",
-    "ai-service-test-failed-please-check-network-conn": "La prueba del servicio AI falló, verifique la conexión y configuración de la red."
-  },
   "useBackendSettingsActions": {
     "invalid-backend-url-remote-backends-must-use-htt": "Dirección de backend no válida: el backend remoto requiere HTTPS, solo el host local puede usar HTTP",
     "backend-connection-failed-please-check-the-serve": "La conexión de backend falló. Verifique si el estado del servidor o el secreto de API son correctos.",
     "backend-connection-successful": "¡La conexión de backend fue exitosa!",
     "backend-not-available": "El servidor no está disponible",
     "partial-sync-failure-v1-failed-v2-succeeded": "Error de sincronización parcial: {{v1}} falló, {{v2}} se realizó correctamente",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "Sincronizado con el backend: almacén {{v1}}, versión {{v2}}, configuración de AI {{v3}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "Sincronizado con el backend: almacén {{v1}}, versión {{v2}}",
     "sync-failed": "Error de sincronización",
     "sync-from-backend": "Sincronización desde el backend",
     "syncing-from-backend-will-overwrite-local-data-c": "La sincronización desde el backend sobrescribirá los datos locales. ¿Quieres continuar?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Sincronizado desde backend: Almacén {{v1}}, Versión {{v2}}, Configuración AI {{v3}}"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Sincronizado desde backend: Almacén {{v1}}, Versión {{v2}}"
   },
   "useDesktopActions": {
     "load-failed": "Error al cargar",

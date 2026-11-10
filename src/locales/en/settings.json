@@ -1,19 +1,15 @@
 {
-  "useAIConfigActions": {
-    "ai-service-connection-successful": "AI service connection successful!",
-    "ai-service-test-failed-please-check-network-conn": "AI service test failed. Please check network connection and configuration."
-  },
   "useBackendSettingsActions": {
     "invalid-backend-url-remote-backends-must-use-htt": "Invalid backend URL: remote backends must use HTTPS; only localhost may use HTTP",
     "backend-connection-failed-please-check-the-serve": "Backend connection failed. Please check the server status or whether the API Secret is correct.",
     "backend-connection-successful": "Backend connection successful!",
     "backend-not-available": "Backend not available",
     "partial-sync-failure-v1-failed-v2-succeeded": "Partial sync failure: {{v1}} failed, {{v2}} succeeded",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "Synced to backend: repos {{v1}}, releases {{v2}}, AI configs {{v3}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "Synced to backend: repos {{v1}}, releases {{v2}}",
     "sync-failed": "Sync failed",
     "sync-from-backend": "Sync from Backend",
     "syncing-from-backend-will-overwrite-local-data-c": "Syncing from backend will overwrite local data. Continue?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Synced from backend: repos {{v1}}, releases {{v2}}, AI configs {{v3}}"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Synced from backend: repos {{v1}}, releases {{v2}}"
   },
   "useDesktopActions": {
     "load-failed": "Load failed",

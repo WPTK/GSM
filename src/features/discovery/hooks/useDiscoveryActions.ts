@@ -9,9 +9,11 @@ import { syncWeeklyChannel } from '../../../services/weeklyIssuesService';
 import { AIService, isAbortError } from '../../../services/aiService';
 import { isGrepRateLimitError } from '../../../services/grepAppService';
 import { searchRepositoriesSemantically } from '../../../services/semanticRepoSearchService';
-import { AIAnalysisOptimizer } from '../../../services/aiAnalysisOptimizer';
+import { runClaudeAnalysis } from '../../../services/claudeJobs';
+import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
+import { useClaudeSpendConfirm } from '../../../hooks/useClaudeSpendConfirm';
 import { discoveryAnalysisStorage } from '../../../services/discoveryAnalysisStorage';
-import { buildCategoryHints, resolveCategoryAssignment } from '../../../utils/categoryUtils';
+import { resolveCategoryAssignment } from '../../../utils/categoryUtils';
 import { getAllCategories } from '../../../store/useAppStore';
 import { useDialog } from '../../../hooks/useDialog';
 import { useAuthSessionGeneration } from '../../../hooks/useAuthSessionGeneration';
@@ -66,7 +68,10 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
   const { toast } = useDialog();
   const { setAnalysisProgress } = state;
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const optimizerRef = useRef<AIAnalysisOptimizer | null>(null);
+  const analysisAbortRef = useRef<AbortController | null>(null);
+  const { connected: claudeConnected } = useClaudeStatus();
+  const claudeConnectedRef = useRef(claudeConnected);
+  const confirmSpend = useClaudeSpendConfirm();
   const channelRequestVersionRef = useRef<Partial<Record<DiscoveryChannelId, number>>>({});
   const channelLoadingVersionRef = useRef<Record<string, number>>({});
   const channelRequestControllersRef = useRef<Partial<Record<DiscoveryChannelId, AbortController>>>({});
@@ -77,6 +82,9 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
     latestStateRef.current = state;
   }, [state]);
   useEffect(() => {
+    claudeConnectedRef.current = claudeConnected;
+  }, [claudeConnected]);
+  useEffect(() => {
     setIsAnalyzing(false);
     setAnalysisProgress({ current: 0, total: 0 });
     const controllers = channelRequestControllersRef.current;
@@ -84,8 +92,8 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
     // 账号切换后旧会话的周刊/推文/频道同步进度不再属于当前页面，直接清空
     useAppStore.getState().setWeeklySyncStatus(null);
     return () => {
-      optimizerRef.current?.abort();
-      optimizerRef.current = null;
+      analysisAbortRef.current?.abort();
+      analysisAbortRef.current = null;
       // Revoke this instance's loading ownership before aborting so a pending
       // request cannot clear a replacement instance's loading state in finally.
       channelLoadingVersionRef.current = {};
@@ -99,8 +107,13 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
       channelRequestControllersRef.current = {};
     };
   }, [authSessionIdentity, setAnalysisProgress]);
+  const tApp = useT('app');
   const t = useT('discovery');
   const tRef = useRef(t);
+  const tAppRef = useRef(tApp);
+  useEffect(() => {
+    tAppRef.current = tApp;
+  }, [tApp]);
   useEffect(() => {
     // 提交完成后同步引用，避免渲染期副作用
     tRef.current = t;
@@ -146,16 +159,6 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
           break;
         case 'search': {
           const searchQuery = currentState.discoverySearchQuery.trim();
-          const activeConfig = currentState.aiConfigs.find(config => config.id === currentState.activeAIConfig);
-          // 语义模式要求 AI 配置完整可用（判定镜像 handleAnalyzePage）：配置存在但解密失败/
-          // 密钥为空/缺端点/缺密钥/缺模型时与"无配置"同等处理，回退关键词搜索
-          const isSemanticConfigReady = (config: typeof activeConfig): config is NonNullable<typeof activeConfig> =>
-            !!config
-            && config.apiKeyStatus !== 'decrypt_failed'
-            && config.apiKeyStatus !== 'empty'
-            && !!config.baseUrl
-            && !!config.apiKey
-            && !!config.model;
           // 新搜索开始时清空上一轮语义搜索的进度与空态（含切回关键词模式后的残留清理）
           const semanticStore = useAppStore.getState();
           semanticStore.setDiscoverySearchPhase(null);
@@ -165,11 +168,11 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
           // LLM / grep / GitHub 全链路请求——切回关键词模式时同样要停，不能
           // 只靠结果丢弃（版本守卫）而让旧请求继续烧配额
           channelRequestControllersRef.current['search']?.abort();
-          if (currentState.discoverySearchMode === 'semantic' && searchQuery && isSemanticConfigReady(activeConfig)) {
+          if (currentState.discoverySearchMode === 'semantic' && searchQuery && claudeConnectedRef.current) {
             // AI 语义分支：LLM 查询扩展 → grep.app 全网词法召回 → GitHub 元数据补全 → LLM 精选排序
             const semanticController = new AbortController();
             channelRequestControllersRef.current['search'] = semanticController;
-            const aiService = new AIService(activeConfig, currentState.language);
+            const aiService = new AIService(currentState.language);
             let emptyReason: 'recall_empty' | 'ai_empty' | null = null;
             try {
               result = await searchRepositoriesSemantically(api, aiService, searchQuery, {
@@ -215,7 +218,7 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
               }
             }
           } else {
-            if (currentState.discoverySearchMode === 'semantic' && searchQuery && !isSemanticConfigReady(activeConfig)) {
+            if (currentState.discoverySearchMode === 'semantic' && searchQuery && !claudeConnectedRef.current) {
               // 语义模式但未配置/配置不完整 AI 服务：提示后回退关键词搜索执行
               toast(tRef.current('discoveryView.semantic-no-ai-config'), 'warning');
             }
@@ -332,13 +335,8 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
   const handleAnalyzePage = useCallback(async () => {
     const analysisState = latestStateRef.current;
     if (!analysisState.githubToken) return;
-    const activeConfig = analysisState.aiConfigs.find(config => config.id === analysisState.activeAIConfig);
-    if (!activeConfig) {
-      toast(t('useDiscoveryActions.please-configure-ai-service-in-settings-first'), 'error');
-      return;
-    }
-    if (activeConfig.apiKeyStatus === 'decrypt_failed' || activeConfig.apiKeyStatus === 'empty' || !activeConfig.baseUrl || !activeConfig.apiKey || !activeConfig.model) {
-      toast(t('useDiscoveryActions.ai-service-configuration-is-incomplete-please-ch'), 'error');
+    if (!claudeConnectedRef.current) {
+      toast(tAppRef.current('claudePanel.not-connected'), 'error');
       return;
     }
     const pageRepos = analysisState.discoveryRepos[analysisState.selectedDiscoveryChannel] || [];
@@ -352,80 +350,82 @@ export const useDiscoveryActions = (scrollContainerRef: RefObject<HTMLDivElement
     setIsAnalyzing(true);
     const current = useAppStore.getState();
     const categories = getAllCategories(current.customCategories, current.language, current.hiddenDefaultCategoryIds, current.defaultCategoryOverrides);
-    const categoryNames = [
-      ...current.customCategories.map(category => category.name),
-      ...(analysisState.language === 'zh'
-        ? ['全部分类', 'Web应用', '移动应用', '桌面应用', '数据库', 'AI/机器学习', '开发工具', '安全工具', '游戏', '设计工具', '效率工具', '教育学习', '社交网络', '数据分析']
-        : ['All', 'Web Apps', 'Mobile Apps', 'Desktop Apps', 'Database', 'AI/ML', 'Dev Tools', 'Security Tools', 'Games', 'Design Tools', 'Productivity', 'Education', 'Social Networks', 'Data Analysis']),
-    ];
-    const optimizer = new AIAnalysisOptimizer({
-      initialConcurrency: activeConfig.concurrency || 3,
-      rateLimiter: { maxConcurrency: 0, requestsPerMinute: activeConfig.requestsPerMinute || 0 },
-    });
-    optimizerRef.current = optimizer;
+    const controller = new AbortController();
+    analysisAbortRef.current = controller;
+    const isLive = () => !controller.signal.aborted && isCurrentSession(analysisSession);
+    const byId = new Map(unanalyzed.map(repo => [repo.id, repo]));
+    let successCount = 0;
+    let failCount = 0;
     analysisState.setAnalysisProgress({ current: 0, total: unanalyzed.length });
     try {
-      const api = createGitHubApiService(analysisState.githubToken);
-      const service = new AIService(activeConfig, analysisState.language);
-      const readmeCache = await optimizer.prefetchReadmes(unanalyzed, api);
-      if (optimizer.isAborted() || !isCurrentSession(analysisSession)) return;
-      const results = await optimizer.analyzeRepositories(
-        unanalyzed,
-        readmeCache,
-        service,
-        categoryNames,
-        buildCategoryHints(current.customCategories),
-        (progressCurrent, total) => {
-          if (!optimizer.isAborted() && isCurrentSession(analysisSession)) {
-            analysisState.setAnalysisProgress({ current: progressCurrent, total });
-          }
+      // Discovery repos are not stored stars: the server returns the results and writes nothing.
+      await runClaudeAnalysis(
+        {
+          repos: unanalyzed.map(repo => ({
+            id: repo.id,
+            fullName: repo.full_name,
+            description: repo.description ?? null,
+            language: repo.language ?? null,
+            topics: repo.topics ?? [],
+            stars: repo.stargazers_count,
+          })),
+          language: analysisState.language,
         },
-        result => {
-          if (optimizer.isAborted() || !isCurrentSession(analysisSession) || !result.repo) return;
-          const analyzedAt = new Date().toISOString();
-          if (result.success) {
-            const updatedRepo: DiscoveryRepo = {
-              ...result.repo,
-              rank: 0,
-              channel: analysisState.selectedDiscoveryChannel,
-              platform: analysisState.discoveryPlatform,
-              ai_summary: result.summary,
-              ai_tags: result.tags,
-              ai_platforms: result.platforms,
-              custom_category: resolveCategoryAssignment({ ...result.repo, ai_summary: result.summary }, result.tags || [], categories),
-              category_locked: !!result.repo.category_locked,
-              analyzed_at: analyzedAt,
-              analysis_failed: false,
-              analysis_error: undefined,
-            };
-            analysisState.updateDiscoveryRepo(updatedRepo);
-            void discoveryAnalysisStorage.saveAnalysis(updatedRepo.id, { ai_summary: result.summary, ai_tags: result.tags, ai_platforms: result.platforms, analyzed_at: analyzedAt, analysis_failed: false, analysis_error: undefined });
-          } else {
-            const failedRepo: DiscoveryRepo = { ...result.repo, rank: 0, channel: analysisState.selectedDiscoveryChannel, platform: analysisState.discoveryPlatform, analyzed_at: analyzedAt, analysis_failed: true, analysis_error: result.error?.message || undefined };
-            analysisState.updateDiscoveryRepo(failedRepo);
-            void discoveryAnalysisStorage.saveAnalysis(failedRepo.id, { analyzed_at: analyzedAt, analysis_failed: true, analysis_error: failedRepo.analysis_error });
-          }
+        {
+          signal: controller.signal,
+          confirmSpend,
+          onProgress: (job) => {
+            if (isLive()) analysisState.setAnalysisProgress({ current: job.done + job.failed, total: job.total });
+          },
+          onItem: (item) => {
+            const repo = byId.get(item.repoId);
+            if (!repo || !isLive()) return;
+            const analyzedAt = new Date().toISOString();
+            if (item.status === 'done' && item.result) {
+              const result = item.result;
+              const updatedRepo: DiscoveryRepo = {
+                ...repo,
+                rank: 0,
+                channel: analysisState.selectedDiscoveryChannel,
+                platform: analysisState.discoveryPlatform,
+                ai_summary: result.summary,
+                ai_tags: result.tags,
+                ai_platforms: result.platforms,
+                custom_category: resolveCategoryAssignment({ ...repo, ai_summary: result.summary }, result.tags || [], categories),
+                category_locked: !!repo.category_locked,
+                analyzed_at: analyzedAt,
+                analysis_failed: false,
+                analysis_error: undefined,
+              };
+              analysisState.updateDiscoveryRepo(updatedRepo);
+              void discoveryAnalysisStorage.saveAnalysis(updatedRepo.id, { ai_summary: result.summary, ai_tags: result.tags, ai_platforms: result.platforms, analyzed_at: analyzedAt, analysis_failed: false, analysis_error: undefined });
+              successCount += 1;
+            } else {
+              const failedRepo: DiscoveryRepo = { ...repo, rank: 0, channel: analysisState.selectedDiscoveryChannel, platform: analysisState.discoveryPlatform, analyzed_at: analyzedAt, analysis_failed: true, analysis_error: item.error || undefined };
+              analysisState.updateDiscoveryRepo(failedRepo);
+              void discoveryAnalysisStorage.saveAnalysis(failedRepo.id, { analyzed_at: analyzedAt, analysis_failed: true, analysis_error: failedRepo.analysis_error });
+              failCount += 1;
+            }
+          },
         },
       );
-      if (optimizer.isAborted() || !isCurrentSession(analysisSession)) return;
-      const successCount = results.filter(result => result.success).length;
-      const failCount = results.length - successCount;
+      if (!isLive()) return;
       toast(t(failCount > 0 ? 'useDiscoveryActions.ai-analysis-complete-with-failures' : 'useDiscoveryActions.ai-analysis-complete', { successCount: successCount, failCount: failCount }), successCount === 0 ? 'error' : failCount > 0 ? 'info' : 'success');
     } catch (error) {
-      if (optimizer.isAborted() || !isCurrentSession(analysisSession)) return;
+      if (!isLive()) return;
       console.error('AI analysis error:', error);
       toast(t('useDiscoveryActions.ai-analysis-failed-please-check-your-ai-configur'), 'error');
     } finally {
-      if (optimizerRef.current === optimizer) optimizerRef.current = null;
+      if (analysisAbortRef.current === controller) analysisAbortRef.current = null;
       if (isCurrentSession(analysisSession)) {
         setIsAnalyzing(false);
         analysisState.setAnalysisProgress({ current: 0, total: 0 });
       }
     }
-  }, [captureSession, isCurrentSession, t, toast]);
+  }, [captureSession, confirmSpend, isCurrentSession, t, toast]);
 
   const handleAbortAnalysis = useCallback(() => {
-    optimizerRef.current?.abort();
+    analysisAbortRef.current?.abort();
   }, []);
 
   const handleAbortSearch = useCallback(() => {

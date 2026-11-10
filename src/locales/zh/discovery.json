@@ -112,10 +112,6 @@
     "failed-to-unstar-repository-please-check-your-ne": "取消 Star 失败，请检查网络连接或 GitHub Token 权限。",
     "successfully-starred": "已成功添加 Star",
     "failed-to-star-repository-please-check-your-netw": "Star 操作失败，请检查网络连接或 GitHub Token 权限。",
-    "github-token-not-found-please-login-again": "GitHub Token 未找到，请重新登录。",
-    "please-configure-ai-service-in-settings-first": "请先在设置中配置AI服务。",
-    "the-ai-service-api-key-could-not-be-decrypted-or": "AI服务的API密钥无法解密或为空，请在设置中重新输入并保存该配置。",
-    "ai-service-configuration-is-incomplete-please-ch": "AI服务配置不完整，请检查API端点、密钥和模型名称。",
     "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查AI配置和网络连接",
     "ai-analysis-failed-please-check-your-ai-configur": "AI分析失败，请检查AI配置。"
   },

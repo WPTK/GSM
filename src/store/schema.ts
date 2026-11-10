@@ -44,8 +44,6 @@ export type PersistedAppState = Partial<
     | 'accountWorkspaces'
     | 'repositories'
     | 'lastSync'
-    | 'aiConfigs'
-    | 'activeAIConfig'
     | 'repositoryChatSettings'
     | 'themeTokens'
     | 'embeddingConfigs'
@@ -140,7 +138,6 @@ export const normalizeRepositoryChatSettings = (value: unknown): RepositoryChatS
     : 'default';
   return {
     enabled: record.enabled !== false,
-    chatConfigId: typeof record.chatConfigId === 'string' ? record.chatConfigId : null,
     streamingMode: record.streamingMode === 'off' ? 'off' : 'auto',
     taskDepth,
     enableWebTools: record.enableWebTools === true,

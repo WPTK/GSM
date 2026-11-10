@@ -1,19 +1,15 @@
 {
-  "useAIConfigActions": {
-    "ai-service-connection-successful": "AI服务连接成功！",
-    "ai-service-test-failed-please-check-network-conn": "AI服务测试失败，请检查网络连接和配置。"
-  },
   "useBackendSettingsActions": {
     "invalid-backend-url-remote-backends-must-use-htt": "后端地址无效：远程后端需使用 HTTPS，仅 localhost 可使用 HTTP",
     "backend-connection-failed-please-check-the-serve": "后端连接失败，请检查服务器状态或 API Secret 是否正确。",
     "backend-connection-successful": "后端连接成功！",
     "backend-not-available": "后端不可用",
     "partial-sync-failure-v1-failed-v2-succeeded": "同步部分失败：{{v1}} 项失败，{{v2}} 项成功",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "已同步到后端：仓库 {{v1}}，发布 {{v2}}，AI配置 {{v3}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "已同步到后端：仓库 {{v1}}，发布 {{v2}}",
     "sync-failed": "同步失败",
     "sync-from-backend": "从后端同步",
     "syncing-from-backend-will-overwrite-local-data-c": "从后端同步将覆盖本地数据，是否继续？",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "已从后端同步：仓库 {{v1}}，发布 {{v2}}，AI配置 {{v3}}"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "已从后端同步：仓库 {{v1}}，发布 {{v2}}"
   },
   "useDesktopActions": {
     "load-failed": "加载失败",

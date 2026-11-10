@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Release } from '../types';
 import { AIService } from '../services/aiService';
 import { useAppStore } from '../store/useAppStore';
+import { useClaudeStatus } from './useClaudeStatus';
 import { useDialog } from '../hooks/useDialog';
 
 export type ReleaseArtifactSummaryState = {
@@ -32,12 +33,11 @@ export interface ReleaseArtifactActions {
  * useRepositoryReleaseSheet 委托本 hook（ADR 0001：同一逻辑不允许第三份拷贝）。
  */
 export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
-  const { language, aiConfigs, activeAIConfig } = useAppStore(useShallow((state) => ({
+  const { language } = useAppStore(useShallow((state) => ({
     language: state.language,
-    aiConfigs: state.aiConfigs,
-    activeAIConfig: state.activeAIConfig,
   })));
   const { toast } = useDialog();
+  const { connected: claudeConnected } = useClaudeStatus();
   const t = useT('app');
 
   const [summaries, setSummaries] = useState<Record<number, ReleaseArtifactSummaryState>>({});
@@ -63,12 +63,8 @@ export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
     // disabled（原实现的"取消上一请求"由此不可达，此处守卫化并兼容 sheet 委托）。
     if (existing?.status === 'loading' || (existing?.status === 'done' && existing.content)) return;
 
-    const activeConfig = aiConfigs.find((config) => config.id === activeAIConfig);
-    if (!activeConfig) {
-      toast(
-        t('useReleaseArtifactActions.please-configure-ai-service-in-settings-first'),
-        'error'
-      );
+    if (!claudeConnected) {
+      toast(t('claudePanel.not-connected'), 'error');
       return;
     }
 
@@ -82,10 +78,9 @@ export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
     const controller = new AbortController();
     summaryAbortRefs.current[release.id] = controller;
 
-    const config = activeConfig;
     setSummaries((previous) => ({ ...previous, [release.id]: { status: 'loading' } }));
     try {
-      const aiService = new AIService(config, language);
+      const aiService = new AIService(language);
       const content = await aiService.analyzeReleaseSummary(
         release.body || '',
         {
@@ -115,7 +110,7 @@ export const useReleaseArtifactActions = (): ReleaseArtifactActions => {
         delete summaryAbortRefs.current[release.id];
       }
     }
-  }, [activeAIConfig, aiConfigs, language, summaries, toast, t]);
+  }, [claudeConnected, language, summaries, toast, t]);
 
   return useMemo(() => ({
     summaries,

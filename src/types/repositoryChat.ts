@@ -154,7 +154,6 @@ export interface RepositoryChatTurnMetrics {
 
 export interface RepositoryChatSettings {
   enabled: boolean;
-  chatConfigId: string | null;
   streamingMode: 'auto' | 'off';
   taskDepth: RepositoryChatTaskDepth;
   enableWebTools: boolean;
@@ -192,7 +191,6 @@ export const defaultRepositoryChatAgentBudget: RepositoryChatAgentBudget = {
 
 export const defaultRepositoryChatSettings: RepositoryChatSettings = {
   enabled: true,
-  chatConfigId: null,
   streamingMode: 'auto',
   taskDepth: 'default',
   enableWebTools: false,

@@ -2,6 +2,7 @@
 
 
 
+import { useClaudeStatus } from '../hooks/useClaudeStatus';
 import { getIntlLocale } from '../i18n/format';
 import { useT } from '../i18n/useT';
 import { Input } from './ui/input';
@@ -69,11 +70,11 @@ const SortByDropdown: React.FC<SortByDropdownProps> = ({ value, onChange }) => {
 export const SearchBar: React.FC = () => {
   const [batchStarOpen, setBatchStarOpen] = useState(false);
   const repositoryT = useT('repositories');
+  const { connected: claudeConnected } = useClaudeStatus();
   const {
     searchFilters,
     repositories,
     releaseSubscriptions,
-    activeAIConfig,
     language,
     setSearchFilters,
     setSearchResults,
@@ -86,7 +87,6 @@ export const SearchBar: React.FC = () => {
     searchFilters: state.searchFilters,
     repositories: state.repositories,
     releaseSubscriptions: state.releaseSubscriptions,
-    activeAIConfig: state.activeAIConfig,
     language: state.language,
     setSearchFilters: state.setSearchFilters,
     setSearchResults: state.setSearchResults,
@@ -751,7 +751,7 @@ export const SearchBar: React.FC = () => {
             aria-label={isSearching ? t('searchBar.ai-searching') : t('searchBar.ai-search')}
             disabled={isSearching || !searchQuery.trim()}
             className="flex shrink-0 items-center sm:px-4"
-            title={activeAIConfig
+            title={claudeConnected
               ? t('searchBar.use-configured-ai-service-for-semantic-search-an')
               : t('searchBar.use-local-intelligent-ranking-algorithm-for-sear')}
           >
@@ -789,7 +789,7 @@ export const SearchBar: React.FC = () => {
             <TooltipContent side="bottom" align="end" className="w-80 max-w-xs whitespace-normal break-words text-left">
               <p className="mb-1 font-medium">{t('searchBar.about-ai-search-2')}</p>
               <p className="leading-relaxed text-primary-foreground/80">
-                {activeAIConfig ? t('searchBar.ai-semantic-search-mode-uses-configured-ai-servi') : t('searchBar.fallback-mode-basic-text-search-with-default-sor')}
+                {claudeConnected ? t('searchBar.ai-semantic-search-mode-uses-configured-ai-servi') : t('searchBar.fallback-mode-basic-text-search-with-default-sor')}
               </p>
             </TooltipContent>
           </Tooltip>

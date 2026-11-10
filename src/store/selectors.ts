@@ -110,8 +110,6 @@ export const selectDiscoveryViewState = (state: AppStoreState) => ({
   setDiscoveryRepos: state.setDiscoveryRepos,
   setDiscoveryLastRefresh: state.setDiscoveryLastRefresh,
   updateDiscoveryRepo: state.updateDiscoveryRepo,
-  aiConfigs: state.aiConfigs,
-  activeAIConfig: state.activeAIConfig,
   analysisProgress: state.analysisProgress,
   setAnalysisProgress: state.setAnalysisProgress,
   discoveryPlatform: state.discoveryPlatform,

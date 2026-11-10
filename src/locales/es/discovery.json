@@ -112,10 +112,6 @@
     "failed-to-unstar-repository-please-check-your-ne": "Error al cancelar Star, verifique la conexión de red o los permisos del token de GitHub.",
     "successfully-starred": "Estrella agregada exitosamente",
     "failed-to-star-repository-please-check-your-netw": "La operación Star falló, verifique la conexión de red o los permisos del token de GitHub.",
-    "github-token-not-found-please-login-again": "No se encontró el token de GitHub, inicie sesión nuevamente.",
-    "please-configure-ai-service-in-settings-first": "Primero configure el servicio de IA en la configuración.",
-    "the-ai-service-api-key-could-not-be-decrypted-or": "La clave API del servicio AI no se puede descifrar o está vacía. Vuelva a ingresarlo en la configuración y guarde la configuración.",
-    "ai-service-configuration-is-incomplete-please-ch": "La configuración del servicio de IA está incompleta; verifique el punto final de la API, la clave y el nombre del modelo.",
     "ai-analysis-failed-please-check-ai-configuration": "El análisis de IA falló; verifique la configuración de IA y la conexión de red",
     "ai-analysis-failed-please-check-your-ai-configur": "El análisis de IA falló, verifique la configuración de IA."
   },

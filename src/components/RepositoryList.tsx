@@ -2,7 +2,7 @@ import { useT } from "../i18n/useT";
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { Bot, ChevronDown, LayoutGrid, List, Pause, Play, SearchX, X } from 'lucide-react';
+import { Bot, ChevronDown, LayoutGrid, List, SearchX, X } from 'lucide-react';
 import { RepositoryCard } from './RepositoryCard';
 import { SimilarViewBanner } from './SimilarViewBanner';
 import { GlobalChatHistorySheet } from './GlobalChatHistorySheet';
@@ -125,7 +125,7 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
   const analysisJob = useRepositoryAnalysisJob({ allCategories });
   const bulkActions = useBulkRepositoryActions({ allCategories });
   const isLoading = analysisJob.isRunning;
-  const { isPaused, progress: analysisProgress } = analysisJob;
+  const { progress: analysisProgress } = analysisJob;
 
   useEffect(() => {
     try {
@@ -337,14 +337,6 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
       scope,
       syncOnComplete: false,
     });
-  };
-
-  const handlePauseResume = () => {
-    if (isPaused) {
-      analysisJob.resume();
-      return;
-    }
-    analysisJob.pause();
   };
 
   const handleStop = () => analysisJob.requestStop();
@@ -647,16 +639,6 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
               <span className="text-xs sm:text-sm text-muted-foreground dark:text-muted-foreground">
                 {Math.round((analysisProgress.current / analysisProgress.total) * 100)}%
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handlePauseResume}
-                className="h-7 w-7 p-0 rounded-lg bg-muted text-muted-foreground dark:bg-warning/20 dark:text-warning hover:bg-accent dark:hover:bg-warning/30 transition-colors"
-                aria-label={isPaused ? t('repositoryList.resume') : t('repositoryList.pause')}
-                title={isPaused ? t('repositoryList.resume') : t('repositoryList.pause')}
-              >
-                {isPaused ? <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-              </Button>
               <Button
                 variant="ghost"
                 onClick={handleStop}

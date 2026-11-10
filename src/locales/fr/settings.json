@@ -1,19 +1,15 @@
 {
-  "useAIConfigActions": {
-    "ai-service-connection-successful": "Connexion au service IA réussie !",
-    "ai-service-test-failed-please-check-network-conn": "Le test du service AI a échoué, veuillez vérifier la connexion réseau et la configuration."
-  },
   "useBackendSettingsActions": {
     "invalid-backend-url-remote-backends-must-use-htt": "Adresse du backend invalide : le backend distant nécessite HTTPS, seul l'hôte local peut utiliser HTTP",
     "backend-connection-failed-please-check-the-serve": "La connexion backend a échoué, veuillez vérifier si l'état du serveur ou le secret API est correct.",
     "backend-connection-successful": "Connexion back-end réussie !",
     "backend-not-available": "Le backend n'est pas disponible",
     "partial-sync-failure-v1-failed-v2-succeeded": "Échec de la synchronisation partielle : {{v1}} a échoué, {{v2}} a réussi",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "Synchronisé avec le backend : entrepôt {{v1}}, version {{v2}}, configuration IA {{v3}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "Synchronisé avec le backend : entrepôt {{v1}}, version {{v2}}",
     "sync-failed": "La synchronisation a échoué",
     "sync-from-backend": "Synchronisation depuis le backend",
     "syncing-from-backend-will-overwrite-local-data-c": "La synchronisation depuis le backend écrasera les données locales. Voulez-vous continuer ?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Synchronisé depuis le backend : Warehouse {{v1}}, Release {{v2}}, Configuration AI {{v3}}"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "Synchronisé depuis le backend : Warehouse {{v1}}, Release {{v2}}"
   },
   "useDesktopActions": {
     "load-failed": "Le chargement a échoué",

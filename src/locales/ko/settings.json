@@ -1,19 +1,15 @@
 {
-  "useAIConfigActions": {
-    "ai-service-connection-successful": "AI 서비스 연결 성공!",
-    "ai-service-test-failed-please-check-network-conn": "AI 서비스 테스트에 실패했습니다. 네트워크 연결 및 구성을 확인하세요."
-  },
   "useBackendSettingsActions": {
     "invalid-backend-url-remote-backends-must-use-htt": "잘못된 백엔드 주소: 원격 백엔드에는 HTTPS가 필요하며 로컬 호스트만 HTTP를 사용할 수 있습니다.",
     "backend-connection-failed-please-check-the-serve": "백엔드 연결에 실패했습니다. 서버 상태나 API 비밀번호가 올바른지 확인하세요.",
     "backend-connection-successful": "백엔드 연결 성공!",
     "backend-not-available": "백엔드를 사용할 수 없습니다.",
     "partial-sync-failure-v1-failed-v2-succeeded": "부분 동기화 실패: {{v1}} 실패, {{v2}} 성공",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "백엔드에 동기화됨: 웨어하우스 {{v1}}, 릴리스 {{v2}}, AI 구성 {{v3}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "백엔드에 동기화됨: 웨어하우스 {{v1}}, 릴리스 {{v2}}",
     "sync-failed": "동기화 실패",
     "sync-from-backend": "백엔드에서 동기화",
     "syncing-from-backend-will-overwrite-local-data-c": "백엔드에서 동기화하면 로컬 데이터를 덮어쓰게 됩니다. 계속하시겠습니까?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "백엔드에서 동기화됨: 웨어하우스 {{v1}}, 릴리스 {{v2}}, AI 구성 {{v3}}"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "백엔드에서 동기화됨: 웨어하우스 {{v1}}, 릴리스 {{v2}}"
   },
   "useDesktopActions": {
     "load-failed": "로드 실패",

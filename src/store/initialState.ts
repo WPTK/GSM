@@ -28,8 +28,6 @@ export const createInitialState = (): AppState => ({
       isSyncingStars: false,
       lastSync: null,
       analyzingRepositoryIds: new Set<number>(),
-      aiConfigs: [],
-      activeAIConfig: null,
       repositoryChatSettings: { ...defaultRepositoryChatSettings },
       embeddingConfigs: [],
       activeEmbeddingConfig: null,

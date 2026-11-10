@@ -342,7 +342,7 @@ const translateWithGoogle = async (
 };
 
 /**
- * AI 翻译引擎：复用用户在设置中激活的 AI 配置（AIService.translateTexts），
+ * AI 翻译引擎：走服务端 Claude（AIService.translateTexts，purpose 'translate'），
  * 按小批量逐请求翻译，每个请求独立叠加超时（LLM 生成慢于直连 MT 接口）。
  */
 const translateWithAI = async (
@@ -351,17 +351,8 @@ const translateWithAI = async (
   from: string | undefined,
   signal: AbortSignal | undefined
 ): Promise<string[]> => {
-  const { aiConfigs, activeAIConfig, language } = useAppStore.getState();
-  const config = aiConfigs.find((item) => item.id === activeAIConfig);
-  if (!config) {
-    throw new Error(
-      language === 'zh'
-        ? 'AI 翻译引擎未就绪：请先在「设置 - AI 服务配置」中添加并激活 AI 配置'
-        : 'AI translation engine is not ready: please add and activate an AI configuration in Settings → AI Service Configuration first'
-    );
-  }
-
-  const aiService = new AIService(config, language);
+  const { language } = useAppStore.getState();
+  const aiService = new AIService(language);
   const results: string[] = [];
 
   for (let i = 0; i < texts.length; i += AI_BATCH_LIMITS.texts) {

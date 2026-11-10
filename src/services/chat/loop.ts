@@ -1,5 +1,5 @@
 import type { AppLanguage } from '../../i18n/languages';
-import type { AIConfig, Repository } from '../../types';
+import type { Repository } from '../../types';
 import type {
   RepositoryChatAgentBudget,
   RepositoryChatExecutionStage,
@@ -119,7 +119,6 @@ export interface RepositoryChatTurnInput {
   messages: RepositoryChatMessage[];
   question: string;
   githubToken: string;
-  aiConfig: AIConfig;
   language: AppLanguage;
   maxToolsPerTurn: number;
   agentBudget?: Partial<RepositoryChatAgentBudget>;
@@ -908,7 +907,7 @@ export const runEvidenceDrivenRepositoryChatTurn = async (input: RepositoryChatT
   if (!input.question.trim()) throw new Error(input.language === 'zh' ? '请输入问题。' : 'Enter a question.');
 
   const { budget, answerMaxTokens } = resolveTurnLimits(input);
-  const ai = new AIService(input.aiConfig, input.language);
+  const ai = new AIService(input.language);
   const ctx = createEvidenceToolbox(input, budget, ai);
   const state = { rounds: 0 };
   try {

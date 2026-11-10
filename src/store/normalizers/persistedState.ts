@@ -40,6 +40,7 @@ const REMOVED_PERSISTED_KEYS = [
   'trendingSnapshots', 'trendingTimeRange', 'updateNotification',
   'syncMode', 'syncModeConfigured', 'listsPush', 'categoryListIdMap',
   // Credentials and egress prefs: the browser holds no secret (auth is the HttpOnly session cookie).
+  'aiConfigs', 'activeAIConfig',
   'githubToken', 'backendApiSecret', 'proxyConfig', 'rpcDownloadConfig', 'routeMode', 'pluginCustomIcons',
 ] as const;
 

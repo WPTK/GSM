@@ -112,10 +112,6 @@
     "failed-to-unstar-repository-please-check-your-ne": "Failed to unstar repository. Please check your network connection or GitHub Token permissions.",
     "successfully-starred": "Successfully starred",
     "failed-to-star-repository-please-check-your-netw": "Failed to star repository. Please check your network connection or GitHub Token permissions.",
-    "github-token-not-found-please-login-again": "GitHub token not found. Please login again.",
-    "please-configure-ai-service-in-settings-first": "Please configure AI service in settings first.",
-    "the-ai-service-api-key-could-not-be-decrypted-or": "The AI service API key could not be decrypted or is empty. Please re-enter and save the configuration in settings.",
-    "ai-service-configuration-is-incomplete-please-ch": "AI service configuration is incomplete. Please check the API endpoint, key, and model name.",
     "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed, please check AI configuration and network connection",
     "ai-analysis-failed-please-check-your-ai-configur": "AI analysis failed. Please check your AI configuration."
   },

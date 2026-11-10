@@ -9,6 +9,7 @@ import { CrossEncoderReranker } from '../../../services/crossEncoderReranker';
 import { runVectorSearchPipeline } from '../../../services/vectorSearchPipeline';
 import { createGitHubApiService } from '../../../services/githubApiFactory';
 import { forceSyncToBackend } from '../../../services/autoSync';
+import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
 import { useDialog } from '../../../hooks/useDialog';
 import type { VectorQueryResult } from '../../../services/vectorSearchService';
 import { performBasicTextSearch } from '../../../utils/repoSearch';
@@ -124,8 +125,6 @@ export interface SearchActions {
 export const useSearchActions = (): SearchActions => {
   const {
     repositories,
-    aiConfigs,
-    activeAIConfig,
     language,
     setSearchFilters,
     setSearchResults,
@@ -135,8 +134,6 @@ export const useSearchActions = (): SearchActions => {
     setSyncingStars,
   } = useAppStore(useShallow((state) => ({
     repositories: state.repositories,
-    aiConfigs: state.aiConfigs,
-    activeAIConfig: state.activeAIConfig,
     language: state.language,
     setSearchFilters: state.setSearchFilters,
     setSearchResults: state.setSearchResults,
@@ -147,6 +144,7 @@ export const useSearchActions = (): SearchActions => {
   })));
 
   const { toast } = useDialog();
+  const { connected: claudeConnected } = useClaudeStatus();
   const [isSearching, setIsSearching] = useState(false);
   const [searchPhase, setSearchPhase] = useState<string | null>(null);
   const vectorScoreMapRef = useRef<{ query: string; scores: Map<string, number> } | null>(null);
@@ -158,15 +156,13 @@ export const useSearchActions = (): SearchActions => {
     applyFilters: (repos: Repository[]) => Repository[],
     options?: { signal?: AbortSignal },
   ): Promise<void> => {
-    const activeConfig = aiConfigs.find(config => config.id === activeAIConfig);
-
     let filtered = repositories;
     let aiOrdered = false;
-    if (activeConfig) {
+    if (claudeConnected) {
       try {
         // 无向量降级链：查询扩展+意图复述 → 词法候选召回 → LLM 精选排序
         setSearchPhase(t('useSearchActions.ai-semantic-analysis'));
-        const aiService = new AIService(activeConfig, language);
+        const aiService = new AIService(language);
         const aiResults = await aiService.searchRepositoriesWithSelection(repositories, query, {
           signal: options?.signal,
           onPhase: (phase) => {
@@ -194,8 +190,8 @@ export const useSearchActions = (): SearchActions => {
         filtered = performBasicTextSearch(repositories, query);
       }
     } else {
-      console.log('⚠️ No AI config found, using basic text search');
-      // Basic text search if no AI config
+      console.log('⚠️ Claude not connected, using basic text search');
+      // Basic text search if Claude is not connected
       filtered = performBasicTextSearch(repositories, query);
     }
 
@@ -222,7 +218,7 @@ export const useSearchActions = (): SearchActions => {
 
     // Update search filters to mark that AI search was performed
     setSearchFilters({ query });
-  }, [repositories, aiConfigs, activeAIConfig, language, setSearchResults, setSearchFilters, toast, t]);
+  }, [repositories, claudeConnected, language, setSearchResults, setSearchFilters, toast, t]);
 
   const aiSearch = useCallback(async (
     query: string,
@@ -251,10 +247,9 @@ export const useSearchActions = (): SearchActions => {
         try {
           const embeddingClient = new EmbeddingClient(activeEmbConfig);
           const vectorService = new VectorSearchService(vsConfig);
-          const aiConfig = aiConfigs.find(config => config.id === activeAIConfig);
-          const aiService = aiConfig
+          const aiService = claudeConnected
             && (vsConfig.enableHyDE !== false || vsConfig.enableReranking !== false)
-            ? new AIService(aiConfig, language)
+            ? new AIService(language)
             : null;
           const crossEncoder = activeEmbConfig.apiType === 'siliconflow'
             ? new CrossEncoderReranker(activeEmbConfig)
@@ -328,7 +323,7 @@ export const useSearchActions = (): SearchActions => {
         setSearchPhase(null);
       }
     }
-  }, [repositories, aiConfigs, activeAIConfig, language, setSearchResults, setSearchFilters, keywordSearch, t]);
+  }, [repositories, claudeConnected, language, setSearchResults, setSearchFilters, keywordSearch, t]);
 
   const syncStars = useCallback(async () => {
     if (!githubToken) {

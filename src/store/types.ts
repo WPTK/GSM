@@ -5,7 +5,6 @@ import type {
   ThemeMode,
   Repository,
   Release,
-  AIConfig,
   EmbeddingConfig,
   VectorSearchConfig,
   VectorSearchStatus,
@@ -55,11 +54,6 @@ export interface AppActions {
   setAnalyzingRepository: (repoId: number, isAnalyzing: boolean) => void;
 
   // AI actions
-  addAIConfig: (config: AIConfig) => void;
-  updateAIConfig: (id: string, updates: Partial<AIConfig>) => void;
-  deleteAIConfig: (id: string) => void;
-  setActiveAIConfig: (id: string | null) => void;
-  setAIConfigs: (configs: AIConfig[]) => void;
   setRepositoryChatSettings: (settings: Partial<RepositoryChatSettings>) => void;
 
   // Embedding actions

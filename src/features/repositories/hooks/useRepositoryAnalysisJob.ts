@@ -4,11 +4,11 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Category, Repository } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { useDialog } from '../../../hooks/useDialog';
-import { AIAnalysisOptimizer, type AnalysisResult } from '../../../services/aiAnalysisOptimizer';
-import { AIService } from '../../../services/aiService';
-import { createGitHubApiService } from '../../../services/githubApiFactory';
+import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
+import { useClaudeSpendConfirm } from '../../../hooks/useClaudeSpendConfirm';
+import { runClaudeAnalysis } from '../../../services/claudeJobs';
 import { forceSyncToBackend } from '../../../services/autoSync';
-import { buildCategoryHints, resolveCategoryAssignment } from '../../../utils/categoryUtils';
+import { resolveCategoryAssignment } from '../../../utils/categoryUtils';
 import { applyAnalysisFailure, applyAnalysisSuccess } from '../application/repositoryPatches';
 
 export type RepositoryAnalysisScope = 'all' | 'unanalyzed' | 'failed' | 'selected';
@@ -25,49 +25,25 @@ interface RunRepositoryAnalysisOptions {
 
 export interface RepositoryAnalysisJob {
   run: (options: RunRepositoryAnalysisOptions) => Promise<boolean>;
-  pause: () => void;
-  resume: () => void;
   requestStop: () => Promise<boolean>;
   isRunning: boolean;
-  isPaused: boolean;
   progress: { current: number; total: number };
 }
 
-const createOptimizer = (concurrency?: number, requestsPerMinute?: number) => new AIAnalysisOptimizer({
-  initialConcurrency: concurrency || 3,
-  maxConcurrency: 10,
-  minConcurrency: 1,
-  targetResponseTime: 5000,
-  batchDelayMs: 100,
-  maxRetries: 3,
-  retryDelayBaseMs: 1000,
-  enableAdaptiveConcurrency: true,
-  rateLimiter: {
-    maxConcurrency: 0,
-    requestsPerMinute: requestsPerMinute || 0,
-  },
-});
-
 /**
- * Owns the lifecycle of one RepositoryList batch-analysis job. The hook keeps
- * the optimizer instance in a ref so pause, resume, stop, and unmount cleanup
- * always affect the active job without putting a mutable job in the store.
+ * Owns the lifecycle of one RepositoryList batch-analysis job. The work runs on the
+ * server (estimate, job, poll); the hook keeps the abort controller in a ref so stop and
+ * unmount cleanup always cancel the active job without putting a mutable job in the store.
  */
 export const useRepositoryAnalysisJob = ({
   allCategories,
 }: UseRepositoryAnalysisJobOptions): RepositoryAnalysisJob => {
   const {
-    githubToken,
-    aiConfigs,
-    activeAIConfig,
     language,
     updateRepository,
     setLoading,
     setAnalysisProgress,
   } = useAppStore(useShallow((state) => ({
-    githubToken: state.githubToken,
-    aiConfigs: state.aiConfigs,
-    activeAIConfig: state.activeAIConfig,
     language: state.language,
     updateRepository: state.updateRepository,
     setLoading: state.setLoading,
@@ -75,15 +51,16 @@ export const useRepositoryAnalysisJob = ({
   })));
 
   const { toast, confirm } = useDialog();
-  const optimizerRef = useRef<AIAnalysisOptimizer | null>(null);
+  const { connected } = useClaudeStatus();
+  const confirmSpend = useClaudeSpendConfirm();
+  const abortRef = useRef<AbortController | null>(null);
   const isRunningRef = useRef(false);
-  const isPausedRef = useRef(false);
   const stopRequestedRef = useRef(false);
   const mountedRef = useRef(true);
   const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
+  const tApp = useT('app');
   const t = useT('repositories');
 
   const resetVisibleState = useCallback(() => {
@@ -91,8 +68,6 @@ export const useRepositoryAnalysisJob = ({
     setAnalysisProgress({ current: 0, total: 0 });
     if (mountedRef.current) {
       setIsRunning(false);
-      isPausedRef.current = false;
-      setIsPaused(false);
       setProgress({ current: 0, total: 0 });
     }
   }, [setAnalysisProgress, setLoading]);
@@ -101,33 +76,14 @@ export const useRepositoryAnalysisJob = ({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      optimizerRef.current?.abort();
-      optimizerRef.current = null;
+      abortRef.current?.abort();
+      abortRef.current = null;
       isRunningRef.current = false;
-      isPausedRef.current = false;
       stopRequestedRef.current = false;
       setLoading(false);
       setAnalysisProgress({ current: 0, total: 0 });
     };
   }, [setAnalysisProgress, setLoading]);
-
-  const pause = useCallback(() => {
-    const optimizer = optimizerRef.current;
-    if (!isRunningRef.current || !optimizer || isPausedRef.current) return;
-    optimizer.pause();
-    isPausedRef.current = true;
-    setIsPaused(true);
-    console.log('Analysis paused');
-  }, []);
-
-  const resume = useCallback(() => {
-    const optimizer = optimizerRef.current;
-    if (!isRunningRef.current || !optimizer || !isPausedRef.current) return;
-    optimizer.resume();
-    isPausedRef.current = false;
-    setIsPaused(false);
-    console.log('Analysis resumed');
-  }, []);
 
   const requestStop = useCallback(async () => {
     if (!isRunningRef.current) return false;
@@ -140,12 +96,7 @@ export const useRepositoryAnalysisJob = ({
     if (!confirmed || !isRunningRef.current) return false;
 
     stopRequestedRef.current = true;
-    optimizerRef.current?.abort();
-    isPausedRef.current = false;
-    if (mountedRef.current) {
-      setIsPaused(false);
-    }
-    console.log('Stop requested by user');
+    abortRef.current?.abort();
     return true;
   }, [confirm, t]);
 
@@ -156,24 +107,8 @@ export const useRepositoryAnalysisJob = ({
   }: RunRepositoryAnalysisOptions) => {
     if (isRunningRef.current) return false;
 
-    if (!githubToken) {
-      toast(t('useRepositoryAnalysisJob.github-token-not-found-please-login-again'), 'error');
-      return false;
-    }
-
-    const activeConfig = aiConfigs.find((config) => config.id === activeAIConfig);
-    if (!activeConfig) {
-      toast(t('useRepositoryAnalysisJob.please-configure-ai-service-in-settings-first'), 'error');
-      return false;
-    }
-
-    if (scope !== 'selected' && (activeConfig.apiKeyStatus === 'decrypt_failed' || activeConfig.apiKeyStatus === 'empty')) {
-      toast(t('useRepositoryAnalysisJob.the-ai-service-api-key-could-not-be-decrypted-or'), 'error');
-      return false;
-    }
-
-    if (scope !== 'selected' && (!activeConfig.baseUrl || !activeConfig.apiKey || !activeConfig.model)) {
-      toast(t('useRepositoryAnalysisJob.ai-service-configuration-is-incomplete-please-ch'), 'error');
+    if (!connected) {
+      toast(tApp('claudePanel.not-connected'), 'error');
       return false;
     }
 
@@ -203,87 +138,78 @@ export const useRepositoryAnalysisJob = ({
     );
     if (!confirmed) return false;
 
-    const optimizer = createOptimizer(activeConfig.concurrency, activeConfig.requestsPerMinute);
-    optimizerRef.current = optimizer;
+    const controller = new AbortController();
+    abortRef.current = controller;
     stopRequestedRef.current = false;
-    isPausedRef.current = false;
     isRunningRef.current = true;
     setLoading(true);
     setAnalysisProgress({ current: 0, total: repositories.length });
     if (mountedRef.current) {
       setIsRunning(true);
-      setIsPaused(false);
       setProgress({ current: 0, total: repositories.length });
     }
 
     let successCount = 0;
     let failedCount = 0;
+    const byId = new Map(repositories.map((repository) => [repository.id, repository]));
 
     try {
-      const githubApi = createGitHubApiService(githubToken);
-      const aiService = new AIService(activeConfig, language);
-      const categoryNames = allCategories.filter((category) => category.id !== 'all').map((category) => category.name);
-      const aiCategoryHints = buildCategoryHints(allCategories);
-      const onResult = (result: AnalysisResult) => {
-        if (!mountedRef.current || optimizerRef.current !== optimizer) return;
-
-        if (result.success) {
-          const resolvedCategory = resolveCategoryAssignment(
-            { ...result.repo, ai_summary: result.summary },
-            result.tags || [],
-            allCategories,
-          );
-          const wasCategoryLocked = !!result.repo.category_locked;
-          updateRepository(applyAnalysisSuccess(result.repo, {
-            summary: result.summary,
-            tags: result.tags,
-            platforms: result.platforms,
-            category: resolvedCategory,
-            categoryLocked: wasCategoryLocked,
-            analyzedAt: new Date().toISOString(),
-          }));
-          successCount += 1;
-          return;
-        }
-
-        updateRepository(applyAnalysisFailure(result.repo, {
-          analyzedAt: new Date().toISOString(),
-          error: result.error?.message || undefined,
-        }));
-        failedCount += 1;
-      };
-
-      await optimizer.analyzeRepositoriesPipelined(
-        repositories,
-        githubApi,
-        aiService,
-        categoryNames,
-        aiCategoryHints,
-        (current, total, currentConcurrency) => {
-          if (!mountedRef.current || optimizerRef.current !== optimizer) return;
-          setAnalysisProgress({ current, total });
-          setProgress({ current, total });
-          console.log(`AI Analysis Progress: ${current}/${total}, Concurrency: ${currentConcurrency}`);
+      const outcome = await runClaudeAnalysis(
+        { repoIds: repositories.map((repository) => repository.id), language },
+        {
+          signal: controller.signal,
+          confirmSpend,
+          onProgress: (job) => {
+            if (!mountedRef.current || abortRef.current !== controller) return;
+            const current = job.done + job.failed;
+            setAnalysisProgress({ current, total: job.total });
+            setProgress({ current, total: job.total });
+          },
+          onItem: (item) => {
+            if (!mountedRef.current || abortRef.current !== controller) return;
+            const repo = byId.get(item.repoId);
+            if (!repo) return;
+            if (item.status === 'done' && item.result) {
+              const resolvedCategory = resolveCategoryAssignment(
+                { ...repo, ai_summary: item.result.summary },
+                item.result.tags || [],
+                allCategories,
+              );
+              updateRepository(applyAnalysisSuccess(repo, {
+                summary: item.result.summary,
+                tags: item.result.tags,
+                platforms: item.result.platforms,
+                category: resolvedCategory,
+                categoryLocked: !!repo.category_locked,
+                analyzedAt: new Date().toISOString(),
+              }));
+              successCount += 1;
+              return;
+            }
+            updateRepository(applyAnalysisFailure(repo, {
+              analyzedAt: new Date().toISOString(),
+              error: item.error || undefined,
+            }));
+            failedCount += 1;
+          },
         },
-        onResult,
       );
 
-      const stats = optimizer.getStats();
-      console.log('AI Analysis Stats:', stats);
+      if (outcome.declined) return false;
       if (syncOnComplete) {
         await forceSyncToBackend();
       }
 
       if (scope === 'selected') {
         toast(
-          t('useRepositoryAnalysisJob.successfully-analyzed-successcount-repositories', { successCount: successCount, failedCount: failedCount, v3: stats.averageResponseTime }),
+          t('useRepositoryAnalysisJob.successfully-analyzed-successcount-repositories', { successCount: successCount, failedCount: failedCount }),
           failedCount > 0 ? 'error' : 'success',
         );
       } else {
         toast(
-          stopRequestedRef.current
+          stopRequestedRef.current || outcome.cancelled
             ? (t('useRepositoryAnalysisJob.ai-analysis-stopped-success-successcount-failed', { successCount: successCount, failedCount: failedCount }))
-            : (t('useRepositoryAnalysisJob.ai-analysis-completed-success-successcount-faile', { successCount: successCount, failedCount: failedCount, v3: stats.averageResponseTime })),
+            : (t('useRepositoryAnalysisJob.ai-analysis-completed-success-successcount-faile', { successCount: successCount, failedCount: failedCount })),
           'success',
         );
       }
@@ -298,22 +224,19 @@ export const useRepositoryAnalysisJob = ({
       );
       return false;
     } finally {
-      if (optimizerRef.current === optimizer) {
-        optimizerRef.current = null;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
         isRunningRef.current = false;
         stopRequestedRef.current = false;
         resetVisibleState();
       }
     }
-  }, [aiConfigs, activeAIConfig, allCategories, confirm, githubToken, language, resetVisibleState, setAnalysisProgress, setLoading, t, toast, updateRepository]);
+  }, [allCategories, confirm, confirmSpend, connected, language, resetVisibleState, setAnalysisProgress, setLoading, t, tApp, toast, updateRepository]);
 
   return useMemo(() => ({
     run,
-    pause,
-    resume,
     requestStop,
     isRunning,
-    isPaused,
     progress,
-  }), [isPaused, isRunning, pause, progress, requestStop, resume, run]);
+  }), [isRunning, progress, requestStop, run]);
 };

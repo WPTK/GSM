@@ -1,19 +1,15 @@
 {
-  "useAIConfigActions": {
-    "ai-service-connection-successful": "AIサービス接続成功！",
-    "ai-service-test-failed-please-check-network-conn": "AI サービスのテストに失敗しました。ネットワーク接続と構成を確認してください。"
-  },
   "useBackendSettingsActions": {
     "invalid-backend-url-remote-backends-must-use-htt": "無効なバックエンド アドレス: リモート バックエンドには HTTPS が必要です。HTTP を使用できるのはローカルホストのみです",
     "backend-connection-failed-please-check-the-serve": "バックエンド接続に失敗しました。サーバーのステータスまたは API シークレットが正しいかどうかを確認してください。",
     "backend-connection-successful": "バックエンド接続に成功しました!",
     "backend-not-available": "バックエンドが利用できません",
     "partial-sync-failure-v1-failed-v2-succeeded": "部分的な同期に失敗しました: {{v1}} は失敗しました、{{v2}} は成功しました",
-    "synced-to-backend-repos-v1-releases-v2-ai-config": "バックエンドに同期: ウェアハウス {{v1}}、リリース {{v2}}、AI 構成 {{v3}}",
+    "synced-to-backend-repos-v1-releases-v2-ai-config": "バックエンドに同期: ウェアハウス {{v1}}、リリース {{v2}}",
     "sync-failed": "同期に失敗しました",
     "sync-from-backend": "バックエンドから同期する",
     "syncing-from-backend-will-overwrite-local-data-c": "バックエンドから同期するとローカル データが上書きされます。続行しますか?",
-    "synced-from-backend-repos-v1-releases-v2-ai-conf": "バックエンドから同期: ウェアハウス {{v1}}、リリース {{v2}}、AI 構成 {{v3}}"
+    "synced-from-backend-repos-v1-releases-v2-ai-conf": "バックエンドから同期: ウェアハウス {{v1}}、リリース {{v2}}"
   },
   "useDesktopActions": {
     "load-failed": "読み込みに失敗しました",

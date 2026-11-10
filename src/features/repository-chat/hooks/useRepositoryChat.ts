@@ -5,6 +5,7 @@
 import { makeT, useT } from '../../../i18n/useT';
 import type { AppLanguage } from '../../../i18n/languages';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
 import { useAppStore } from '../../../store/useAppStore';
 import { useShallow } from 'zustand/react/shallow';
 import type { Repository } from '../../../types';
@@ -62,17 +63,14 @@ export const useRepositoryChat = ({
     language,
     user,
     githubToken,
-    aiConfigs,
-    activeAIConfig,
     repositoryChatSettings,
   } = useAppStore(useShallow((state) => ({
     language: state.language,
     user: state.user,
     githubToken: state.githubToken,
-    aiConfigs: state.aiConfigs,
-    activeAIConfig: state.activeAIConfig,
     repositoryChatSettings: state.repositoryChatSettings,
   })));
+  const { connected: claudeConnected, status: claudeStatus } = useClaudeStatus();
   const abortControllerRef = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
   const retryInFlightRef = useRef(false);
@@ -214,13 +212,11 @@ export const useRepositoryChat = ({
     return () => { active = false; };
   }, [accountScope, activeSessionId]);
 
-  const resolvedConfigId = repositoryChatSettings.chatConfigId ?? activeAIConfig;
-  const aiConfig = aiConfigs.find((config) => config.id === resolvedConfigId) ?? null;
   const unavailableReason = !repositoryChatSettings.enabled
     ? (t('useRepositoryChat.repository-chat-is-disabled-in-ai-settings'))
     : !githubToken
       ? (t('useRepositoryChat.configure-a-github-token-first'))
-      : !aiConfig
+      : !claudeConnected
         ? (t('useRepositoryChat.configure-an-active-ai-service-first'))
         : null;
 
@@ -290,7 +286,7 @@ export const useRepositoryChat = ({
     sessionOverride?: RepositoryChatSession,
   ) => {
     const activeSession = sessionOverride ?? session;
-    if (!repository || !activeSession || !aiConfig || unavailableReason || sendingRef.current || isSending || (!isRetry && retryInFlightRef.current)) {
+    if (!repository || !activeSession || !claudeConnected || unavailableReason || sendingRef.current || isSending || (!isRetry && retryInFlightRef.current)) {
       if (unavailableReason) setError(unavailableReason);
       return;
     }
@@ -365,7 +361,6 @@ export const useRepositoryChat = ({
           messages: [...baseMessages, userMessage],
           question: normalizedQuestion,
           githubToken: githubToken ?? '',
-          aiConfig,
           language,
           maxToolsPerTurn: repositoryChatSettings.maxToolsPerTurn,
           agentBudget: repositoryChatSettings.agentBudget,
@@ -447,8 +442,8 @@ export const useRepositoryChat = ({
         const updatedSession = {
           ...latestSession,
           title: fallbackTitle,
-          modelConfigId: aiConfig.id,
-          modelLabelAtTime: `${aiConfig.name} · ${aiConfig.model}`,
+          modelConfigId: 'claude',
+          modelLabelAtTime: `Claude · ${claudeStatus?.models.chat ?? ''}`.trim(),
           updatedAt: new Date().toISOString(),
         };
         try {
@@ -460,7 +455,7 @@ export const useRepositoryChat = ({
           console.warn('[repository-chat] unable to persist session metadata', persistenceError);
         }
         if (fallbackTitle !== latestSession.title) {
-          void new AIService(aiConfig, language).generateChatText({
+          void new AIService(language).generateChatText({
             system: language === 'zh'
               ? '为仓库问答会话生成一个不超过 16 个汉字、不加引号和标点的标题。只输出标题。'
               : 'Write a repository-chat title of at most 8 words. Output only the title, without quotes or punctuation.',
@@ -507,7 +502,7 @@ export const useRepositoryChat = ({
       sendingRef.current = false;
       setIsSending(false);
     }
-  }, [aiConfig, githubToken, isSending, language, loadPriorEvidence, messages, onMessagesChange, onSessionChange, persistToolEvent, repository, repositoryChatSettings.agentBudget, repositoryChatSettings.enableAgentToolLoop, repositoryChatSettings.fastPath, repositoryChatSettings.maxToolsPerTurn, repositoryChatSettings.streamingMode, repositoryChatSettings.taskDepth, retainNewestSession, session, unavailableReason, t]);
+  }, [claudeConnected, claudeStatus, githubToken, isSending, language, loadPriorEvidence, messages, onMessagesChange, onSessionChange, persistToolEvent, repository, repositoryChatSettings.agentBudget, repositoryChatSettings.enableAgentToolLoop, repositoryChatSettings.fastPath, repositoryChatSettings.maxToolsPerTurn, repositoryChatSettings.streamingMode, repositoryChatSettings.taskDepth, retainNewestSession, session, unavailableReason, t]);
 
   const stop = useCallback(() => {
     abortControllerRef.current?.abort();

@@ -9,7 +9,9 @@ import { AIService, isAbortError } from '../../../services/aiService';
 import { CrossEncoderReranker } from '../../../services/crossEncoderReranker';
 import { runSimilarRepositoryPipeline } from '../../../services/similarRepositoryPipeline';
 import { EmbeddingClient, VectorSearchService } from '../../../services/vectorSearchService';
-import { analyzeRepository, createFailedAnalysisResult } from '../../../services/aiAnalysisHelper';
+import { analyzeRepository, createFailedAnalysisResult } from '../../../services/claudeJobs';
+import { useClaudeStatus } from '../../../hooks/useClaudeStatus';
+import { useClaudeSpendConfirm } from '../../../hooks/useClaudeSpendConfirm';
 import { forceSyncToBackend } from '../../../services/autoSync';
 import { createGitHubApiService } from '../../../services/githubApiFactory';
 import { logger } from '../../../services/logger';
@@ -40,6 +42,7 @@ export const useRepositoryCardActions = ({
   repository,
   allCategories,
 }: UseRepositoryCardActionsOptions): RepositoryCardActions => {
+  const tApp = useT('app');
   const t = useT('repositories');
   const repoId = repository.id;
   const isSubscribed = useAppStore(
@@ -50,7 +53,6 @@ export const useRepositoryCardActions = ({
   );
   const {
     githubToken,
-    activeAIConfig,
     setAnalyzingRepository,
     language,
     updateRepository,
@@ -61,14 +63,12 @@ export const useRepositoryCardActions = ({
     activeEmbeddingConfig,
     repositories,
     enterSimilarView,
-    aiConfigs,
     toggleReleaseSubscription: toggleStoreReleaseSubscription,
   } = useAppStore(
     useShallow(
       useCallback(
         (state) => ({
           githubToken: state.githubToken,
-          activeAIConfig: state.activeAIConfig,
           setAnalyzingRepository: state.setAnalyzingRepository,
           language: state.language,
           updateRepository: state.updateRepository,
@@ -79,7 +79,6 @@ export const useRepositoryCardActions = ({
           activeEmbeddingConfig: state.activeEmbeddingConfig,
           repositories: state.repositories,
           enterSimilarView: state.enterSimilarView,
-          aiConfigs: state.aiConfigs,
           toggleReleaseSubscription: state.toggleReleaseSubscription,
         }),
         [],
@@ -87,6 +86,8 @@ export const useRepositoryCardActions = ({
     ),
   );
   const { toast, confirm } = useDialog();
+  const { connected: claudeConnected } = useClaudeStatus();
+  const confirmSpend = useClaudeSpendConfirm();
   const abortControllerRef = useRef<AbortController | null>(null);
   const similarityAbortRef = useRef<AbortController | null>(null);
   const [isLocallyAnalyzing, setIsLocallyAnalyzing] = useState(false);
@@ -119,36 +120,8 @@ export const useRepositoryCardActions = ({
   }, [embeddingConfigs, activeEmbeddingConfig, vectorSearchConfig, vectorSearchStatus]);
 
   const analyze = useCallback(async () => {
-    if (!githubToken) {
-      toast(
-        t('useRepositoryCardActions.github-token-not-found-please-login-again'),
-        'error',
-      );
-      return;
-    }
-
-    const activeConfig = aiConfigs.find((config) => config.id === activeAIConfig);
-    if (!activeConfig) {
-      toast(
-        t('useRepositoryCardActions.please-configure-ai-service-in-settings-first'),
-        'error',
-      );
-      return;
-    }
-
-    if (activeConfig.apiKeyStatus === 'decrypt_failed' || activeConfig.apiKeyStatus === 'empty') {
-      toast(
-        t('useRepositoryCardActions.the-ai-service-api-key-could-not-be-decrypted-or'),
-        'error',
-      );
-      return;
-    }
-
-    if (!activeConfig.baseUrl || !activeConfig.apiKey || !activeConfig.model) {
-      toast(
-        t('useRepositoryCardActions.ai-service-configuration-is-incomplete-please-ch'),
-        'error',
-      );
+    if (!claudeConnected) {
+      toast(tApp('claudePanel.not-connected'), 'error');
       return;
     }
 
@@ -182,8 +155,8 @@ export const useRepositoryCardActions = ({
     try {
       const result = await analyzeRepository({
         repository,
-        githubToken,
-        aiConfig: activeConfig,
+        stored: true,
+        confirmSpend,
         language,
         categories: allCategories,
         onProgress: (status) => {
@@ -265,17 +238,16 @@ export const useRepositoryCardActions = ({
       }
     }
   }, [
-    activeAIConfig,
-    aiConfigs,
     allCategories,
+    claudeConnected,
     confirm,
-    githubToken,
+    confirmSpend,
     language,
     repoId,
     repository,
     setAnalyzingRepository,
     toast,
-    updateRepository, t]);
+    updateRepository, t, tApp]);
 
   const findSimilar = useCallback(async () => {
     if (isFindingSimilar) return;
@@ -313,15 +285,7 @@ export const useRepositoryCardActions = ({
       const readmeFetcher = githubApi
         ? (owner: string, repo: string, signal?: AbortSignal) => githubApi.getRepositoryReadme(owner, repo, signal)
         : undefined;
-      const aiConfig = aiConfigs.find((config) => config.id === activeAIConfig);
-      const aiService = aiConfig
-        && aiConfig.apiKeyStatus !== 'decrypt_failed'
-        && aiConfig.apiKeyStatus !== 'empty'
-        && aiConfig.baseUrl
-        && aiConfig.apiKey
-        && aiConfig.model
-        ? new AIService(aiConfig, language)
-        : null;
+      const aiService = claudeConnected ? new AIService(language) : null;
       const result = await runSimilarRepositoryPipeline({
         source: repository,
         repositories,
@@ -360,9 +324,8 @@ export const useRepositoryCardActions = ({
       }
     }
   }, [
-    activeAIConfig,
     activeEmbeddingConfig,
-    aiConfigs,
+    claudeConnected,
     embeddingConfigs,
     enterSimilarView,
     githubToken,

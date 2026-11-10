@@ -1,85 +1,30 @@
-import { Repository, AIConfig, AIApiType } from '../types';
-import { isToolCallCapableApiType } from '../constants/aiCapabilities';
-import { backend } from './backendAdapter';
-import { buildApiUrl, buildFinalApiUrl } from '../utils/apiUrlBuilder';
+import { Repository } from '../types';
 import { NO_LICENSE_SENTINEL, normalizeLicense } from '../utils/licenseFilter';
-import { deriveRepositoryHealthSnapshot } from '../utils/repositoryHealth';
-import { isLocalOrLanHost } from '../utils/lanAddress';
 import { logger } from './logger';
 import { getOutputLanguageDirective } from '../i18n/aiLanguage';
 import type { GradedRerankResult, RelevanceGrade, VectorQueryAnalysis } from './vectorSearchPipeline';
 import { deriveRepoKind } from './crossEncoderReranker';
+import {
+  AIRequestError,
+  consumeSseStream,
+  parseRetryAfterMs,
+  postMessages,
+  streamMessages,
+} from './claudeClient';
+import type { AiContentBlock, AiMessage, AiPurpose, AiStopReason } from './claudeContract';
 
-interface OpenAIResponseContentPart {
-  text?: string;
-}
-
-interface OpenAIResponseOutputItem {
-  content?: OpenAIResponseContentPart[];
-}
-
-interface OpenAIResponseMessage {
-  content?: string;
-  reasoning_content?: string;
-}
-
-interface OpenAIResponseChoice {
-  message?: OpenAIResponseMessage;
-  finish_reason?: string;
-}
-
-interface OpenAIResponse {
-  output_text?: string;
-  output?: OpenAIResponseOutputItem[];
-  choices?: OpenAIResponseChoice[];
-  status?: string;
-  incomplete_details?: { reason?: string };
-}
-
-export interface ConnectionTestResult {
-  success: boolean;
-  statusCode?: number;
-  statusText?: string;
-  errorType?: 'network' | 'auth' | 'timeout' | 'server' | 'unknown';
-  message: string;
-}
+export { AIRequestError, consumeSseStream, parseRetryAfterMs };
 
 export interface RepoSearchQuery {
   terms: string[];
   scope: 'metadata' | 'readme' | 'any';
 }
 
-type RepositoryAnalysisResult = {
-  summary: string;
-  tags: string[];
-  platforms: string[];
-};
-
-type ParsedAIResponse = RepositoryAnalysisResult & {
-  isValid: boolean;
-  invalidReason?: string;
-};
-
 /**
- * 统一的 AI 请求错误，携带 HTTP 状态码与（可选）服务端建议的等待时长。
- * 上层（限流器 / 优化器）依赖 status / retryAfterMs 判断退避策略。
+ * Claude request error: HTTP status, server error code and, for 429, the suggested wait.
+ * Callers (rate limiter, analysis jobs) read status and retryAfterMs for backoff.
+ * Defined in claudeClient and re-exported above.
  */
-export class AIRequestError extends Error {
-  readonly status: number;
-  readonly retryAfterMs?: number;
-  readonly isRateLimit: boolean;
-  /** 错误是否来自 HTTP 200 响应体里的网关错误对象（区别于真实 HTTP 非 2xx 错误）。 */
-  readonly fromGatewayBody: boolean;
-
-  constructor(message: string, status: number, retryAfterMs?: number, fromGatewayBody = false) {
-    super(message);
-    this.name = 'AIRequestError';
-    this.status = status;
-    this.retryAfterMs = retryAfterMs;
-    this.isRateLimit = status === 429;
-    this.fromGatewayBody = fromGatewayBody;
-  }
-}
 
 export type AIChatTextPurpose = 'internal-json' | 'answer';
 
@@ -94,19 +39,11 @@ export function isRateLimitedError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const e = error as { statusCode?: unknown; status?: unknown; isRateLimit?: unknown; message?: unknown };
   if (e.isRateLimit === true) return true;
-  if (error instanceof AIRequestError && error.fromGatewayBody && !error.isRateLimit) return false;
   if (typeof e.statusCode === 'number' && e.statusCode === 429) return true;
   if (typeof e.status === 'number' && e.status === 429) return true;
   const msg = typeof e.message === 'string' ? e.message : '';
   return /429|rate\s*limit|too many requests/i.test(msg);
 }
-
-/**
- * 网关可能在 HTTP 200 的 JSON body 里返回错误对象（如 agnes 的 429 throttling_error）。
- * 识别这类"伪成功"响应并转为带状态码的 AIRequestError，让限流/退避逻辑正常生效。
- */
-/** 明确表示限流已触发的错误短语；避免把恰好提到 rate_limit 的参数错误误判为限流。 */
-const THROTTLING_MESSAGE_PATTERN = /throttling|rate[\s-]limit (exceeded|reached)|too many requests/i;
 
 /** 内部 JSON 步骤判断首次结果是否已可用：容忍模型套一层 ```json 围栏。 */
 const isParseableJsonObject = (text: string): boolean => {
@@ -120,68 +57,12 @@ const isParseableJsonObject = (text: string): boolean => {
   }
 };
 
-function extractGatewayErrorFromData(data: unknown): { message: string; status: number } | null {
-  if (!data || typeof data !== 'object') return null;
-  const err = (data as { error?: unknown }).error;
-  if (!err) return null;
-  if (typeof err === 'string') return { message: err, status: THROTTLING_MESSAGE_PATTERN.test(err) ? 429 : 502 };
-  if (typeof err !== 'object') return null;
-  const e = err as { message?: unknown; code?: unknown; type?: unknown; status?: unknown };
-  const message = typeof e.message === 'string' && e.message
-    ? e.message
-    : (() => { try { return JSON.stringify(err); } catch { return 'unknown gateway error'; } })();
-  const code = typeof e.code === 'string' || typeof e.code === 'number' ? String(e.code) : '';
-  const type = typeof e.type === 'string' ? e.type : '';
-  const isThrottling = e.status === 429 || code === '429' || /throttling|rate.?limit|too many requests/i.test(`${code} ${type}`)
-    || THROTTLING_MESSAGE_PATTERN.test(message);
-  return { message, status: isThrottling ? 429 : 502 };
-}
-
-function extractGatewayErrorFromSsePayloads(payloads: string[]): { message: string; status: number } | null {
-  for (const payload of payloads) {
-    try {
-      const gatewayError = extractGatewayErrorFromData(JSON.parse(payload));
-      if (gatewayError) return gatewayError;
-    } catch { /* 非 JSON 载荷 */ }
-  }
-  return null;
-}
-
-function stringifyDataForWarn(data: unknown): string {
-  try {
-    const s = JSON.stringify(data);
-    return s.length > 500 ? `${s.slice(0, 500)}...[truncated]` : s;
-  } catch {
-    return String(data);
-  }
-}
-
 /** 从限流错误中读取服务端建议的等待毫秒数（Retry-After / retry-after-ms）。 */
 export function getRetryAfterMsFromError(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const e = error as { retryAfterMs?: unknown; retryAfter?: unknown };
   const ms = typeof e.retryAfterMs === 'number' ? e.retryAfterMs : undefined;
   if (ms !== undefined && Number.isFinite(ms) && ms > 0) return ms;
-  return undefined;
-}
-
-/** 解析响应头里的 Retry-After（retry-after-ms → retry-after 秒 → HTTP date）。 */
-function parseRetryAfterMs(response: Response): number | undefined {
-  const msHeader = response.headers.get('retry-after-ms');
-  if (msHeader) {
-    const v = Number(msHeader);
-    if (Number.isFinite(v) && v > 0) return Math.round(v);
-  }
-  const secHeader = response.headers.get('retry-after');
-  if (secHeader) {
-    const v = Number(secHeader);
-    if (Number.isFinite(v) && v > 0) return Math.round(v * 1000);
-    const parsed = Date.parse(secHeader);
-    if (!Number.isNaN(parsed)) {
-      const remaining = parsed - Date.now();
-      if (remaining > 0) return remaining;
-    }
-  }
   return undefined;
 }
 
@@ -207,18 +88,6 @@ export function isAbortError(error: unknown): boolean {
   );
 }
 
-/** 当前 AI 配置/端点不支持模型原生工具调用（function calling）。调用方应降级到编排式循环。 */
-export class AIToolCallUnsupportedError extends Error {
-  constructor(message = 'Tool calling is not supported on this AI configuration') {
-    super(message);
-    this.name = 'AIToolCallUnsupportedError';
-  }
-}
-
-export function isAIToolCallUnsupportedError(error: unknown): boolean {
-  return error instanceof AIToolCallUnsupportedError;
-}
-
 export interface AIToolDefinition {
   name: string;
   description: string;
@@ -238,188 +107,51 @@ export type AIToolLoopMessage =
   | { role: 'assistant'; content: string | null; toolCalls: AIToolCall[] }
   | { role: 'tool'; toolCallId: string; content: string };
 
-/**
- * 该配置是否实际启用原生工具调用：协议族支持 且 用户在该 AI 配置中显式
- * 勾选“支持工具调用”。两者缺一不可——避免未经验证的端点默认进入工具循环。
- * 端点实际能力不足时由请求失败降级兜底。
- */
-export function supportsChatToolCalls(config: Pick<AIConfig, 'apiType' | 'supportsToolCalls'>): boolean {
-  return isToolCallCapableApiType(config.apiType) && config.supportsToolCalls === true;
+/** Server stop reasons mapped to the finish reasons callers already branch on. */
+function normalizeStopReason(reason: AiStopReason | undefined): string | null {
+  if (!reason) return null;
+  if (reason === 'max_tokens') return 'length';
+  if (reason === 'end_turn') return 'stop';
+  return reason;
 }
 
-/** 逐事件消费 SSE 字节流，把每个 data: 载荷交给回调（自动跨 chunk 缓冲不完整行）。 */
-export async function consumeSseStream(body: ReadableStream<Uint8Array>, onData: (payload: string) => void): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let dataLines: string[] = [];
-  const flush = () => {
-    if (dataLines.length > 0) {
-      onData(dataLines.join('\n'));
-      dataLines = [];
-    }
-  };
+function parseToolArguments(raw: string): Record<string, unknown> {
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let separatorIndex: number;
-      // SSE 行分隔符按规范接受 CRLF / LF / 裸 CR。
-      while ((separatorIndex = buffer.search(/[\r\n]/)) >= 0) {
-        // 末尾的 \r 可能与下一块开头的 \n 组成 CRLF，先等更多数据再定。
-        if (buffer[separatorIndex] === '\r' && separatorIndex === buffer.length - 1) break;
-        const separatorLength = buffer[separatorIndex] === '\r' && buffer[separatorIndex + 1] === '\n' ? 2 : 1;
-        const line = buffer.slice(0, separatorIndex);
-        buffer = buffer.slice(separatorIndex + separatorLength);
-        if (line === '') {
-          flush();
-        } else if (line.startsWith('data:')) {
-          dataLines.push(line.slice(5).replace(/^ /, ''));
-        }
-        // event:/id:/注释行与这些 API 无关，直接忽略。
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Tool-loop messages to Claude messages: consecutive tool results share one user message. */
+function toClaudeMessages(messages: AIToolLoopMessage[]): AiMessage[] {
+  const out: AiMessage[] = [];
+  for (const message of messages) {
+    if (message.role === 'assistant') {
+      const blocks: AiContentBlock[] = [];
+      if (message.content) blocks.push({ type: 'text', text: message.content });
+      for (const call of message.toolCalls) {
+        blocks.push({ type: 'tool_use', id: call.id, name: call.name, input: parseToolArguments(call.arguments) });
       }
-    }
-    // 冲刷解码器中剩余的多字节序列，EOF 残余按同样规则切分：覆盖未以换行
-    // 结尾的最后一行、裸 CR 分隔与末尾悬挂的 \r。
-    buffer += decoder.decode();
-    const residualLines = buffer.split(/\r\n|\r|\n/);
-    buffer = '';
-    for (const line of residualLines) {
-      if (line === '') {
-        flush();
-      } else if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).replace(/^ /, ''));
+      out.push({ role: 'assistant', content: blocks.length > 0 ? blocks : '(no content)' });
+    } else if (message.role === 'tool') {
+      const block: AiContentBlock = { type: 'tool_result', tool_use_id: message.toolCallId, content: message.content };
+      const last = out[out.length - 1];
+      if (last && last.role === 'user' && Array.isArray(last.content) && last.content.every((b) => b.type === 'tool_result')) {
+        last.content.push(block);
+      } else {
+        out.push({ role: 'user', content: [block] });
       }
+    } else {
+      out.push({ role: 'user', content: message.content });
     }
-    flush();
-  } catch (error) {
-    // 回调抛错（如网关错误帧）时主动取消底层流，避免错误帧后连接被挂起。
-    await reader.cancel().catch(() => {});
-    throw error;
-  } finally {
-    reader.releaseLock();
   }
-}
-
-export function extractOpenAiChatDelta(payload: string): string {
-  if (!payload || payload === '[DONE]') return '';
-  try {
-    const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> };
-    const delta = json.choices?.[0]?.delta?.content;
-    return typeof delta === 'string' ? delta : '';
-  } catch {
-    return '';
-  }
-}
-
-export function extractOpenAiResponsesDelta(payload: string): string {
-  try {
-    const json = JSON.parse(payload) as { type?: string; delta?: unknown };
-    if (json.type === 'response.output_text.delta' && typeof json.delta === 'string') return json.delta;
-    return '';
-  } catch {
-    return '';
-  }
-}
-
-export function extractClaudeDelta(payload: string): string {
-  try {
-    const json = JSON.parse(payload) as { type?: string; delta?: { type?: string; text?: string } };
-    if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta' && typeof json.delta.text === 'string') {
-      return json.delta.text;
-    }
-    return '';
-  } catch {
-    return '';
-  }
-}
-
-export function extractGeminiDelta(payload: string): string {
-  try {
-    const json = JSON.parse(payload) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> };
-    const parts = json.candidates?.[0]?.content?.parts;
-    if (!Array.isArray(parts)) return '';
-    return parts
-      .filter((p) => p && !p.thought && typeof p.text === 'string')
-      .map((p) => p.text as string)
-      .join('');
-  } catch {
-    return '';
-  }
-}
-
-/** 服务端未按 SSE 返回时，从整段 JSON 响应里提取文本（与 requestText 的解析保持一致）。 */
-function extractFullTextFromResponse(apiType: AIApiType, data: unknown): string {
-  if (apiType === 'openai-responses') {
-    const typed = data as OpenAIResponse;
-    if (typeof typed.output_text === 'string' && typed.output_text) return typed.output_text;
-    if (Array.isArray(typed.output)) {
-      return typed.output
-        .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
-        .map((part) => part?.text || '')
-        .join('');
-    }
-    return '';
-  }
-  if (apiType === 'claude') {
-    const blocks = (data as { content?: unknown }).content;
-    if (!Array.isArray(blocks)) return '';
-    return blocks
-      .map((b) => {
-        if (!b || typeof b !== 'object') return '';
-        const block = b as { type?: unknown; text?: unknown };
-        return block.type === 'text' && typeof block.text === 'string' ? block.text : '';
-      })
-      .join('');
-  }
-  if (apiType === 'gemini') {
-    const candidates = (data as { candidates?: unknown }).candidates;
-    if (!Array.isArray(candidates) || candidates.length === 0) return '';
-    const parts = (candidates[0] as { content?: { parts?: unknown } }).content?.parts;
-    if (!Array.isArray(parts)) return '';
-    return parts
-      .filter((p) => p && typeof p === 'object' && !(p as { thought?: boolean }).thought)
-      .map((p) => {
-        if (!p || typeof p !== 'object') return '';
-        const part = p as { text?: unknown };
-        return typeof part.text === 'string' ? part.text : '';
-      })
-      .join('');
-  }
-  const content = (data as { choices?: OpenAIResponseChoice[] }).choices?.[0]?.message?.content;
-  return typeof content === 'string' ? content : '';
-}
-
-function getStatusCodeMeaning(statusCode: number, language: string): string {
-  const meanings: Record<number, { zh: string; en: string }> = {
-    400: { zh: '请求参数错误', en: 'Bad Request' },
-    401: { zh: 'API密钥无效或已过期', en: 'Invalid or expired API key' },
-    403: { zh: '没有权限访问该资源', en: 'Forbidden - no permission' },
-    404: { zh: 'API端点或模型不存在', en: 'API endpoint or model not found' },
-    408: { zh: '请求超时', en: 'Request timeout' },
-    429: { zh: '请求过于频繁，已达到速率限制', en: 'Rate limit exceeded' },
-    500: { zh: '服务器内部错误', en: 'Internal server error' },
-    502: { zh: '网关错误，服务器暂时不可用', en: 'Bad Gateway' },
-    503: { zh: '服务暂时不可用，请稍后重试', en: 'Service unavailable' },
-    504: { zh: '网关超时', en: 'Gateway timeout' },
-  };
-  return meanings[statusCode]?.[language as 'zh' | 'en'] || (language === 'zh' ? '未知错误' : 'Unknown error');
-}
-
-function getErrorTypeFromStatus(statusCode: number): ConnectionTestResult['errorType'] {
-  if (statusCode === 401 || statusCode === 403) return 'auth';
-  if (statusCode === 408 || statusCode === 504) return 'timeout';
-  if (statusCode >= 500) return 'server';
-  if (statusCode >= 400) return 'unknown';
-  return 'unknown';
+  return out;
 }
 
 export class AIService {
-  private config: AIConfig;
   private language: string;
-  private static readonly ANALYSIS_MAX_ATTEMPTS = 3;
-  private static readonly ANALYSIS_MAX_TOKENS = 4096;
   private static readonly RERANKING_MAX_TOKENS = 4096;
   /** 库容不超过该数量时跳过词法召回，直接把全库交给 LLM 精选。 */
   private static readonly SELECTION_FULL_LIBRARY_LIMIT = 150;
@@ -430,37 +162,12 @@ export class AIService {
   /** LLM 精选最多返回的相关仓库数。 */
   private static readonly SELECTION_MAX_RESULTS = 20;
 
-  constructor(config: AIConfig, language: string = 'zh', private readonly redactDebugPayload = false) {
-    this.config = config;
-    this.language = language;
-  }
-
   /**
-   * Log AI request details at debug level (only logged when debug mode is on).
+   * All calls go through the server's /api/ai routes. The key and the model live on the
+   * server; the request purpose picks the model.
    */
-  private logAIRequestDebug(
-    startTime: number,
-    context: { apiType: string; model: string; configId: string },
-    result: { responseLength: number; finishReason?: string } | { error: string },
-    httpDetails?: {
-      url?: string;
-      requestHeaders?: Record<string, string>;
-      requestBody?: unknown;
-      responseHeaders?: Record<string, string>;
-      responseBody?: string;
-      status?: number;
-      /** 是否走 SSE 流式返回（流式调试日志使用）。 */
-      streamed?: boolean;
-    }
-  ): void {
-    if (logger.isDebugMode()) {
-      logger.debug('ai', 'AI request', {
-        ...context,
-        durationMs: Date.now() - startTime,
-        ...result,
-        ...(this.redactDebugPayload ? { status: httpDetails?.status } : (httpDetails || {})),
-      });
-    }
+  constructor(language: string = 'zh') {
+    this.language = language;
   }
 
   /**
@@ -480,77 +187,9 @@ export class AIService {
     return sanitized;
   }
 
-  private getApiType(): AIApiType {
-    return this.config.apiType || 'openai';
-  }
-
-  /**
-   * 直连模式安全守卫：禁止把 Authorization / x-api-key / URL key 通过明文
-   * HTTP 发往远端。仅本机或局域网地址（如 localhost、127.0.0.1、192.168.x.x 等）豁免
-   * （本地推理/局域网设备服务场景）。走后端代理时由代理负责，不在此检查。
-   */
-  private requireSecureDirectEndpoint(): void {
-    if (backend.isAvailable) return;
-    const base = this.config.baseUrl.trim();
-    if (!/^http:\/\//i.test(base)) return;
-    let host = base.replace(/^http:\/\//i, '').split('/')[0] || '';
-    try {
-      host = new URL(base).hostname;
-    } catch {
-      // 保留字符串解析结果
-    }
-    if (!isLocalOrLanHost(host)) {
-      throw new Error(this.language === 'zh'
-        ? 'AI 服务地址必须使用 HTTPS：为保护 API Key，仅 localhost / 127.0.0.1 等本机或局域网地址允许 HTTP。'
-        : 'The AI endpoint must use HTTPS: to protect your API key, plain HTTP is only allowed for local or LAN addresses (localhost / 127.0.0.1).');
-    }
-  }
-
-  private getOpenAIReasoningPayload(): { effort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' } | undefined {
-    const effort = this.config.reasoningEffort;
-    return effort ? { effort } : undefined;
-  }
-
-  /**
-   * reasoning.effort 'none' 只有 gpt-5.1 起的 OpenAI 推理模型接受；
-   * gpt-5、o 系列等会以 400 拒绝该值，此时应回退到用户配置的推理强度。
-   */
-  private supportsNoneReasoningEffort(): boolean {
-    return /^gpt-5\.[1-9]/i.test(this.config.model.trim());
-  }
-
-  private isDeepSeekModel(): boolean {
-    return this.getApiType() === 'deepseek';
-  }
-
-  private isDeepSeekReasonerModel(): boolean {
-    return this.isDeepSeekModel() && this.config.model.trim() === 'deepseek-reasoner';
-  }
-
-  /**
-   * Check if the model is a DeepSeek model with default thinking enabled (e.g. deepseek-v4-pro, deepseek-v4-flash).
-   * These models consume max_tokens for reasoning, leaving 0 tokens for content if max_tokens is too low.
-   * We need to explicitly disable thinking for these models.
-   */
-  private isDeepSeekThinkingModel(): boolean {
-    return this.isDeepSeekModel() && this.config.model.trim() !== 'deepseek-reasoner';
-  }
-
-  private isMiMoModel(): boolean {
-    return this.getApiType() === 'mimo';
-  }
-
-  private async extractErrorDetail(response: Response): Promise<string> {
-    try {
-      const text = await response.text();
-      try {
-        const errorBody = JSON.parse(text);
-        return typeof errorBody === 'object' ? JSON.stringify(errorBody) : String(errorBody);
-      } catch {
-        return text;
-      }
-    } catch {
-      return '';
+  private logRequest(startTime: number, purpose: AiPurpose, result: { responseLength: number; finishReason?: string } | { error: string }): void {
+    if (logger.isDebugMode()) {
+      logger.debug('ai', 'AI request', { purpose, durationMs: Date.now() - startTime, ...result });
     }
   }
 
@@ -560,397 +199,38 @@ export class AIService {
     temperature: number;
     maxTokens: number;
     signal?: AbortSignal;
-    purpose?: AIChatTextPurpose;
-    /** internal-json 默认携带 JSON response_format；端点 400 拒绝后由调用方以 false 重试。 */
-    jsonMode?: boolean;
-    /** 降级重试时同时省略内部步骤新增的 thinking 禁用字段（DeepSeek/MiMo 原有行为不受影响）。 */
-    omitThinking?: boolean;
+    purpose?: AiPurpose;
   }): Promise<AIChatTextResult> {
-    this.requireSecureDirectEndpoint();
+    const purpose = options.purpose ?? 'search';
     const startTime = Date.now();
-    const apiType = this.getApiType();
-    const model = this.config.model;
-    const configId = this.config.id;
-    const isInternalJson = options.purpose === 'internal-json';
-    const disableInternalThinking = isInternalJson && this.config.disableThinkingForInternalSteps !== false;
-    // 仅对支持 effort:'none' 的模型发送该值；其余模型恢复用户配置的推理强度，
-    // 避免内部 JSON 步骤发送无效参数被端点 400 拒绝。
-    const reasoning = disableInternalThinking && this.supportsNoneReasoningEffort()
-      ? { effort: 'none' as const }
-      : this.getOpenAIReasoningPayload();
-    const normalizeFinishReason = (raw: string | null | undefined): string | null => {
-      if (!raw) return null;
-      if (raw === 'max_tokens' || raw === 'MAX_TOKENS' || raw === 'max_output_tokens') return 'length';
-      return raw.toLowerCase();
-    };
-    let chatFinishReason: string | null = null;
-
-    if (apiType === 'openai' || apiType === 'openai-responses' || apiType === 'openai-compatible' || apiType === 'deepseek' || apiType === 'mimo') {
-      const messages = [
-        ...(options.system.trim()
-          ? [{ role: 'system', content: options.system }]
-          : []),
-        { role: 'user', content: options.user },
-      ];
-      const isDeepSeekReasoner = this.isDeepSeekReasonerModel();
-      const isDeepSeekThinking = this.isDeepSeekThinkingModel();
-      const isMiMoModel = this.isMiMoModel();
-
-      const requestBody = apiType === 'openai-responses'
-        ? {
-            model: this.config.model,
-            input: messages,
-            temperature: options.temperature,
-            max_output_tokens: options.maxTokens,
-            ...(isInternalJson && (options.jsonMode ?? true) ? { text: { format: { type: 'json_object' } } } : {}),
-            ...(reasoning ? { reasoning } : {}),
-            ...(isMiMoModel || isDeepSeekThinking ? { thinking: { type: 'disabled' } } : {}),
-          }
-        : {
-            model: this.config.model,
-            messages,
-            max_tokens: options.maxTokens,
-            ...(isInternalJson && (options.jsonMode ?? true) ? { response_format: { type: 'json_object' } } : {}),
-            ...(!isDeepSeekReasoner ? { temperature: options.temperature } : {}),
-            ...(!isDeepSeekReasoner && !isDeepSeekThinking && !isMiMoModel && reasoning && apiType !== 'openai-compatible' ? { reasoning } : {}),
-            ...(isMiMoModel || isDeepSeekThinking || (disableInternalThinking && !options.omitThinking && (apiType === 'openai-compatible' || apiType === 'deepseek' || apiType === 'mimo')) ? { thinking: { type: 'disabled' } } : {}),
-          };
-
-      let data: Record<string, unknown>;
-      // HTTP details captured in debug mode
-      const requestUrl = buildFinalApiUrl(this.config.baseUrl, apiType);
-      const requestHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': 'Bearer ***',
-      };
-      let responseHeaders: Record<string, string> | undefined;
-      let responseBodyPreview: string | undefined;
-      let responseStatus: number | undefined;
-
-      if (backend.isAvailable) {
-        // Note: backend proxy does not return HTTP-level details (headers, body preview).
-        // httpDetails will contain only url/requestHeaders/requestBody; response fields stay undefined.
-        data = await backend.proxyAIRequestWithFallback(this.config.id, this.config, requestBody, options.signal) as Record<string, unknown>;
-      } else {
-        const response = await fetch(requestUrl, {
-          // 直连携带 API Key，禁止跟随重定向以防凭据外泄。
-          redirect: 'error',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${this.config.apiKey}`,
-          },
-          body: JSON.stringify(requestBody),
-          signal: options.signal,
-        });
-        // Capture response headers
-        responseHeaders = {};
-        response.headers.forEach((v, k) => { responseHeaders![k] = v; });
-        responseStatus = response.status;
-        // Capture response body preview (clone to avoid consuming)
-        try {
-          const cloned = response.clone();
-          const text = await cloned.text();
-          if (text.length > 0) {
-            responseBodyPreview = text.length > 4000 ? text.slice(0, 4000) + '...[truncated]' : text;
-          }
-        } catch { /* body not readable */ }
-        if (!response.ok) {
-          const errorDetail = await this.extractErrorDetail(response);
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, {
-            url: requestUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-          });
-          throw new AIRequestError(
-            `AI API error: ${response.status} ${response.statusText}${errorDetail ? ` - ${errorDetail}` : ''}`,
-            response.status,
-            parseRetryAfterMs(response)
-          );
-        }
-        data = await response.json();
-      }
-
-      const httpDetails = logger.isDebugMode() ? {
-        url: requestUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-      } : undefined;
-
-      if (apiType === 'openai-responses') {
-        const typedData = data as OpenAIResponse;
-        const outputText = typedData.output_text;
-        const responsesFinishReason = typedData.status === 'incomplete' && typedData.incomplete_details?.reason === 'max_output_tokens' ? 'length' : normalizeFinishReason(typedData.status);
-        if (outputText) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: outputText.length }, httpDetails);
-          return { text: outputText, finishReason: responsesFinishReason };
-        }
-
-        const output = typedData.output;
-        if (Array.isArray(output)) {
-          const text = output
-            .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
-            .map((part) => part?.text || '')
-            .join('');
-          if (text) {
-            this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: text.length }, httpDetails);
-            return { text, finishReason: responsesFinishReason };
-          }
-        }
-        if (responsesFinishReason === 'length') {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: 0, finishReason: responsesFinishReason }, httpDetails);
-          return { text: '', finishReason: 'length' };
-        }
-      } else {
-        const typedData = data as { choices?: OpenAIResponseChoice[] };
-        const choices = typedData.choices;
-        chatFinishReason = normalizeFinishReason(choices?.[0]?.finish_reason);
-        const message = choices?.[0]?.message;
-        const content = message?.content;
-        if (content) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: content.length }, httpDetails);
-          return { text: content, finishReason: chatFinishReason };
-        }
-
-        // Only fall back to reasoning_content for the dedicated deepseek-reasoner model.
-        // Other DeepSeek models (e.g. deepseek-v4-flash, deepseek-v4-pro) may also return
-        // reasoning_content (the thinking chain), but we must not use it as the final answer.
-        const reasoningContent = message?.reasoning_content;
-        if (reasoningContent && isDeepSeekReasoner) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: reasoningContent.length }, httpDetails);
-          return { text: reasoningContent, finishReason: chatFinishReason };
-        }
-
-        if (!content && reasoningContent) {
-          logger.warn('ai', 'Model returned reasoning_content but empty content', { model, configId });
-        }
-      }
-
-      // 网关可能在 HTTP 200 body 里携带错误对象；先识别再按"无内容"兜底。
-      const gatewayError = extractGatewayErrorFromData(data);
-      if (gatewayError) {
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'gateway error body' }, httpDetails);
-        throw new AIRequestError(`AI gateway error: ${gatewayError.message}`, gatewayError.status, undefined, true);
-      }
-      if (logger.isDebugMode()) {
-        logger.warn('ai', 'No content received from AI service', {
-          model,
-          configId,
-          ...(this.redactDebugPayload ? {} : { data: stringifyDataForWarn(data) }),
-        });
-      }
-      if (chatFinishReason === 'length') {
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: 0, finishReason: chatFinishReason }, httpDetails);
-        return { text: '', finishReason: 'length' };
-      }
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, httpDetails);
-      throw new Error('No content received from AI service');
-    }
-
-    if (apiType === 'claude') {
-      const requestBody = {
-        model: this.config.model,
+    try {
+      const reply = await postMessages({
+        purpose,
         ...(options.system.trim() ? { system: options.system } : {}),
         messages: [{ role: 'user', content: options.user }],
+        maxTokens: options.maxTokens,
         temperature: options.temperature,
-        max_tokens: options.maxTokens,
-      };
-
-      let data: unknown;
-      // HTTP details captured in debug mode
-      const requestUrl = buildApiUrl(this.config.baseUrl, 'v1/messages');
-      const requestHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'x-api-key': '***',
-        'anthropic-version': '2023-06-01',
-      };
-      let responseHeaders: Record<string, string> | undefined;
-      let responseBodyPreview: string | undefined;
-      let responseStatus: number | undefined;
-
-      if (backend.isAvailable) {
-        // Note: backend proxy does not return HTTP-level details (headers, body preview).
-        data = await backend.proxyAIRequestWithFallback(this.config.id, this.config, requestBody, options.signal);
-      } else {
-        const response = await fetch(requestUrl, {
-          // 直连携带 API Key，禁止跟随重定向以防凭据外泄。
-          redirect: 'error',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'x-api-key': this.config.apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify(requestBody),
-          signal: options.signal,
-        });
-        // Capture response headers
-        responseHeaders = {};
-        response.headers.forEach((v, k) => { responseHeaders![k] = v; });
-        responseStatus = response.status;
-        // Capture response body preview
-        try {
-          const cloned = response.clone();
-          const text = await cloned.text();
-          if (text.length > 0) {
-            responseBodyPreview = text.length > 4000 ? text.slice(0, 4000) + '...[truncated]' : text;
-          }
-        } catch { /* body not readable */ }
-        if (!response.ok) {
-          const errorDetail = await this.extractErrorDetail(response);
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, {
-            url: requestUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-          });
-          throw new AIRequestError(
-            `AI API error: ${response.status} ${response.statusText}${errorDetail ? ` - ${errorDetail}` : ''}`,
-            response.status,
-            parseRetryAfterMs(response)
-          );
-        }
-        data = await response.json();
+      }, options.signal);
+      const finishReason = normalizeStopReason(reply.stopReason);
+      if (reply.text) {
+        this.logRequest(startTime, purpose, { responseLength: reply.text.length, finishReason: finishReason ?? undefined });
+        return { text: reply.text, finishReason };
       }
-
-      const httpDetails = logger.isDebugMode() ? {
-        url: requestUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-      } : undefined;
-
-      const claudeFinishReason = normalizeFinishReason((data as { stop_reason?: string }).stop_reason);
-      const contentBlocks = (data as { content?: unknown }).content;
-      if (Array.isArray(contentBlocks)) {
-        const text = contentBlocks
-          .map((b) => {
-            if (!b || typeof b !== 'object') return '';
-            const block = b as { type?: unknown; text?: unknown };
-            return block.type === 'text' && typeof block.text === 'string' ? block.text : '';
-          })
-          .join('');
-        if (text) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: text.length }, httpDetails);
-          return { text, finishReason: claudeFinishReason };
-        }
-      }
-      if (claudeFinishReason === 'length') {
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: 0, finishReason: claudeFinishReason }, httpDetails);
+      if (finishReason === 'length') {
+        this.logRequest(startTime, purpose, { responseLength: 0, finishReason });
         return { text: '', finishReason: 'length' };
       }
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, httpDetails);
+      this.logRequest(startTime, purpose, { error: 'empty response' });
       throw new Error('No content received from AI service');
+    } catch (error) {
+      if (error instanceof AIRequestError) this.logRequest(startTime, purpose, { error: `request failed (${error.status})` });
+      throw error;
     }
-
-    // gemini
-    const rawModel = this.config.model.trim();
-    const geminiModel = rawModel.startsWith('models/') ? rawModel.slice('models/'.length) : rawModel;
-    const prompt = options.system ? `${options.system}
-
-${options.user}` : options.user;
-    const requestBody = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
-      generationConfig: {
-        temperature: options.temperature,
-        maxOutputTokens: options.maxTokens,
-      },
-    };
-
-    let data: unknown;
-    // HTTP details captured in debug mode
-    const path = `v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`;
-    const urlObj = new URL(buildApiUrl(this.config.baseUrl, path));
-    urlObj.searchParams.set('key', this.config.apiKey);
-    const requestUrl = urlObj.toString();
-    // Mask API key in URL for debug logging
-    const maskedUrl = requestUrl.replace(/([?&]key=)[^&]+/, '$1***');
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    let responseHeaders: Record<string, string> | undefined;
-    let responseBodyPreview: string | undefined;
-    let responseStatus: number | undefined;
-
-    if (backend.isAvailable) {
-      // Note: backend proxy does not return HTTP-level details (headers, body preview).
-      data = await backend.proxyAIRequestWithFallback(this.config.id, this.config, requestBody, options.signal);
-    } else {
-      const response = await fetch(requestUrl, {
-        // 直连在 URL 携带 API Key，禁止跟随重定向以防凭据外泄。
-        redirect: 'error',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-        signal: options.signal,
-      });
-      // Capture response headers
-      responseHeaders = {};
-      response.headers.forEach((v, k) => { responseHeaders![k] = v; });
-      responseStatus = response.status;
-      // Capture response body preview
-      try {
-        const cloned = response.clone();
-        const text = await cloned.text();
-        if (text.length > 0) {
-          responseBodyPreview = text.length > 4000 ? text.slice(0, 4000) + '...[truncated]' : text;
-        }
-      } catch { /* body not readable */ }
-      if (!response.ok) {
-        const errorDetail = await this.extractErrorDetail(response);
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, {
-          url: maskedUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-        });
-        throw new AIRequestError(
-          `AI API error: ${response.status} ${response.statusText}${errorDetail ? ` - ${errorDetail}` : ''}`,
-          response.status,
-          parseRetryAfterMs(response)
-        );
-      }
-      data = await response.json();
-    }
-
-    const httpDetails = logger.isDebugMode() ? {
-      url: maskedUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-    } : undefined;
-
-    const candidates = (data as { candidates?: unknown }).candidates;
-    const geminiFinishReason = Array.isArray(candidates) && candidates.length > 0
-      ? normalizeFinishReason((candidates[0] as { finishReason?: string }).finishReason)
-      : null;
-    if (Array.isArray(candidates) && candidates.length > 0) {
-      const candidate = candidates[0] as { content?: { parts?: unknown }; finishReason?: string };
-      const parts = candidate.content?.parts;
-      if (Array.isArray(parts)) {
-        // Skip thought parts emitted by Gemini thinking models (e.g. gemini-2.5-pro)
-        const text = parts
-          .filter((p) => p && typeof p === 'object' && !(p as { thought?: boolean }).thought)
-          .map((p) => {
-            if (!p || typeof p !== 'object') return '';
-            const part = p as { text?: unknown };
-            return typeof part.text === 'string' ? part.text : '';
-          })
-          .join('');
-        if (text) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: text.length }, httpDetails);
-          return { text, finishReason: geminiFinishReason };
-        }
-      }
-    }
-    if (geminiFinishReason === 'length') {
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: 0, finishReason: geminiFinishReason }, httpDetails);
-      return { text: '', finishReason: 'length' };
-    }
-    this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, httpDetails);
-    throw new Error('No content received from AI service');
   }
 
   /**
-   * 流式文本生成（SSE）。仅支持直连模式；走后端代理时抛 AIStreamUnsupportedError，
-   * 由调用方决定降级。返回完整拼接文本；增量通过 onChunk 逐段回调。
+   * 流式文本生成（SSE，/api/ai/messages stream:true）。返回完整拼接文本；
+   * 增量通过 onChunk 逐段回调。
    */
   private async requestTextStream(options: {
     system: string;
@@ -959,241 +239,26 @@ ${options.user}` : options.user;
     maxTokens: number;
     signal?: AbortSignal;
     onChunk: (delta: string) => void;
+    purpose?: AiPurpose;
   }): Promise<string> {
-    if (backend.isAvailable) {
-      // /api/proxy/ai 会整体缓冲 JSON 响应，无法转发 SSE 帧。
-      throw new AIStreamUnsupportedError();
-    }
-    this.requireSecureDirectEndpoint();
-    if (this.isDeepSeekReasonerModel()) {
-      // deepseek-reasoner 的最终文本可能仅存在于 reasoning_content（思考链），
-      // 非流式路径对此有专门处理（且思考链不得用于其他 DeepSeek 模型）。流式
-      // 增量无法安全区分思考与正文，直接走阻塞路径以复用既有语义。
-      throw new AIStreamUnsupportedError();
-    }
-
-    const apiType = this.getApiType();
-    const model = this.config.model;
-    const configId = this.config.id;
+    const purpose = options.purpose ?? 'chat';
     const startTime = Date.now();
-
-    let requestUrl: string;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-    };
-    let body: unknown;
-    let extractDelta: (payload: string) => string;
-
-    if (apiType === 'claude') {
-      requestUrl = buildApiUrl(this.config.baseUrl, 'v1/messages');
-      headers['x-api-key'] = this.config.apiKey;
-      headers['anthropic-version'] = '2023-06-01';
-      body = {
-        model,
-        stream: true,
-        ...(options.system.trim() ? { system: options.system } : {}),
-        messages: [{ role: 'user', content: options.user }],
-        temperature: options.temperature,
-        max_tokens: options.maxTokens,
-      };
-      extractDelta = extractClaudeDelta;
-    } else if (apiType === 'gemini') {
-      const rawModel = this.config.model.trim();
-      const geminiModel = rawModel.startsWith('models/') ? rawModel.slice('models/'.length) : rawModel;
-      const prompt = options.system ? `${options.system}\n\n${options.user}` : options.user;
-      const urlObj = new URL(buildApiUrl(this.config.baseUrl, `v1beta/models/${encodeURIComponent(geminiModel)}:streamGenerateContent`));
-      urlObj.searchParams.set('alt', 'sse');
-      urlObj.searchParams.set('key', this.config.apiKey);
-      requestUrl = urlObj.toString();
-      body = {
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: options.temperature,
-          maxOutputTokens: options.maxTokens,
-        },
-      };
-      extractDelta = extractGeminiDelta;
-    } else if (apiType === 'openai' || apiType === 'openai-responses' || apiType === 'openai-compatible' || apiType === 'deepseek' || apiType === 'mimo') {
-      const messages = [
-        ...(options.system.trim() ? [{ role: 'system', content: options.system }] : []),
-        { role: 'user', content: options.user },
-      ];
-      const isDeepSeekReasoner = this.isDeepSeekReasonerModel();
-      const isDeepSeekThinking = this.isDeepSeekThinkingModel();
-      const isMiMoModel = this.isMiMoModel();
-      const reasoning = this.getOpenAIReasoningPayload();
-
-      body = apiType === 'openai-responses'
-        ? {
-            model,
-            input: messages,
-            stream: true,
-            temperature: options.temperature,
-            max_output_tokens: options.maxTokens,
-            ...(reasoning ? { reasoning } : {}),
-            ...(isMiMoModel || isDeepSeekThinking ? { thinking: { type: 'disabled' } } : {}),
-          }
-        : {
-            model,
-            messages,
-            stream: true,
-            max_tokens: options.maxTokens,
-            ...(!isDeepSeekReasoner ? { temperature: options.temperature } : {}),
-            ...(!isDeepSeekReasoner && !isDeepSeekThinking && !isMiMoModel && reasoning && apiType !== 'openai-compatible' ? { reasoning } : {}),
-            ...(isMiMoModel || isDeepSeekThinking ? { thinking: { type: 'disabled' } } : {}),
-          };
-      requestUrl = buildFinalApiUrl(this.config.baseUrl, apiType);
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-      extractDelta = apiType === 'openai-responses' ? extractOpenAiResponsesDelta : extractOpenAiChatDelta;
-    } else {
-      throw new AIStreamUnsupportedError();
-    }
-
-    // 请求头仅在 debug 日志中展示，密钥做掩码
-    const debugHeaders: Record<string, string> = { ...headers };
-    if (debugHeaders['Authorization']) debugHeaders['Authorization'] = 'Bearer ***';
-    if (debugHeaders['x-api-key']) debugHeaders['x-api-key'] = '***';
-    const maskedUrl = requestUrl.replace(/([?&]key=)[^&]+/, '$1***');
-
-    const response = await fetch(requestUrl, {
-      // 直连携带 API Key（URL 或请求头），禁止跟随重定向以防凭据外泄。
-      redirect: 'error',
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: options.signal,
-    });
-    if (!response.ok) {
-      const errorDetail = await this.extractErrorDetail(response);
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, {
-        url: maskedUrl, requestHeaders: debugHeaders, status: response.status,
-      });
-      throw new AIRequestError(
-        `AI API error: ${response.status} ${response.statusText}${errorDetail ? ` - ${errorDetail}` : ''}`,
-        response.status,
-        parseRetryAfterMs(response)
-      );
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType) {
-      // 缺失 Content-Type 时按内容嗅探：body 含 data: 帧走 SSE 解析，
-      // 否则按整段 JSON / 纯文本回退（此时 body 已整体读入，逐段回调）。
-      const raw = await response.text();
-      const ssePayloads: string[] = [];
-      let dataLines: string[] = [];
-      // SSE 行分隔符按规范接受 CRLF / LF / 裸 CR。
-      for (const line of raw.split(/\r\n|\r|\n/)) {
-        if (line === '') {
-          if (dataLines.length > 0) {
-            ssePayloads.push(dataLines.join('\n'));
-            dataLines = [];
-          }
-        } else if (line.startsWith('data:')) {
-          dataLines.push(line.slice(5).replace(/^ /, ''));
-        }
-      }
-      if (dataLines.length > 0) ssePayloads.push(dataLines.join('\n'));
-
-      if (ssePayloads.length > 0) {
-        // 只有至少一帧解出当前 API 的有效增量才算 SSE；普通文本里恰好出现
-        // "data:" 开头的行时继续走下方 JSON / 纯文本回退。
-        // 缺失 Content-Type 时，仅当整段 body 都由 SSE 帧行组成才视为真 SSE，
-        // 避免把纯文本回答里恰好出现的 data: 行误判为网关错误帧。
-        const isSseFramed = raw.split(/\r\n|\r|\n/).every((line) => line === '' || /^(?:(?:data|event|id|retry):|:)/.test(line));
-        if (isSseFramed) {
-          const gatewayError = extractGatewayErrorFromSsePayloads(ssePayloads);
-          if (gatewayError) {
-            this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'gateway error body' }, { url: maskedUrl });
-            throw new AIRequestError(`AI gateway error: ${gatewayError.message}`, gatewayError.status, undefined, true);
-          }
-        }
-        const deltas = ssePayloads
-          .map((payload) => extractDelta(payload))
-          .filter((delta) => delta !== '');
-        if (deltas.length > 0) {
-          let full = '';
-          for (const delta of deltas) {
-            full += delta;
-            options.onChunk(delta);
-          }
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: full.length }, { url: maskedUrl, streamed: true });
-          return full;
-        }
-      }
-
-      let text = '';
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-        text = extractFullTextFromResponse(apiType, parsed);
-      } catch {
-        text = raw;
-      }
-      if (!text) {
-        const gatewayError = extractGatewayErrorFromData(parsed);
-        if (gatewayError) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'gateway error body' }, { url: maskedUrl });
-          throw new AIRequestError(`AI gateway error: ${gatewayError.message}`, gatewayError.status, undefined, true);
-        }
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, { url: maskedUrl });
-        throw new Error('No content received from AI service');
-      }
-      options.onChunk(text);
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: text.length }, { url: maskedUrl, streamed: false });
-      return text;
-    }
-
-    if (!contentType.includes('text/event-stream')) {
-      // 服务端忽略 stream:true 时可能返回整段 JSON（application/json）或纯文本
-      // 回答：先按 JSON 解析提取结构化文本，失败则把原始文本作为一次性 chunk。
-      const raw = await response.text();
-      let text = '';
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-        text = extractFullTextFromResponse(apiType, parsed);
-      } catch {
-        text = raw;
-      }
-      if (!text) {
-        const gatewayError = extractGatewayErrorFromData(parsed);
-        if (gatewayError) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'gateway error body' }, { url: maskedUrl });
-          throw new AIRequestError(`AI gateway error: ${gatewayError.message}`, gatewayError.status, undefined, true);
-        }
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, { url: maskedUrl });
-        throw new Error('No content received from AI service');
-      }
-      options.onChunk(text);
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: text.length }, { url: maskedUrl, streamed: false });
-      return text;
-    }
-
-    if (!response.body) {
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'empty response body' }, { url: maskedUrl });
-      throw new Error('No content received from AI service (empty body)');
-    }
     let full = '';
-    await consumeSseStream(response.body, (payload) => {
-      const delta = extractDelta(payload);
-      if (delta) {
-        full += delta;
-        options.onChunk(delta);
-      } else {
-        // 网关可能在 HTTP 200 流里夹带错误帧；收到即抛出，不等流结束。
-        const gatewayError = extractGatewayErrorFromSsePayloads([payload]);
-        if (gatewayError) {
-          this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'gateway error body' }, { url: maskedUrl });
-          throw new AIRequestError(`AI gateway error: ${gatewayError.message}`, gatewayError.status, undefined, true);
-        }
-      }
-    });
-    this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: full.length }, { url: maskedUrl, streamed: true });
+    await streamMessages({
+      purpose,
+      ...(options.system.trim() ? { system: options.system } : {}),
+      messages: [{ role: 'user', content: options.user }],
+      maxTokens: options.maxTokens,
+      temperature: options.temperature,
+    }, (delta) => {
+      full += delta;
+      options.onChunk(delta);
+    }, options.signal);
     if (!full.trim()) {
+      this.logRequest(startTime, purpose, { error: 'empty stream' });
       throw new Error('No content received from AI service (stream)');
     }
+    this.logRequest(startTime, purpose, { responseLength: full.length });
     return full;
   }
 
@@ -1204,6 +269,7 @@ ${options.user}` : options.user;
     temperature: number;
     maxTokens: number;
     signal?: AbortSignal;
+    purpose?: AiPurpose;
   }): Promise<string> {
     const result = await this.requestTextResult(options);
     if (!result.text) throw new Error('No content received from AI service');
@@ -1224,10 +290,9 @@ ${options.user}` : options.user;
 
   /**
    * 带结束原因的文本生成。purpose='internal-json'（理解/规划/gate 等内部步骤）
-   * 时：思考被关闭、尽力携带 JSON response_format（端点 400 拒绝时自动降级
-   * 重试一次）、推理型模型的 max_tokens 抬到至少 4000；若 finishReason=length
-   * 且没有正文，自动以双倍 max_tokens 重试一次（追加“直接输出 JSON”提示）——
-   * 该重试发生在 AIService 内部，不计入调用方的工具/轮次预算。
+   * 时：若 finishReason=length 且没有可解析的 JSON 对象，自动以双倍 max_tokens
+   * 重试一次（追加“直接输出 JSON”提示）——该重试发生在 AIService 内部，不计入
+   * 调用方的工具/轮次预算。
    */
   async generateChatTextDetailed(options: {
     system: string;
@@ -1239,83 +304,31 @@ ${options.user}` : options.user;
   }): Promise<AIChatTextResult> {
     const purpose = options.purpose ?? 'answer';
     const isInternalJson = purpose === 'internal-json';
-    // 内部 JSON 步骤对推理模型常常先输出很长的思考再给 JSON；800 级别的上限
-    // 会在 JSON 中途截断（无法解析即等于整步失败），所以只对推理模型按 4000
-    // 兜底。非推理模型保持调用方的上限——部分 OpenAI 兼容端点会拒绝超过该
-    // 模型输出上限的请求（HTTP 400），无条件抬高会让理解/规划/gate 步骤失败。
-    const reasoningModelFloor = isInternalJson
-      && (this.config.reasoningEffort || /(?:r1|reason|think|glm-|qwen3|o\d|gpt-5|deepseek)/i.test(this.config.model));
-    const baseMaxTokens = reasoningModelFloor ? Math.max(options.maxTokens ?? 4_000, 4_000) : options.maxTokens ?? 4_000;
-    try {
-      const result = await this.requestTextResult({
+    const maxTokens = options.maxTokens ?? 4_000;
+    const result = await this.requestTextResult({
+      system: options.system,
+      user: options.user,
+      temperature: options.temperature ?? 0.2,
+      maxTokens,
+      signal: options.signal,
+      purpose: 'chat',
+    });
+    // finishReason=length 表示输出被截断；JSON 已完整时保留首次结果，
+    // 只有正文为空或无法解析成 JSON 对象时才重试一次。
+    if (isInternalJson && result.finishReason === 'length' && !isParseableJsonObject(result.text)) {
+      return await this.requestTextResult({
         system: options.system,
-        user: options.user,
+        user: `${options.user}\n\n直接输出 JSON，不要思考过程。`,
         temperature: options.temperature ?? 0.2,
-        maxTokens: baseMaxTokens,
+        maxTokens: maxTokens * 2,
         signal: options.signal,
-        purpose,
+        purpose: 'chat',
       });
-      // finishReason=length 表示输出被截断。推理模型可能只是尾部思考被截断而
-      // JSON 已完整，此时保留首次结果（重试可能失败或返回更差的内容）；只有
-      // 正文为空或无法解析成 JSON 对象时才重试一次。
-      if (isInternalJson && result.finishReason === 'length' && !isParseableJsonObject(result.text)) {
-        return await this.requestTextResult({
-          system: options.system,
-          user: `${options.user}\n\n直接输出 JSON，不要思考过程。`,
-          temperature: options.temperature ?? 0.2,
-          // 非推理模型只翻倍（跳到 4000 会被有输出上限的端点 400 拒绝）；
-          // 推理模型维持 4000 兜底，思考消耗仍可能吃掉翻倍后的配额。
-          maxTokens: reasoningModelFloor ? Math.max(baseMaxTokens * 2, 4_000) : baseMaxTokens * 2,
-          signal: options.signal,
-          purpose,
-        });
-      }
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      // 后端代理会把上游 400 包装成携带 statusCode 的普通 Error（见
-      // backendAdapter.throwTranslatedError），这里不能只认 AIRequestError，
-      // 否则代理路径上的 JSON 模式拒绝不会降级重试。
-      const status = error instanceof AIRequestError
-        ? error.status
-        : (error as { statusCode?: number } | null)?.statusCode;
-      if (
-        isInternalJson
-        && status === 400
-        && /response_format|text\.format|json_object|thinking/i.test(message)
-      ) {
-        // 仅当错误正文表明端点不支持 JSON 模式或拒绝 thinking 参数时，才降级为
-        // 普通请求重试一次；无效模型、超长上下文等其它 400 属于必然失败，
-        // 不重复发送。降级重试同时省略内部步骤新增的 thinking 字段，端点拒绝
-        // 未知参数时重试才能成功；DeepSeek/MiMo 原有的 thinking 行为不受影响。
-        return await this.requestTextResult({
-          system: options.system,
-          user: options.user,
-          temperature: options.temperature ?? 0.2,
-          maxTokens: baseMaxTokens,
-          signal: options.signal,
-          purpose,
-          jsonMode: false,
-          omitThinking: true,
-        });
-      }
-      // 端点允许的 max_tokens 低于推理模型的 4000 兜底时也会 400；用调用方原始
-      // 上限重试一次，避免理解/规划/gate 步骤整体失败。
-      if (isInternalJson && status === 400 && options.maxTokens !== undefined && baseMaxTokens > options.maxTokens) {
-        return await this.requestTextResult({
-          system: options.system,
-          user: options.user,
-          temperature: options.temperature ?? 0.2,
-          maxTokens: options.maxTokens,
-          signal: options.signal,
-          purpose,
-        });
-      }
-      throw error;
     }
+    return result;
   }
 
-  /** 流式版本的 generateChatText；不支持流式的通道抛 AIStreamUnsupportedError。 */
+  /** 流式版本的 generateChatText。 */
   async generateChatTextStream(options: {
     system: string;
     user: string;
@@ -1331,14 +344,13 @@ ${options.user}` : options.user;
       maxTokens: options.maxTokens ?? 4000,
       signal: options.signal,
       onChunk: options.onChunk,
+      purpose: 'chat',
     });
   }
 
   /**
-   * 原生 function calling（OpenAI chat completions 线格式）。与 generateChatText
-   * 共享 URL/鉴权/重定向守卫；只做单次请求——多轮对话由调用方把返回的
-   * tool_calls 与工具结果追加进 messages 后再次调用。端点不支持 tools 时抛
-   * AIToolCallUnsupportedError，调用方可降级到编排式循环。
+   * 原生工具调用（Claude tool use，purpose 'tools'）。只做单次请求——多轮对话由
+   * 调用方把返回的 toolCalls 与工具结果追加进 messages 后再次调用。
    */
   async generateWithTools(options: {
     system: string;
@@ -1348,233 +360,30 @@ ${options.user}` : options.user;
     maxTokens?: number;
     signal?: AbortSignal;
   }): Promise<{ content: string; toolCalls: AIToolCall[] }> {
-    const apiType = this.getApiType();
-    if (!supportsChatToolCalls(this.config)) {
-      throw new AIToolCallUnsupportedError(`API type "${apiType}" does not support native tool calling`);
-    }
-    this.requireSecureDirectEndpoint();
     const startTime = Date.now();
-    const model = this.config.model;
-    const configId = this.config.id;
-    const isDeepSeekReasoner = this.isDeepSeekReasonerModel();
-    const isDeepSeekThinking = this.isDeepSeekThinkingModel();
-    const isMiMoModel = this.isMiMoModel();
-    const reasoning = this.getOpenAIReasoningPayload();
-
-    const messages = [
-      ...(options.system.trim() ? [{ role: 'system', content: options.system }] : []),
-      ...options.messages.map((message): Record<string, unknown> => {
-        if (message.role === 'assistant') {
-          return {
-            role: 'assistant',
-            // content 为空（null/''）时直接省略该字段：显式 null 与空字符串在
-            // 部分网关与模型上会被拒绝；带 tool_calls 的消息省略 content 是
-            // 兼容性最好的线格式。
-            ...(message.content ? { content: message.content } : {}),
-            // 空 tool_calls 会与 content:null 组合成部分网关拒绝的请求体，直接省略。
-            ...(message.toolCalls.length > 0 ? {
-              tool_calls: message.toolCalls.map((call) => ({
-                id: call.id,
-                type: 'function',
-                function: { name: call.name, arguments: call.arguments },
-              })),
-            } : {}),
-          };
-        }
-        if (message.role === 'tool') {
-          return { role: 'tool', tool_call_id: message.toolCallId, content: message.content };
-        }
-        return { role: message.role, content: message.content };
-      }),
-    ];
-
-    const requestBody = {
-      model: this.config.model,
-      messages,
+    const reply = await postMessages({
+      purpose: 'tools',
+      ...(options.system.trim() ? { system: options.system } : {}),
+      messages: toClaudeMessages(options.messages),
       tools: options.tools.map((tool) => ({
-        type: 'function',
-        function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.parameters,
       })),
-      tool_choice: 'auto',
-      max_tokens: options.maxTokens ?? 4_000,
-      ...(!isDeepSeekReasoner ? { temperature: options.temperature ?? 0 } : {}),
-      ...(!isDeepSeekReasoner && !isDeepSeekThinking && !isMiMoModel && reasoning && apiType !== 'openai-compatible' ? { reasoning } : {}),
-      ...(isMiMoModel || isDeepSeekThinking ? { thinking: { type: 'disabled' } } : {}),
-    };
-
-    const requestUrl = buildFinalApiUrl(this.config.baseUrl, apiType);
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': 'Bearer ***',
-    };
-    let responseHeaders: Record<string, string> | undefined;
-    let responseBodyPreview: string | undefined;
-    let responseStatus: number | undefined;
-    let data: Record<string, unknown>;
-
-    if (backend.isAvailable) {
-      // 代理整体透传请求体（含 tools 字段），响应仍由客户端解析。
-      try {
-        data = await backend.proxyAIRequestWithFallback(this.config.id, this.config, requestBody, options.signal) as Record<string, unknown>;
-      } catch (error) {
-        // 代理错误不保留上游响应体：按状态码 + 消息识别端点拒绝 tools 的情形，
-        // 与直连路径同样转为 AIToolCallUnsupportedError，让调用方落回编排式循环。
-        const carrier = error as { status?: unknown; statusCode?: unknown };
-        const status = typeof carrier.status === 'number' ? carrier.status : carrier.statusCode;
-        const message = error instanceof Error ? error.message : String(error ?? '');
-        if ((status === 400 || status === 404 || status === 422) && /\btools?\b|function/i.test(message)) {
-          throw new AIToolCallUnsupportedError(`Endpoint rejected tool calling: ${message.slice(0, 200)}`);
-        }
-        throw error;
-      }
-    } else {
-      const response = await fetch(requestUrl, {
-        // 直连携带 API Key，禁止跟随重定向以防凭据外泄。
-        redirect: 'error',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal: options.signal,
-      });
-      responseHeaders = {};
-      response.headers.forEach((v, k) => { responseHeaders![k] = v; });
-      responseStatus = response.status;
-      try {
-        const cloned = response.clone();
-        const text = await cloned.text();
-        if (text.length > 0) {
-          responseBodyPreview = text.length > 4000 ? text.slice(0, 4000) + '...[truncated]' : text;
-        }
-      } catch { /* body not readable */ }
-      if (!response.ok) {
-        const errorDetail = await this.extractErrorDetail(response);
-        this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, {
-          url: requestUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-        });
-        const error = new AIRequestError(
-          `AI API error: ${response.status} ${response.statusText}${errorDetail ? ` - ${errorDetail}` : ''}`,
-          response.status,
-          parseRetryAfterMs(response),
-        );
-        // 网关不支持 tools 时通常以 4xx 拒绝并提及 tools/function：识别为
-        // 能力缺失而非瞬时故障，让调用方落回编排式循环。
-        if ((response.status === 400 || response.status === 404 || response.status === 422) && /\btools?\b|function/i.test(errorDetail)) {
-          throw new AIToolCallUnsupportedError(`Endpoint rejected tool calling: ${errorDetail.slice(0, 200)}`);
-        }
-        throw error;
-      }
-      data = await response.json();
-    }
-
-    const httpDetails = logger.isDebugMode() ? {
-      url: requestUrl, requestHeaders, requestBody, responseHeaders, responseBody: responseBodyPreview, status: responseStatus,
-    } : undefined;
-
-    const message = (data as { choices?: OpenAIResponseChoice[] }).choices?.[0]?.message;
-    const rawToolCalls = (message as { tool_calls?: unknown } | undefined)?.tool_calls;
-    const toolCalls = Array.isArray(rawToolCalls)
-      ? rawToolCalls.flatMap((call): AIToolCall[] => {
-          if (!call || typeof call !== 'object') return [];
-          const typed = call as { id?: unknown; function?: { name?: unknown; arguments?: unknown } };
-          const name = typeof typed.function?.name === 'string' ? typed.function.name : '';
-          if (!name) return [];
-          return [{
-            id: typeof typed.id === 'string' ? typed.id : `call_${name}`,
-            name,
-            arguments: typeof typed.function?.arguments === 'string' ? typed.function.arguments : '{}',
-          }];
-        })
-      : [];
-    const content = typeof message?.content === 'string' ? message.content : '';
-    if (!content && toolCalls.length === 0) {
-      this.logAIRequestDebug(startTime, { apiType, model, configId }, { error: 'request failed' }, httpDetails);
+      maxTokens: options.maxTokens ?? 4_000,
+      temperature: options.temperature ?? 0,
+    }, options.signal);
+    const toolCalls: AIToolCall[] = (reply.toolCalls ?? []).map((call) => ({
+      id: call.id,
+      name: call.name,
+      arguments: JSON.stringify(call.input ?? {}),
+    }));
+    if (!reply.text && toolCalls.length === 0) {
+      this.logRequest(startTime, 'tools', { error: 'empty response' });
       throw new Error('No content or tool calls received from AI service');
     }
-    this.logAIRequestDebug(startTime, { apiType, model, configId }, { responseLength: content.length + toolCalls.length }, httpDetails);
-    return { content, toolCalls };
-  }
-
-  async analyzeRepository(repository: Repository, readmeContent: string, customCategories?: string[], categoryHints?: string, signal?: AbortSignal): Promise<RepositoryAnalysisResult> {
-    const startTime = Date.now();
-    const configId = this.config.id;
-    const { full_name } = repository;
-    const owner = full_name.split('/')[0] || '';
-    const repo = full_name.split('/')[1] || full_name;
-    logger.info('ai', 'AI analysis started', { owner, repo, configId });
-
-    const prompt = this.config.useCustomPrompt && this.config.customPrompt
-      ? this.createCustomAnalysisPrompt(repository, readmeContent, customCategories, categoryHints)
-      : this.createAnalysisPrompt(repository, readmeContent, customCategories, categoryHints);
-
-    try {
-      const outputLanguageDirective = getOutputLanguageDirective(this.language);
-      const system = this.language === 'zh'
-        ? '你是一个专业的GitHub仓库分析助手。请严格按照用户指定的语言进行分析，无论原始内容是什么语言。请用中文简洁地分析仓库，提供实用的概述、分类标签和支持的平台类型。只输出合法JSON，不要输出思考过程、Markdown、代码块标记或任何额外文本。summary字段只能描述仓库功能，不得复述提示词、输出格式或“只输出JSON”等要求。'
-        : this.language === 'en'
-          ? 'You are a professional GitHub repository analysis assistant. Please strictly analyze in the language specified by the user, regardless of the original content language. Please analyze repositories concisely in English, providing practical overviews, category tags, and supported platform types. Only output valid JSON. Do not output thinking process, Markdown, code block markers, or any extra text. The summary field must describe repository functionality only; never restate the prompt, output format, or JSON-only requirements.'
-          : 'You are a professional GitHub repository analysis assistant. Analyze repositories concisely, providing practical overviews, category tags, and supported platform types. Only output valid JSON. Do not output thinking process, Markdown, code block markers, or any extra text. The summary field must describe repository functionality only; never restate the prompt, output format, or JSON-only requirements.'
-            + (outputLanguageDirective ? `\n\n${outputLanguageDirective}` : '');
-
-      let lastContent = '';
-      let lastInvalidReason = '';
-
-      for (let attempt = 1; attempt <= AIService.ANALYSIS_MAX_ATTEMPTS; attempt++) {
-        const content = await this.requestText({
-          system,
-          user: attempt === 1
-            ? prompt
-            : this.createAnalysisRetryPrompt(prompt, lastContent, lastInvalidReason),
-          temperature: attempt === 1 ? 0.3 : 0.1,
-          maxTokens: AIService.ANALYSIS_MAX_TOKENS,
-          signal,
-        });
-
-        const result = this.parseAIResponse(content);
-        if (result.isValid) {
-          logger.info('ai', 'AI analysis completed', {
-            owner,
-            repo,
-            configId,
-            attempts: attempt,
-            durationMs: Date.now() - startTime,
-          });
-          return {
-            summary: result.summary,
-            tags: result.tags,
-            platforms: result.platforms,
-          };
-        }
-
-        lastContent = content;
-        lastInvalidReason = result.invalidReason || (this.language === 'zh' ? '返回内容不符合要求' : 'Response did not meet requirements');
-
-        if (attempt < AIService.ANALYSIS_MAX_ATTEMPTS) {
-          logger.warn('ai', 'AI analysis response invalid, retrying', {
-            owner,
-            repo,
-            configId,
-            attempt,
-            invalidReason: lastInvalidReason,
-          });
-        }
-      }
-
-      throw new Error(this.language === 'zh'
-        ? `AI返回内容不符合要求，已重试${AIService.ANALYSIS_MAX_ATTEMPTS - 1}次：${lastInvalidReason}`
-        : `AI response did not meet requirements after ${AIService.ANALYSIS_MAX_ATTEMPTS - 1} retries: ${lastInvalidReason}`);
-    } catch (error) {
-      // 取消不是失败：用户主动停止时不要把 AbortError 记成分析失败。
-      if (!isAbortError(error) && !signal?.aborted) {
-        logger.errorFromError('ai', 'AI analysis failed', error, { configId, durationMs: Date.now() - startTime });
-      }
-      // 抛出错误，让调用方处理失败状态
-      throw error;
-    }
+    this.logRequest(startTime, 'tools', { responseLength: reply.text.length + toolCalls.length });
+    return { content: reply.text, toolCalls };
   }
 
   /**
@@ -1626,6 +435,7 @@ ${options.user}` : options.user;
       // 输出至少要容纳等长译文：按输入长度估算并留出 JSON 结构开销
       maxTokens: Math.min(16000, Math.max(1024, Math.ceil(totalChars * 2) + 512)),
       signal,
+      purpose: 'translate',
     });
 
     const parsed = this.parseTranslationResponse(raw, texts.length);
@@ -1712,6 +522,7 @@ ${body}
       temperature: 0.3,
       maxTokens: 4096,
       signal,
+      purpose: 'release-summary',
     });
 
     // 防御性处理：部分模型仍会用 ```markdown 或 ``` 包裹返回内容，
@@ -1830,315 +641,6 @@ ${body}
     // 返回 null 让调用方走词法兜底，避免把无效响应当成"无相关结果"呈现空态。
     if (ids.length > 0 && ranked.length === 0) return null;
     return ranked;
-  }
-
-  private createAnalysisRetryPrompt(originalPrompt: string, previousContent: string, invalidReason: string): string {
-    const previousOutput = this.sanitizeForPrompt(previousContent).slice(0, 1200);
-
-    if (this.language === 'zh') {
-      return `
-上一次 AI 输出不符合要求，原因：${invalidReason}
-
-请基于同一仓库信息重新生成结果。必须只输出一个合法 JSON 对象，不要 Markdown、代码块、解释或任何额外文本。
-
-强制要求：
-- summary 必须是仓库功能和用途的中文概述，不超过50字。
-- summary 禁止复述提示词、输出格式、字段名或“只输出JSON”等要求。
-- tags 必须是字符串数组。
-- platforms 只能从 ["mac","windows","linux","ios","android","docker","web","cli"] 中选择。
-
-原始分析任务：
-${originalPrompt}
-
-上一次错误输出（仅用于纠错，不要复述）：
-${previousOutput}
-      `.trim();
-    }
-
-    return `
-The previous AI output did not meet the requirements. Reason: ${invalidReason}
-
-Regenerate the result for the same repository information. Output exactly one valid JSON object. Do not output Markdown, code fences, explanations, or any extra text.
-
-Mandatory requirements:
-- summary must describe the repository functionality and purpose in no more than 50 words.
-- summary must not restate the prompt, output format, field names, or JSON-only requirements.
-- tags must be a string array.
-- platforms must only use ["mac","windows","linux","ios","android","docker","web","cli"].
-
-Original analysis task:
-${originalPrompt}
-
-Previous invalid output for correction only. Do not restate it:
-${previousOutput}
-    `.trim();
-  }
-
-  /**
-   * Repository Health 客观事实摘要，供 AI 分析提示复用。
-   *
-   * 只输出中性事实与保守观测，并显式标注「不是质量结论」：模型不应仅因为最近没有
-   * 提交就把成熟稳定项目判为劣质。主观评分属于插件（roadmap §4.3）。
-   * 分析路径拿不到 Release 列表，因此这里不包含 Release 相关事实，绝不猜测。
-   */
-  private formatRepositoryHealthFacts(repository: Repository): string {
-    const zh = this.language === 'zh';
-    const yes = zh ? '是' : 'yes';
-    const no = zh ? '否' : 'no';
-    const unknown = zh ? '未知' : 'unknown';
-    const toDate = (value?: string | null): string => {
-      if (!value || !Number.isFinite(Date.parse(value))) return unknown;
-      return new Date(value).toISOString().slice(0, 10);
-    };
-
-    const snapshot = deriveRepositoryHealthSnapshot(repository);
-    // 三态渲染：`undefined` 是「本地没有这个事实」，必须输出 unknown，
-    // 用 truthiness 会把它说成「否」，等于向模型伪造了一条事实。
-    const tri = (value: boolean | undefined): string =>
-      value === undefined ? unknown : value ? yes : no;
-    const status = [
-      `${zh ? '已归档' : 'archived'}=${tri(snapshot.archived)}`,
-      `${zh ? '已停用' : 'disabled'}=${tri(snapshot.disabled)}`,
-      `${zh ? 'Fork' : 'fork'}=${tri(snapshot.fork)}`,
-      `${zh ? '模板' : 'template'}=${tri(snapshot.isTemplate)}`,
-    ].join(', ');
-    const observations = snapshot.signals.length
-      ? snapshot.signals.map((signal) => signal.id).join(', ')
-      : (zh ? '无' : 'none');
-
-    return [
-      `${zh ? '状态' : 'Status'}: ${status}`,
-      `${zh ? '创建时间' : 'Created'}: ${toDate(repository.created_at)} | ${zh ? '最近推送' : 'Last push'}: ${toDate(repository.pushed_at)}`,
-      `License: ${repository.license || (zh ? '未声明' : 'none')} | ${zh ? 'Open Issues' : 'Open issues'}: ${repository.open_issues_count ?? unknown}`,
-      `${zh ? '保守观测' : 'Observations'}: ${observations}`,
-    ].join('\n');
-  }
-
-  private createCustomAnalysisPrompt(repository: Repository, readmeContent: string, customCategories?: string[], categoryHints?: string): string {
-    const repoInfo = `
-${this.language === 'zh' ? '仓库名称' : 'Repository Name'}: ${repository.full_name}
-${this.language === 'zh' ? '描述' : 'Description'}: ${this.sanitizeForPrompt(repository.description || (this.language === 'zh' ? '无描述' : 'No description'))}
-${this.language === 'zh' ? '编程语言' : 'Programming Language'}: ${repository.language || (this.language === 'zh' ? '未知' : 'Unknown')}
-${this.language === 'zh' ? 'Star数' : 'Stars'}: ${repository.stargazers_count}
-${this.language === 'zh' ? '主题标签' : 'Topics'}: ${repository.topics?.join(', ') || (this.language === 'zh' ? '无' : 'None')}
-${this.language === 'zh' ? '客观事实（中性，不代表质量结论）' : 'Objective facts (neutral, not a quality verdict)'}:
-${this.sanitizeForPrompt(this.formatRepositoryHealthFacts(repository))}
-
-${this.language === 'zh' ? 'README内容 (前2000字符)' : 'README Content (first 2000 characters)'}:
-${this.sanitizeForPrompt(readmeContent.substring(0, 2000))}
-    `.trim();
-
-    const categoriesInfo = customCategories && customCategories.length > 0 
-      ? `\n\n${this.language === 'zh' ? '可用的应用分类' : 'Available Application Categories'}: ${customCategories.join(', ')}`
-      : '';
-
-    let customPrompt = this.config.customPrompt || '';
-    customPrompt = customPrompt.replace(/\{REPO_INFO\}/g, repoInfo);
-    customPrompt = customPrompt.replace(/\{CATEGORIES_INFO\}/g, categoriesInfo);
-    customPrompt = customPrompt.replace(/\{LANGUAGE\}/g, this.language);
-    const sanitizedHints = this.sanitizeForPrompt(categoryHints || '');
-    if (customPrompt.includes('{CATEGORIES_HINT}')) {
-      customPrompt = customPrompt.replace(/\{CATEGORIES_HINT\}/g, sanitizedHints);
-    } else if (sanitizedHints) {
-      customPrompt = `${customPrompt.trim()}\n\n${this.language === 'zh'
-        ? '自定义分类提示：\n' + sanitizedHints
-        : 'Custom category hints:\n' + sanitizedHints}`;
-    }
-
-    const outputLanguageDirective = getOutputLanguageDirective(this.language);
-    return outputLanguageDirective ? `${customPrompt.trim()}\n\n${outputLanguageDirective}` : customPrompt;
-  }
-
-  private createAnalysisPrompt(repository: Repository, readmeContent: string, customCategories?: string[], categoryHints?: string): string {
-    const repoInfo = `
-${this.language === 'zh' ? '仓库名称' : 'Repository Name'}: ${repository.full_name}
-${this.language === 'zh' ? '描述' : 'Description'}: ${this.sanitizeForPrompt(repository.description || (this.language === 'zh' ? '无描述' : 'No description'))}
-${this.language === 'zh' ? '编程语言' : 'Programming Language'}: ${repository.language || (this.language === 'zh' ? '未知' : 'Unknown')}
-${this.language === 'zh' ? 'Star数' : 'Stars'}: ${repository.stargazers_count}
-${this.language === 'zh' ? '主题标签' : 'Topics'}: ${repository.topics?.join(', ') || (this.language === 'zh' ? '无' : 'None')}
-${this.language === 'zh' ? '客观事实（中性，不代表质量结论）' : 'Objective facts (neutral, not a quality verdict)'}:
-${this.sanitizeForPrompt(this.formatRepositoryHealthFacts(repository))}
-
-${this.language === 'zh' ? 'README内容 (前2000字符)' : 'README Content (first 2000 characters)'}:
-${this.sanitizeForPrompt(readmeContent.substring(0, 2000))}
-    `.trim();
-
-    if (this.language === 'zh') {
-      const categoriesLine = customCategories && customCategories.length > 0
-        ? `\n可用分类（tags 请优先从中选择）：${customCategories.join(', ')}`
-        : '';
-      const hintLine = categoryHints && categoryHints.length > 0
-        ? `\n\n自定义分类提示：以下是用户自定义的分类及其关键词。当仓库的名称、描述、Topics 或 README 明显与某个自定义分类的关键词相关时，请务必把该自定义分类名作为 tags 之一（仍保持中文，3-5个）。\n${this.sanitizeForPrompt(categoryHints)}`
-        : '';
-      return `
-请分析以下GitHub仓库信息，并只输出合法JSON对象。不要输出思考过程、Markdown、代码块标记、解释或任何额外文本。
-
-要求：
-- summary：中文概述，说明仓库的主要功能和用途，不超过50字。
-  禁止出现“我们被要求”“只输出JSON”“根据仓库信息”“summary/tags/platforms”等提示词复述。
-- tags：3-5个中文应用类型标签${customCategories && customCategories.length > 0 ? '，请优先从上方的可用分类中选择' : '，类似应用商店的分类，如：开发工具、Web应用、移动应用、数据库、AI工具等'}。${categoriesLine}${hintLine}
-- platforms：只能从 ["mac","windows","linux","ios","android","docker","web","cli"] 中选择；无法判断则为 []。
-
-输出格式：
-{
-  "summary": "中文概述",
-  "tags": ["标签1", "标签2", "标签3"],
-  "platforms": ["web", "cli"]
-}
-
-平台线索：
-Dockerfile/docker-compose=docker；CLI/命令行/终端=cli；浏览器/前端/API=web；iOS/Swift/Xcode=ios；Android/Kotlin/Gradle=android；macOS/Homebrew=mac；Windows/.exe/MSI=windows；Linux/systemd/apt=linux。
-
-仓库信息：
-${repoInfo}
-      `.trim();
-    }
-
-    const categoriesLine = customCategories && customCategories.length > 0
-      ? `\nAvailable categories (tags should prioritize these): ${customCategories.join(', ')}`
-      : '';
-    const hintLine = categoryHints && categoryHints.length > 0
-      ? `\n\nCustom category hint: The following are user-defined custom categories with their keywords. When the repository keywords, description, Topics, or README clearly relate to these keywords, include the custom category name as-is in tags (3-5 tags total).\n${this.sanitizeForPrompt(categoryHints)}`
-      : '';
-    const outputLanguageDirective = getOutputLanguageDirective(this.language);
-    const summaryRequirement = this.language === 'en'
-      ? 'A concise English overview explaining the main functionality and purpose, no more than 50 words.'
-      : 'A concise overview explaining the main functionality and purpose, no more than 50 words.';
-    const tagsRequirement = this.language === 'en'
-      ? `3-5 English application type tags${customCategories && customCategories.length > 0 ? ', please prioritize from the available categories above' : ', similar to app store categories such as: development tools, web apps, mobile apps, database, AI tools, etc.'}.`
-      : `3-5 application type tags${customCategories && customCategories.length > 0 ? ', please prioritize from the available categories above' : ', similar to app store categories such as: development tools, web apps, mobile apps, database, AI tools, etc.'}.`;
-    const summaryExample = this.language === 'en' ? 'English overview' : 'overview';
-
-    return `
-Please analyze the following GitHub repository information and only output a valid JSON object. Do not output thinking process, Markdown, code block markers, explanations, or any extra text.
-
-Requirements:
-- summary: ${summaryRequirement}
-  Do not include prompt restatements such as "asked to", "only output JSON", "based on repository information", or "summary/tags/platforms".
-- tags: ${tagsRequirement}${categoriesLine}${hintLine}
-- platforms: Must only choose from ["mac","windows","linux","ios","android","docker","web","cli"]; use [] if unable to determine.
-
-Output format:
-{
-  "summary": "${summaryExample}",
-  "tags": ["tag1", "tag2", "tag3"],
-  "platforms": ["web", "cli"]
-}
-
-Platform hints:
-Dockerfile/docker-compose=docker; CLI/command-line/terminal=cli; browser/frontend/API=web; iOS/Swift/Xcode=ios; Android/Kotlin/Gradle=android; macOS/Homebrew=mac; Windows/.exe/MSI=windows; Linux/systemd/apt=linux.
-
-Repository information:
-${repoInfo}${outputLanguageDirective ? `\n\n${outputLanguageDirective}` : ''}
-    `.trim();
-  }
-
-  private static readonly VALID_PLATFORMS = ['mac', 'windows', 'linux', 'ios', 'android', 'docker', 'web', 'cli'];
-
-  /**
-   * 校验 summary 是否为真实仓库概述。
-   * 命中提示词复述时直接判为无效，由上层触发重新生成。
-   */
-  private sanitizeSummary(raw: string): string | null {
-    if (!raw) return null;
-
-    const cleaned = raw
-      .trim()
-      .replace(/^["'“”]+|["'“”]+$/g, '')
-      .trim();
-
-    if (cleaned.length < 3) return null;
-
-    if (/^[\s.,;:!?，。；：！？、]+$/.test(cleaned)) return null;
-
-    const promptRestatementPatterns: RegExp[] = [
-      /^(?:我们|我)被要求(?:只?输出|分析|评估|总结|概述|介绍|提供|生成|返回)/i,
-      /^(?:根据|按照|基于)(?:给定的?)?(?:要求|提示|指示|任务|prompt|instruction)[，,。.\s]/i,
-      /^(?:根据|按照|基于)(?:给定的?)?(?:仓库|项目|repo|repository)(?:信息|描述)?[，,。.\s]*(?:需要|应|要)?(?:提供|输出|生成|返回)(?:\s*summary|\s*摘要|\s*tags?|\s*platforms?)/i,
-      /(?:^|[。！？.!?]\s*)(?:只输出|输出)\s*(?:一个)?(?:合法)?\s*JSON(?:对象)?(?:[，,。.!?]|$)/i,
-      /(?:不要|不应|不能)(?:输出)?(?:任何)?(?:思考过程|Markdown|代码块|解释|额外文本)/i,
-      /(?:需要|要求)(?:提供|输出|生成|返回)\s*(?:summary|摘要)[、,，\s]*(?:tags?)[、,，\s]*(?:和|与|and)?\s*platforms?/i,
-      /\bsummary\b[、,，/\s]*(?:tags?)[、,，/\s]*(?:和|与|and)?\s*platforms?\b/i,
-      /^(?:I|we)\s*(?:(?:have been|was|were|am)\s*)?(?:asked|instructed|told|requested)\b/i,
-      /^(?:based|according)\s+(?:on|to)\s+(?:the\s+)?(?:request|prompt|instruction|task)[.,:;\s]/i,
-      /^(?:based|according)\s+(?:on|to)\s+(?:the\s+)?(?:repository|repo|project)\s+(?:information|description)[.,:;\s]*(?:we\s+)?(?:need|should|must|will)?\s*(?:provide|output|generate|return)/i,
-      /(?:^|[.!?]\s*)(?:only\s+output|output\s+only)\s+(?:one\s+)?(?:valid\s+)?json(?:\s+object)?(?:[.,!?]|$)/i,
-      /(?:do\s+not|don't)\s+output\s+(?:any\s+)?(?:thinking|markdown|code\s+block|explanation|extra\s+text)/i,
-      /(?:need|required|asked)\s+to\s+(?:provide|output|generate|return)\s+summary/i,
-      /^(?:here|this)\s+(?:is|are)\s+(?:the|my|a)\s+(?:analysis|summary|result|overview)[.,:;\s]/i,
-      /^(?:analysis|summary|overview)\s*(?:result|of)?[.:]\s*/i,
-    ];
-
-    if (promptRestatementPatterns.some((pattern) => pattern.test(cleaned))) return null;
-
-    return cleaned;
-  }
-
-  private parseAIResponse(content: string): ParsedAIResponse {
-    try {
-      // Strip thinking tags that some models embed in the content field (e.g. <think>...</think>)
-      // Also handle truncated tags (dangling <think> without </think>) from token exhaustion
-      const cleaned = content
-        .trim()
-        .replace(/<think>[\s\S]*?<\/think>/gi, '')
-        .replace(/<think>[\s\S]*$/gi, '')
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-
-      const parsed = this.extractAndParseAIJson(cleaned);
-      if (parsed) {
-        const rawSummary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
-        const summary = this.sanitizeSummary(rawSummary);
-        const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((v) => typeof v === 'string').slice(0, 5) : [];
-        const platforms = Array.isArray(parsed.platforms)
-          ? Array.from(
-              new Set(
-                parsed.platforms
-                  .filter((v): v is string => typeof v === 'string')
-                  .map((v) => v.trim().toLowerCase())
-                  .filter((v) => AIService.VALID_PLATFORMS.includes(v))
-              )
-            ).slice(0, 8)
-          : [];
-
-        if (!summary) {
-          return {
-            summary: '',
-            tags,
-            platforms,
-            isValid: false,
-            invalidReason: rawSummary
-              ? (this.language === 'zh' ? 'summary包含提示词复述或不是仓库概述' : 'summary contains prompt restatement or is not a repository overview')
-              : (this.language === 'zh' ? 'summary缺失或为空' : 'summary is missing or empty'),
-          };
-        }
-
-        return {
-          summary,
-          tags,
-          platforms,
-          isValid: true,
-        };
-      }
-
-      return {
-        summary: '',
-        tags: [],
-        platforms: [],
-        isValid: false,
-        invalidReason: this.language === 'zh' ? '未返回合法JSON对象' : 'No valid JSON object returned',
-      };
-    } catch (error) {
-      logger.errorFromError('ai', 'Failed to parse AI response', error);
-      return {
-        summary: '',
-        tags: [],
-        platforms: [],
-        isValid: false,
-        invalidReason: this.language === 'zh' ? '解析AI返回失败' : 'Failed to parse AI response',
-      };
-    }
   }
 
   private extractAndParseAIJson(content: string): Record<string, unknown> | null {
@@ -2278,126 +780,6 @@ ${repoInfo}${outputLanguageDirective ? `\n\n${outputLanguageDirective}` : ''}
     return queries;
   }
 
-  async testConnection(): Promise<ConnectionTestResult> {
-    const timeoutMs = 30000;
-
-    try {
-      const base = new URL(this.config.baseUrl);
-      if (base.protocol !== 'http:' && base.protocol !== 'https:') {
-        return {
-          success: false,
-          errorType: 'unknown',
-          message: this.language === 'zh'
-            ? '无效的协议，请使用 http:// 或 https://'
-            : 'Invalid protocol, please use http:// or https://',
-        };
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const content = await this.requestText({
-          system: 'You are a connection test assistant.',
-          user: 'Reply with exactly one word: OK',
-          temperature: 0,
-          maxTokens: 2048,
-          signal: controller.signal,
-        });
-        if (content) {
-          return {
-            success: true,
-            message: this.language === 'zh' ? '连接成功' : 'Connection successful',
-          };
-        }
-        return {
-          success: false,
-          errorType: 'unknown',
-          message: this.language === 'zh' ? '未收到响应内容' : 'No content received',
-        };
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } catch (error) {
-      const err = error as Error;
-      const errorMessage = err.message || '';
-
-      const statusFailure = (statusCode: number) => {
-        const meaning = getStatusCodeMeaning(statusCode, this.language);
-        const errorType = getErrorTypeFromStatus(statusCode) ?? 'unknown';
-        const suggestions: Record<string, { zh: string; en: string }> = {
-          auth: {
-            zh: '请检查 API 密钥是否正确，或密钥是否已过期',
-            en: 'Please check if the API key is correct or expired',
-          },
-          timeout: {
-            zh: '请求超时，请稍后重试或检查网络连接',
-            en: 'Request timeout, please retry later or check network',
-          },
-          server: {
-            zh: '服务器端错误，请稍后重试或联系服务提供商',
-            en: 'Server error, please retry later or contact provider',
-          },
-          unknown: {
-            zh: '请检查 API 端点、模型名称和请求参数是否正确',
-            en: 'Please check API endpoint, model name and request parameters',
-          },
-        };
-
-        return {
-          success: false,
-          statusCode,
-          statusText: meaning,
-          errorType,
-          message: this.language === 'zh'
-            ? `HTTP ${statusCode} - ${meaning}\n建议：${suggestions[errorType].zh}`
-            : `HTTP ${statusCode} - ${meaning}\nSuggestion: ${suggestions[errorType].en}`,
-        };
-      };
-
-      // AIRequestError 已映射的状态码优先于消息关键词，避免限流错误被误报为网络/超时问题。
-      if (error instanceof AIRequestError && Number.isInteger(error.status)) {
-        return statusFailure(error.status);
-      }
-
-      // 处理超时错误（原生 AbortError 或普通错误消息）
-      if (err.name === 'AbortError' || errorMessage.includes('timeout') || errorMessage.includes('abort')) {
-        return {
-          success: false,
-          errorType: 'timeout',
-          message: this.language === 'zh'
-            ? `连接超时（${timeoutMs / 1000}秒）。请检查：1. 网络连接是否正常 2. API端点是否正确 3. 服务器是否响应缓慢`
-            : `Connection timeout (${timeoutMs / 1000}s). Please check: 1. Network connection 2. API endpoint 3. Server response time`,
-        };
-      }
-
-      // 普通错误：网络关键词先于消息里的状态码（如消息含 127.0.0.1 会被误读为状态码）。
-      if (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('Failed to fetch')) {
-        return {
-          success: false,
-          errorType: 'network',
-          message: this.language === 'zh'
-            ? '网络连接失败。请检查：1. 网络连接是否正常 2. API端点地址是否正确 3. 防火墙或代理设置'
-            : 'Network connection failed. Please check: 1. Network connection 2. API endpoint 3. Firewall or proxy settings',
-        };
-      }
-
-      // 普通错误消息中携带的三位状态码
-      const statusMatch = errorMessage.match(/(\d{3})/);
-      if (statusMatch) {
-        return statusFailure(parseInt(statusMatch[1], 10));
-      }
-
-      // 默认错误
-      return {
-        success: false,
-        errorType: 'unknown',
-        message: this.language === 'zh'
-          ? `连接失败：${errorMessage || '未知错误'}\n请检查 API 端点、API 密钥和模型名称是否正确`
-          : `Connection failed: ${errorMessage || 'Unknown error'}\nPlease check API endpoint, API key and model name`,
-      };
-    }
-  }
-
   /**
    * HyDE (Hypothetical Document Embedding) 查询预处理
    * 根据用户查询生成一个"理想仓库描述"，用该描述生成向量而非原始查询
@@ -2463,9 +845,7 @@ each facet <= 6 values, highPrecisionTerms <= 8.`;
       system,
       user,
       temperature: 0.1,
-      maxTokens: (this.config.reasoningEffort || this.getApiType() === 'gemini')
-        ? AIService.RERANKING_MAX_TOKENS
-        : 1200,
+      maxTokens: 1200,
       signal,
     });
     return this.parseVectorQueryAnalysis(content);
@@ -2584,9 +964,7 @@ each facet <= 6 values, highPrecisionTerms <= 8, lowConfidenceFacets <= 4.`;
       system,
       user,
       temperature: 0.1,
-      maxTokens: (this.config.reasoningEffort || this.getApiType() === 'gemini')
-        ? AIService.RERANKING_MAX_TOKENS
-        : 1200,
+      maxTokens: 1200,
       signal,
     });
     return this.parseVectorQueryAnalysis(content, { requireNonEmptyText: true });
@@ -2633,9 +1011,7 @@ Return:
       system,
       user,
       temperature: 0.1,
-      maxTokens: (this.config.reasoningEffort || this.getApiType() === 'gemini')
-        ? AIService.RERANKING_MAX_TOKENS
-        : 1200,
+      maxTokens: 1200,
       signal,
     });
     return this.parseGradedRerankResult(content, candidates);
@@ -2684,9 +1060,7 @@ Return:
       system,
       user,
       temperature: 0.1,
-      maxTokens: (this.config.reasoningEffort || this.getApiType() === 'gemini')
-        ? AIService.RERANKING_MAX_TOKENS
-        : 1200,
+      maxTokens: 1200,
       signal,
     });
     return this.parseGradedRerankResult(content, candidates);
@@ -2861,8 +1235,6 @@ Output only the JSON object.`;
     } catch (error) {
       if (signal?.aborted || isAbortError(error)) throw error;
       logger.warn('ai', 'Failed to generate repository search queries', {
-        model: this.config.model,
-        configId: this.config.id,
         error: error instanceof Error ? error.message : String(error),
       });
       return [];
@@ -2898,7 +1270,7 @@ Output only the JSON object.`;
     let intent = '';
 
     try {
-      logger.info('ai', 'Starting AI selection search', { apiType: this.getApiType(), model: this.config.model, configId: this.config.id, query });
+      logger.info('ai', 'Starting AI selection search', { query });
 
       // ① 查询扩展 + 意图复述
       onPhase?.('expanding');
@@ -2931,20 +1303,17 @@ Output only the JSON object.`;
       if (ranked === null) {
         // 响应缺失或格式非法：按词法得分序兜底
         onFallback?.('unparseable');
-        logger.warn('ai', 'AI selection returned unparseable result, falling back to lexical ranking', { configId: this.config.id, durationMs: Date.now() - startTime });
+        logger.warn('ai', 'AI selection returned unparseable result, falling back to lexical ranking', { durationMs: Date.now() - startTime });
         return this.performEnhancedBasicSearch(repositories, query, aiTerms)
           .slice(0, AIService.SELECTION_CANDIDATE_LIMIT);
       }
       if (ranked.length === 0) {
         // 模型明确判定无相关仓库：尊重该判断返回空态，但让调用方知道原因
         onFallback?.('ai_empty');
-        logger.info('ai', 'AI selection found no relevant repositories', { configId: this.config.id, durationMs: Date.now() - startTime });
+        logger.info('ai', 'AI selection found no relevant repositories', { durationMs: Date.now() - startTime });
         return [];
       }
       logger.info('ai', 'AI selection completed', {
-        apiType: this.getApiType(),
-        model: this.config.model,
-        configId: this.config.id,
         candidates: candidates.length,
         resultCount: ranked.length,
         durationMs: Date.now() - startTime,
@@ -2955,9 +1324,6 @@ Output only the JSON object.`;
       if (signal?.aborted || isAbortError(error)) throw error;
       onFallback?.('ai_failed');
       logger.warn('ai', 'AI selection failed, falling back to lexical ranking', {
-        apiType: this.getApiType(),
-        model: this.config.model,
-        configId: this.config.id,
         durationMs: Date.now() - startTime,
         error: error instanceof Error ? error.message : String(error),
       });
