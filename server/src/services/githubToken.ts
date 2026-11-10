@@ -2,7 +2,7 @@ import { readSecret } from '../secrets.js';
 
 /**
  * The GitHub token lives only on the server, in the environment:
- * GITHUB_TOKEN, or GITHUB_TOKEN_FILE (a path, for Docker secrets).
+ * GITHUB_TOKEN, or GITHUB_TOKEN_FILE (a path, for Docker secrets; the file wins when both are set).
  * It is never stored in the database and never sent to the browser.
  */
 let cached: string | null | undefined;

@@ -2,7 +2,7 @@ import { readSecret } from '../secrets.js';
 
 /**
  * Claude settings come from the environment only:
- *   ANTHROPIC_API_KEY, or ANTHROPIC_API_KEY_FILE (a path, for Docker secrets)
+ *   ANTHROPIC_API_KEY, or ANTHROPIC_API_KEY_FILE (a path, for Docker secrets; the file wins when both are set)
  *   CLAUDE_MODEL_BULK  (default claude-haiku-5-5)   summaries, tags, search, translate
  *   CLAUDE_MODEL_CHAT  (default claude-sonnet-5-5)  chat and tools
  *   AI_SPEND_CONFIRM_USD (default 2.00)

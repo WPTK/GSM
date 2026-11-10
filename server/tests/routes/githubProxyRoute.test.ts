@@ -76,6 +76,29 @@ describe('GitHub proxy routes', () => {
     }
   });
 
+  it('GITHUB_TOKEN_FILE wins over GITHUB_TOKEN when both are set', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-token-'));
+    const file = path.join(dir, 'token');
+    fs.writeFileSync(file, 'file-token\n');
+    process.env.GITHUB_TOKEN_FILE = file;
+    resetGithubTokenForTests();
+    try {
+      await request(createTestApp()).post('/api/proxy/github/user').send({ method: 'GET' }).expect(200);
+      expect(proxyRequestMock.mock.calls[0][0].headers.Authorization).toBe('Bearer file-token');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an unreadable GITHUB_TOKEN_FILE is missing even when GITHUB_TOKEN is set', async () => {
+    process.env.GITHUB_TOKEN_FILE = path.join(os.tmpdir(), 'gsm-no-such-token-file');
+    resetGithubTokenForTests();
+    await request(createTestApp())
+      .post('/api/proxy/github/user')
+      .send({ method: 'GET' })
+      .expect(400, { error: 'GitHub token not configured', code: 'GITHUB_TOKEN_NOT_CONFIGURED' });
+  });
+
   it('answers 400 GITHUB_TOKEN_NOT_CONFIGURED when no token is configured on the server', async () => {
     delete process.env.GITHUB_TOKEN;
     resetGithubTokenForTests();

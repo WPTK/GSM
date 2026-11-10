@@ -7,25 +7,22 @@ export type RequiredSecret = (typeof REQUIRED_SECRETS)[number];
 type Env = Record<string, string | undefined>;
 
 /**
- * Read one secret from `NAME`, else from the file named by `NAME_FILE` (trimmed).
- * An unreadable or empty file counts as missing. Neither the path nor the value is ever logged.
+ * Read one secret. When `NAME_FILE` is set and non-empty, the file wins over `NAME`: its trimmed
+ * contents are the value. If the file is unreadable or empty the secret counts as missing; there is
+ * no fallback to the plain variable (a broken secret mount must fail loudly, not run on a stale
+ * value). Without `NAME_FILE`, `NAME` is used. Neither the path nor the value is ever logged.
  */
 export function readSecret(name: string, env: Env = process.env): string | null {
-  const direct = env[name]?.trim();
-  if (direct) return direct;
-
   const file = env[`${name}_FILE`]?.trim();
   if (file) {
     try {
-      const fromFile = fs.readFileSync(file, 'utf8').trim();
-      if (fromFile) return fromFile;
+      return fs.readFileSync(file, 'utf8').trim() || null;
     } catch {
-      // Unreadable file = missing; the path is not logged.
+      return null; // Unreadable file = missing; the path is not logged.
     }
   }
-  return null;
+  return env[name]?.trim() || null;
 }
-
 /** Names (only) of the required secrets that are not set. */
 export function missingSecrets(env: Env = process.env): RequiredSecret[] {
   return REQUIRED_SECRETS.filter((name) => readSecret(name, env) === null);

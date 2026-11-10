@@ -60,6 +60,22 @@ describe('preflight: required secrets', () => {
         err.mockRestore();
       }
     });
+    it(`${name}_FILE wins over ${name} when both are set`, () => {
+      const file = path.join(dir, `${name}.txt`);
+      fs.writeFileSync(file, 'value-from-file\n');
+      const env = { ...FAKE, [`${name}_FILE`]: file };
+      expect(readSecret(name, env)).toBe('value-from-file');
+    });
+
+    it(`an unreadable or empty ${name}_FILE is missing even when ${name} is set (no fallback)`, () => {
+      const empty = path.join(dir, 'empty.txt');
+      fs.writeFileSync(empty, '\n');
+      for (const file of [empty, path.join(dir, 'nope.txt')]) {
+        const env = { ...FAKE, [`${name}_FILE`]: file };
+        expect(readSecret(name, env)).toBeNull();
+        expect(missingSecrets(env)).toEqual([name]);
+      }
+    });
   }
 
   it('names every missing variable in one line', () => {

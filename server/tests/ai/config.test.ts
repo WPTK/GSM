@@ -27,6 +27,17 @@ describe('claude config', () => {
     expect(getAnthropicKey()).toBe(SECRET);
   });
 
+  it('ANTHROPIC_API_KEY_FILE wins over ANTHROPIC_API_KEY; an unreadable file is missing, not a fallback', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gsm-key-')), 'key');
+    fs.writeFileSync(file, `${SECRET}\n`);
+    process.env.ANTHROPIC_API_KEY = 'plain-variable-value-000000';
+    process.env.ANTHROPIC_API_KEY_FILE = file;
+    expect(getAnthropicKey()).toBe(SECRET);
+    resetClaudeConfigForTests();
+    process.env.ANTHROPIC_API_KEY_FILE = `${file}.missing`;
+    expect(getAnthropicKey()).toBeNull();
+  });
+
   it('keySuffix returns only the last 4 characters', () => {
     process.env.ANTHROPIC_API_KEY = SECRET;
     expect(keySuffix()).toBe('7f3a');
