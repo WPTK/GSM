@@ -18,6 +18,8 @@ grep.app
 [link-outs]
 # Shown to the user as links; the app never fetches them.
 zread.ai
+# Source URL recorded in server/src/ai/pricing.json (the pricing page the rates were copied from).
+platform.claude.com
 
 [namespaces-and-library-strings]
 # XML namespaces and URLs embedded in third-party library code or CSS.
@@ -40,17 +42,11 @@ query-string.invalid
 localhost
 127.0.0.1
 
-[pending-phase-3]
-# AI provider preset hosts, to be replaced by a server-side list.
+[pending-phase-6]
+# Embedding and vector-search provider hosts, still named in the MCP embedding code
+# (server/src/mcp/provider.ts) until Phase 6 replaces it.
 api.openai.com
-api.deepseek.com
 api.cohere.com
 generativelanguage.googleapis.com
 api.siliconflow.cn
-api.xiaomimimo.com
-token-plan-cn.xiaomimimo.com
-integrate.api.nvidia.com
-
-[pending-phase-6]
-# Vector-search provider hosts.
 github-stars-vectorize.your-name.workers.dev

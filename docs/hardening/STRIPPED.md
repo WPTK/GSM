@@ -82,8 +82,33 @@ Added:
   limits equal).
 - `github.com/.../blob/...` image links are rewritten to `/raw/` so they load through `/api/img`.
 
-Known limitations, deferred to Phase 3 (AI):
+Known limitation carried to Phase 3, now closed there: AI provider keys in browser storage (see Phase 3 below). The
+"include keys" backup toggle still exists by owner decision; see the Phase 3 note on what it covers.
 
-- AI provider configs (`aiConfigs`) still hold their API keys in browser storage. That is outside this stream's scope and needs a server-held-key design.
-- Backup export with "include keys" still carries AI and embedding keys.
-- Locale keys left unused by the removals are not pruned here beyond what Stream C did.
+## Phase 3 (Claude on the server)
+
+Claude is the only AI provider. The Anthropic key and both model IDs live on the server (`ANTHROPIC_API_KEY`, `CLAUDE_MODEL_BULK`, `CLAUDE_MODEL_CHAT`); the browser sends a `purpose` and never a key, base URL or model. Format: item -> files -> reason.
+
+Client:
+
+- Provider transport and provider presets -> `AIService` in `src/services/aiService.ts` now posts to `/api/ai/messages` only (OpenAI, Gemini, Claude-direct, reasoning-effort and base-URL code paths deleted) -> one provider, one server-held key.
+- Bulk analysis engine -> `src/services/aiAnalysisOptimizer.ts(.test)`, `src/services/aiAnalysisHelper.ts` -> replaced by `src/services/claudeJobs.ts` (estimate, confirm, job, poll, cancel on the server). Pause/resume is gone: the server has no pause.
+- AI config UI and logic -> `AIConfigPanel(.test)`, `src/constants/aiCapabilities.ts`, `useAIConfigActions.ts`, the `AIConfig` type and its store fields and setters, the AI parts of `autoSync.ts`, `proxyAI*`/`syncAIConfigs`/`fetchAIConfigs` in `backendAdapter.ts` -> nothing to configure in the browser.
+- Native tool-call capability probe and the "endpoint rejects tools" fallback -> `isAIToolCallUnsupportedError`, `supportsChatToolCalls`, the "supports tool calls" flag -> Claude always supports tool use.
+- Added -> `settings/ClaudePanel.tsx` (status, key suffix, both models, cache-skipped note, editable custom analysis prompt via `PUT /api/ai/settings`), `CreditLowBanner` (app-level), `useClaudeStatus`, `useClaudeSpendConfirm`, `claudeClient.ts`, `claudeJobs.ts`, `claudeContract.ts`. Every AI call site is gated on `useClaudeStatus().connected`.
+- Persist version 18 -> `aiConfigs` and `activeAIConfig` are in `REMOVED_PERSISTED_KEYS` and dropped by the v17 to v18 migration, so no provider key stays in browser state.
+- Backup export -> the in-browser export no longer writes `aiConfigs` (nothing to write). Importing an old backup that contains `aiConfigs` only shows it in the preview; it is not applied to the store. The "include keys" toggle (`IncludeKeysToggle`) is kept as is by owner decision; with no keys in the browser it now only records the flag in the file. A test checks the export holds no `aiConfigs` or `apiKey` even with the toggle on.
+- Locales -> about 12 new `claudePanel.*`, `creditBanner.*`, `spendConfirm.*` keys with real translations in all 10 locales; the removed AI-config keys are deleted. No orange in any new color.
+- Egress allowlist -> `[pending-phase-3]` removed; `api.deepseek.com`, `api.xiaomimimo.com`, `token-plan-cn.xiaomimimo.com`, `integrate.api.nvidia.com` dropped; `api.openai.com`, `api.cohere.com`, `generativelanguage.googleapis.com`, `api.siliconflow.cn` moved to `[pending-phase-6]` because `server/src/mcp/provider.ts` (embeddings) still names them; `platform.claude.com` added under link-outs (source URL recorded in `pricing.json`, never fetched).
+
+Server:
+
+- removed POST /api/proxy/ai (+ helpers) and /api/configs/ai* routes.
+- NOT removed per owner: the `ai_configs` table, the `activeAIConfig` setting, and sync masking/import of `ai_configs`; the server just stops reading and serving them. Old saved AI configs are never deleted.
+- v5 adds `ai_jobs`, `ai_job_items` and `ai.customAnalysisPrompt` (copied read-only from the active config).
+- `ai.state` is excluded from /api/settings and sync.
+- repositories upsert overwrites AI fields only when the incoming `analyzed_at` is newer.
+- startup refuses a `CLAUDE_MODEL_BULK` with no `pricing.json` entry.
+- estimates are kept in memory for 30 minutes (client: `AI_ESTIMATE_NOT_FOUND` => re-estimate).
+
+Backup export masking (for the owner): `POST /api/sync/export` always masks `ai_configs` keys (`***` plus the last 4 characters, ciphertext deleted) whatever the toggle says, so the toggle text "Includes keys for AI configs and the backend server" no longer matches what the server does, and the last four key characters still leave the server in an export.
