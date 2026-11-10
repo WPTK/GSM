@@ -493,7 +493,7 @@
     "external-web-search-and-fetch": "外部網頁搜尋與抓取",
     "disabled-by-default-the-current-version-does-not": "預設為關閉；當前版本不會將其暴露為工具。",
     "tool-loop-mode-experimental": "工具循環模式（實驗性）",
-    "evidence-gathering-is-driven-by-native-function": "取證改為由模型原生 function calling 驅動；僅對勾選了「支援工具呼叫」的問答模型生效，不支援時自動回退。",
+    "evidence-gathering-is-driven-by-native-function": "取證由模型原生 function calling 驅動，透過後端 Claude 連線執行。",
     "readme-fast-path": "README 快速路徑",
     "for-simple-usage-overview-or-deployment-questions-ans": "簡單的使用、簡介或部署問題直接讀根 README 作答，跳過多輪檢索；深入/不限檔位自動關閉。",
     "streaming-answers": "流式回答",
@@ -531,7 +531,9 @@
     "prompt-saved": "分析提示詞已儲存",
     "prompt-save-failed": "無法儲存分析提示詞",
     "translation-claude": "Claude 翻譯",
-    "translation-claude-help": "Claude 翻譯品質通常較高，但速度較慢並會消耗 API 額度。它使用伺服器上的 Claude 連線。"
+    "translation-claude-help": "Claude 翻譯品質通常較高，但速度較慢並會消耗 API 額度。它使用伺服器上的 Claude 連線。",
+    "prompt-load-failed": "無法讀取已儲存的分析提示詞，編輯已鎖定以免儲存時覆蓋。",
+    "prompt-retry": "重試"
   },
   "creditBanner": {
     "title": "Claude 餘額不足",
@@ -638,7 +640,6 @@
   "dataManagementPanel": {
     "repositories": "倉儲資料",
     "releases": "Release數據",
-    "ai-configs": "AI配置",
     "categories": "分類設定",
     "asset-filters": "資源過濾器",
     "discovery-data": "發現頁數據",
@@ -668,7 +669,6 @@
     "export-failed-please-try-again": "匯出失敗，請重試",
     "invalid-backup-file-format": "無效的備份檔案格式",
     "failed-to-parse-file-ensure-it-is-a-valid-json-f": "解析文件失敗，請確保是有效的JSON文件",
-    "data-imported-successfully-some-secrets-were-mas": "數據導入成功。部分密鑰已屏蔽，請在對應配置中重新輸入。",
     "data-imported-successfully": "數據導入成功",
     "import-data": "導入數據",
     "import-failed-please-try-again": "導入失敗，請重試",
@@ -754,7 +754,6 @@
     "export-date": "匯出日期:",
     "version": "版本:",
     "included-data": "包含的數據:",
-    "warning-some-secrets-in-this-backup-are-masked-p": "警告：此備份中的部分金鑰已被封鎖。導入後請在對應配置中重新輸入密鑰。",
     "importing": "導入中…",
     "merge-import": "合併導入",
     "replace-import": "覆蓋導入"
@@ -846,7 +845,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "備份/匯出時包含金鑰",
-    "includes-keys-for-ai-configs": "包含 AI 設定與後端伺服器的金鑰"
+    "includes-keys-for-ai-configs": "包含後端伺服器的金鑰"
   },
   "mcpSettingsPanel": {
     "copied": "已複製",

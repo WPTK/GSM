@@ -80,7 +80,7 @@
     "customized": "Индивидуальные",
     "ai-analysis-failed-click-ai-button-to-retry": "Анализ ИИ не удался, нажмите кнопку ИИ, чтобы провести повторный анализ.",
     "failed": "Анализ не удался",
-    "ai-analysis-failed-please-check-ai-configuration": "Анализ AI не удался. Проверьте конфигурацию AI и сетевое соединение.",
+    "ai-analysis-failed-please-check-ai-configuration": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках и сеть.",
     "analyzed-on": "проанализировано в",
     "ai-analyzed": "ИИ проанализировал",
     "platforms": "Поддерживаемые платформы:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "Анализ ИИ остановлен! Успех: {{successCount}}, Ошибка: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "Анализ ИИ завершен! Успех: {{successCount}}, Ошибка: {{failedCount}}",
     "bulk-ai-analysis-failed": "Пакетный анализ ИИ не удался",
-    "ai-analysis-failed-please-check-ai-configuration": "Анализ AI не удался, проверьте конфигурацию AI и сетевое соединение."
+    "ai-analysis-failed-please-check-ai-configuration": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках и сеть."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "Токен GitHub не найден. Войдите снова.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "Повторно проанализируйте и подтвердите",
     "ai-re-analysis-completed": "Повторный анализ ИИ завершен!",
     "ai-analysis-completed": "Анализ ИИ завершен!",
-    "ai-analysis-failed-please-check-ai-configuration": "Анализ AI не удался. Проверьте конфигурацию AI и сетевое соединение.",
-    "ai-analysis-failed-please-check-ai-configuration-2": "Анализ AI не удался, проверьте конфигурацию AI и сетевое соединение.",
+    "ai-analysis-failed-please-check-ai-configuration": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках и сеть.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках и сеть.",
     "vector-search-is-not-ready-please-enable-vector": "Поиск векторов не готов: сначала включите поиск векторов в настройках и завершите индексацию.",
     "no-similar-repositories-found": "Подобных репозиториев не обнаружено.",
     "failed-to-find-similar-repositories-please-check": "Не удалось найти похожие склады, проверьте настройки векторного поиска.",

@@ -80,7 +80,7 @@
     "customized": "맞춤형",
     "ai-analysis-failed-click-ai-button-to-retry": "AI 분석 실패, AI 버튼을 눌러 재분석하세요",
     "failed": "분석 실패",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. AI 구성 및 네트워크 연결을 확인하세요.",
+    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. 설정에서 Claude 연결과 네트워크를 확인하세요.",
     "analyzed-on": "에서 분석됨",
     "ai-analyzed": "AI 분석",
     "platforms": "지원되는 플랫폼:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "AI 분석이 중지되었습니다! 성공: {{successCount}}, 실패: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "AI 분석 완료! 성공: {{successCount}}, 실패: {{failedCount}}",
     "bulk-ai-analysis-failed": "일괄 AI 분석 실패",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. AI 구성과 네트워크 연결을 확인해주세요."
+    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. 설정에서 Claude 연결과 네트워크를 확인하세요."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "GitHub 토큰을 찾을 수 없습니다. 다시 로그인하세요.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "재분석 및 확인",
     "ai-re-analysis-completed": "AI 재분석 완료!",
     "ai-analysis-completed": "AI 분석 완료!",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. AI 구성 및 네트워크 연결을 확인하세요.",
-    "ai-analysis-failed-please-check-ai-configuration-2": "AI 분석에 실패했습니다. AI 구성과 네트워크 연결을 확인해주세요.",
+    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. 설정에서 Claude 연결과 네트워크를 확인하세요.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "AI 분석에 실패했습니다. 설정에서 Claude 연결과 네트워크를 확인하세요.",
     "vector-search-is-not-ready-please-enable-vector": "벡터 검색이 준비되지 않았습니다. 먼저 설정에서 벡터 검색을 활성화하고 색인 생성을 완료하세요.",
     "no-similar-repositories-found": "유사한 저장소를 찾을 수 없습니다.",
     "failed-to-find-similar-repositories-please-check": "유사한 창고를 찾지 못했습니다. 벡터 검색 구성을 확인하세요.",

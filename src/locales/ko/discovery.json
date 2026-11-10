@@ -104,7 +104,7 @@
     "ai-service-configuration-is-incomplete-please-ch": "AI 서비스 구성이 불완전합니다. API 엔드포인트, 키, 모델명을 확인하세요.",
     "all-loaded-projects-have-been-analyzed": "로드된 모든 프로젝트는 AI 분석을 완료했습니다.",
     "ai-analysis-complete-successcount-succeeded-v2": "AI 분석 완료! 성공적으로 {{successCount}}{{v2}}",
-    "ai-analysis-failed-please-check-your-ai-configur": "AI 분석에 실패했습니다. AI 구성을 확인해주세요.",
+    "ai-analysis-failed-please-check-your-ai-configur": "AI 분석에 실패했습니다. 설정에서 Claude 연결을 확인하세요.",
     "ai-analysis-complete": "AI 분석 완료! {{successCount}} 성공",
     "ai-analysis-complete-with-failures": "AI 분석 완료! {{successCount}} 성공, {{failCount}} 실패"
   },
@@ -112,8 +112,8 @@
     "failed-to-unstar-repository-please-check-your-ne": "Star를 취소하지 못했습니다. 네트워크 연결 또는 GitHub 토큰 권한을 확인하세요.",
     "successfully-starred": "별표가 추가되었습니다.",
     "failed-to-star-repository-please-check-your-netw": "스타 작업이 실패했습니다. 네트워크 연결 또는 GitHub 토큰 권한을 확인하세요.",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. AI 구성 및 네트워크 연결을 확인하세요.",
-    "ai-analysis-failed-please-check-your-ai-configur": "AI 분석에 실패했습니다. AI 구성을 확인해주세요."
+    "ai-analysis-failed-please-check-ai-configuration": "AI 분석에 실패했습니다. 설정에서 Claude 연결과 네트워크를 확인하세요.",
+    "ai-analysis-failed-please-check-your-ai-configur": "AI 분석에 실패했습니다. 설정에서 Claude 연결을 확인하세요."
   },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "텍스트 로딩에 실패했습니다. 네트워크를 확인한 후 다시 시도해 주세요."

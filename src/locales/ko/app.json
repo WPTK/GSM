@@ -493,7 +493,7 @@
     "external-web-search-and-fetch": "외부 웹 검색 및 크롤링",
     "disabled-by-default-the-current-version-does-not": "기본적으로 꺼져 있습니다. 현재 버전에서는 이를 도구로 노출하지 않습니다.",
     "tool-loop-mode-experimental": "도구 루프 모드(실험적)",
-    "evidence-gathering-is-driven-by-native-function": "이제 포렌식은 모델의 기본 함수 호출에 의해 구동됩니다. \"지원 도구 호출\"이 선택된 Q&A 모델에만 적용되며 지원되지 않는 경우 자동으로 대체됩니다.",
+    "evidence-gathering-is-driven-by-native-function": "증거 수집은 서버 측 Claude 연결을 통해 모델의 기본 function calling이 주도합니다.",
     "readme-fast-path": "README 빠른 경로",
     "for-simple-usage-overview-or-deployment-questions-ans": "간단한 사용법, 개요 또는 배포 질문은 루트 README에서 바로 답변하고 다단계 검색을 건너뜁니다. 심층/무제한 모드에서는 자동으로 꺼집니다.",
     "streaming-answers": "스트리밍 답변",
@@ -531,7 +531,9 @@
     "prompt-saved": "분석 프롬프트를 저장했습니다",
     "prompt-save-failed": "분석 프롬프트를 저장하지 못했습니다",
     "translation-claude": "Claude 번역",
-    "translation-claude-help": "Claude 번역은 대체로 품질이 더 높지만 느리고 API 크레딧을 사용합니다. 서버의 Claude 연결을 사용합니다."
+    "translation-claude-help": "Claude 번역은 대체로 품질이 더 높지만 느리고 API 크레딧을 사용합니다. 서버의 Claude 연결을 사용합니다.",
+    "prompt-load-failed": "저장된 분석 프롬프트를 불러오지 못했습니다. 저장 시 덮어쓰지 않도록 편집이 잠겨 있습니다.",
+    "prompt-retry": "다시 시도"
   },
   "creditBanner": {
     "title": "Claude 크레딧이 부족합니다",
@@ -638,7 +640,6 @@
   "dataManagementPanel": {
     "repositories": "창고 데이터",
     "releases": "릴리스 데이터",
-    "ai-configs": "AI 구성",
     "categories": "분류 설정",
     "asset-filters": "리소스 필터",
     "discovery-data": "검색 페이지 데이터",
@@ -668,7 +669,6 @@
     "export-failed-please-try-again": "내보내기에 실패했습니다. 다시 시도해 주세요.",
     "invalid-backup-file-format": "잘못된 백업 파일 형식",
     "failed-to-parse-file-ensure-it-is-a-valid-json-f": "파일을 구문 분석하지 못했습니다. 유효한 JSON 파일인지 확인하세요.",
-    "data-imported-successfully-some-secrets-were-mas": "Data import was successful. 일부 키가 차단되었습니다. 해당 구성에 다시 입력하세요.",
     "data-imported-successfully": "데이터 가져오기 성공",
     "import-data": "데이터 가져오기",
     "import-failed-please-try-again": "가져오기에 실패했습니다. 다시 시도해 주세요.",
@@ -754,7 +754,6 @@
     "export-date": "수출 날짜:",
     "version": "버전:",
     "included-data": "포함된 데이터:",
-    "warning-some-secrets-in-this-backup-are-masked-p": "경고: 이 백업의 일부 키가 차단되었습니다. 가져온 후 해당 구성에 키를 다시 입력하세요.",
     "importing": "가져오는 중...",
     "merge-import": "병합 가져오기",
     "replace-import": "가져오기 재정의"
@@ -846,7 +845,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "백업/내보내기 시 키 포함",
-    "includes-keys-for-ai-configs": "AI 설정과 백엔드 서버의 키를 포함합니다"
+    "includes-keys-for-ai-configs": "백엔드 서버의 키 포함"
   },
   "mcpSettingsPanel": {
     "copied": "복사됨",

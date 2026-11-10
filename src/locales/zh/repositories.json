@@ -80,7 +80,7 @@
     "customized": "已自定义",
     "ai-analysis-failed-click-ai-button-to-retry": "AI分析失败，点击AI按钮重新分析",
     "failed": "分析失败",
-    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查AI配置和网络连接",
+    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查 Claude 连接和网络。",
     "analyzed-on": "分析于",
     "ai-analyzed": "AI已分析",
     "platforms": "支持平台:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "AI分析已停止！成功: {{successCount}}, 失败: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "AI分析完成！成功: {{successCount}}, 失败: {{failedCount}}",
     "bulk-ai-analysis-failed": "批量AI分析失败",
-    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查AI配置和网络连接。"
+    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查 Claude 连接和网络。"
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "GitHub token 未找到，请重新登录。",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "重新分析确认",
     "ai-re-analysis-completed": "AI重新分析完成！",
     "ai-analysis-completed": "AI分析完成！",
-    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查AI配置和网络连接",
-    "ai-analysis-failed-please-check-ai-configuration-2": "AI分析失败，请检查AI配置和网络连接。",
+    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查 Claude 连接和网络。",
+    "ai-analysis-failed-please-check-ai-configuration-2": "AI分析失败，请检查 Claude 连接和网络。",
     "vector-search-is-not-ready-please-enable-vector": "向量搜索未就绪：请先在设置中开启向量搜索并完成索引。",
     "no-similar-repositories-found": "未找到相似的仓库。",
     "failed-to-find-similar-repositories-please-check": "查找相似仓库失败，请检查向量搜索配置。",

@@ -80,7 +80,7 @@
     "customized": "Personalizado",
     "ai-analysis-failed-click-ai-button-to-retry": "El análisis de IA falló, haga clic en el botón AI para volver a analizar",
     "failed": "El análisis falló",
-    "ai-analysis-failed-please-check-ai-configuration": "El análisis de IA falló; verifique la configuración de IA y la conexión de red",
+    "ai-analysis-failed-please-check-ai-configuration": "El análisis con IA falló. Revisa la conexión con Claude en Ajustes y tu red.",
     "analyzed-on": "analizado en",
     "ai-analyzed": "IA analizada",
     "platforms": "Plataformas compatibles:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "¡El análisis de IA se ha detenido! Éxito: {{successCount}}, Fracaso: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "¡Análisis de IA completado! Éxito: {{successCount}}, Fracaso: {{failedCount}}",
     "bulk-ai-analysis-failed": "El análisis de IA por lotes falló",
-    "ai-analysis-failed-please-check-ai-configuration": "El análisis de IA falló, verifique la configuración de IA y la conexión de red."
+    "ai-analysis-failed-please-check-ai-configuration": "El análisis con IA falló. Revisa la conexión con Claude en Ajustes y tu red."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "No se encontró el token de GitHub. Inicie sesión nuevamente.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "Vuelva a analizar y confirmar",
     "ai-re-analysis-completed": "¡Reanálisis de IA completado!",
     "ai-analysis-completed": "¡Análisis de IA completado!",
-    "ai-analysis-failed-please-check-ai-configuration": "El análisis de IA falló; verifique la configuración de IA y la conexión de red",
-    "ai-analysis-failed-please-check-ai-configuration-2": "El análisis de IA falló, verifique la configuración de IA y la conexión de red.",
+    "ai-analysis-failed-please-check-ai-configuration": "El análisis con IA falló. Revisa la conexión con Claude en Ajustes y tu red.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "El análisis con IA falló. Revisa la conexión con Claude en Ajustes y tu red.",
     "vector-search-is-not-ready-please-enable-vector": "La búsqueda de vectores no está lista: habilite primero la búsqueda de vectores en la configuración y complete la indexación.",
     "no-similar-repositories-found": "No se encontraron repositorios similares.",
     "failed-to-find-similar-repositories-please-check": "No se pudieron encontrar almacenes similares, verifique la configuración de búsqueda de vectores.",

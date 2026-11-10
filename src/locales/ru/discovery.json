@@ -104,7 +104,7 @@
     "ai-service-configuration-is-incomplete-please-ch": "Конфигурация службы AI не завершена. Проверьте конечную точку API, ключ и название модели.",
     "all-loaded-projects-have-been-analyzed": "Все загруженные проекты прошли анализ ИИ.",
     "ai-analysis-complete-successcount-succeeded-v2": "Анализ ИИ завершен! Успешно {{successCount}}{{v2}}",
-    "ai-analysis-failed-please-check-your-ai-configur": "Анализ AI не удался, проверьте конфигурацию AI.",
+    "ai-analysis-failed-please-check-your-ai-configur": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках.",
     "ai-analysis-complete": "Анализ ИИ завершен! {{successCount}} успешно",
     "ai-analysis-complete-with-failures": "Анализ ИИ завершен! {{successCount}} успешно, {{failCount}} не удалось"
   },
@@ -112,8 +112,8 @@
     "failed-to-unstar-repository-please-check-your-ne": "Не удалось отменить подписку Star. Проверьте сетевое соединение или разрешения токена GitHub.",
     "successfully-starred": "Звезда успешно добавлена",
     "failed-to-star-repository-please-check-your-netw": "Не удалось выполнить операцию Star. Проверьте сетевое соединение или разрешения токена GitHub.",
-    "ai-analysis-failed-please-check-ai-configuration": "Анализ AI не удался. Проверьте конфигурацию AI и сетевое соединение.",
-    "ai-analysis-failed-please-check-your-ai-configur": "Анализ AI не удался, проверьте конфигурацию AI."
+    "ai-analysis-failed-please-check-ai-configuration": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках и сеть.",
+    "ai-analysis-failed-please-check-your-ai-configur": "Не удалось выполнить ИИ-анализ. Проверьте подключение к Claude в настройках."
   },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "Не удалось загрузить текст. Проверьте сеть и повторите попытку."

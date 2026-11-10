@@ -493,7 +493,7 @@
     "external-web-search-and-fetch": "外部网页搜索与抓取",
     "disabled-by-default-the-current-version-does-not": "默认关闭；当前版本不会将其暴露为工具。",
     "tool-loop-mode-experimental": "工具循环模式（实验性）",
-    "evidence-gathering-is-driven-by-native-function": "取证改由模型原生 function calling 驱动；仅对勾选了“支持工具调用”的问答模型生效，不支持时自动回退。",
+    "evidence-gathering-is-driven-by-native-function": "取证由模型原生 function calling 驱动，通过后端 Claude 连接执行。",
     "readme-fast-path": "README 快速路径",
     "for-simple-usage-overview-or-deployment-questions-ans": "简单的使用、简介或部署问题直接读根 README 作答，跳过多轮检索；深入/不限档位自动关闭。",
     "streaming-answers": "流式回答",
@@ -531,7 +531,9 @@
     "prompt-saved": "分析提示词已保存",
     "prompt-save-failed": "无法保存分析提示词",
     "translation-claude": "Claude 翻译",
-    "translation-claude-help": "Claude 翻译质量通常更高，但速度较慢并会消耗 API 额度。它使用服务器上的 Claude 连接。"
+    "translation-claude-help": "Claude 翻译质量通常更高，但速度较慢并会消耗 API 额度。它使用服务器上的 Claude 连接。",
+    "prompt-load-failed": "无法读取已保存的分析提示词",
+    "prompt-retry": "重试"
   },
   "creditBanner": {
     "title": "Claude 余额不足",
@@ -638,7 +640,6 @@
   "dataManagementPanel": {
     "repositories": "仓库数据",
     "releases": "Release数据",
-    "ai-configs": "AI配置",
     "categories": "分类设置",
     "asset-filters": "资源过滤器",
     "discovery-data": "发现页数据",
@@ -668,7 +669,6 @@
     "export-failed-please-try-again": "导出失败，请重试",
     "invalid-backup-file-format": "无效的备份文件格式",
     "failed-to-parse-file-ensure-it-is-a-valid-json-f": "解析文件失败，请确保是有效的JSON文件",
-    "data-imported-successfully-some-secrets-were-mas": "数据导入成功。部分密钥已屏蔽，请在相应配置中重新输入。",
     "data-imported-successfully": "数据导入成功",
     "import-data": "导入数据",
     "import-failed-please-try-again": "导入失败，请重试",
@@ -754,7 +754,6 @@
     "export-date": "导出日期:",
     "version": "版本:",
     "included-data": "包含的数据:",
-    "warning-some-secrets-in-this-backup-are-masked-p": "警告：此备份中的部分密钥已被屏蔽。导入后请在相应配置中重新输入密钥。",
     "importing": "导入中…",
     "merge-import": "合并导入",
     "replace-import": "覆盖导入"
@@ -846,7 +845,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "备份/导出时包含密钥",
-    "includes-keys-for-ai-configs": "包含 AI 配置和后端服务器的密钥"
+    "includes-keys-for-ai-configs": "包含后端服务器的密钥"
   },
   "mcpSettingsPanel": {
     "copied": "已复制",

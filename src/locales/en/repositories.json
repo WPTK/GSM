@@ -80,7 +80,7 @@
     "customized": "Customized",
     "ai-analysis-failed-click-ai-button-to-retry": "AI analysis failed, click AI button to retry",
     "failed": "Failed",
-    "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed, please check AI configuration and network connection",
+    "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed. Check the Claude connection in Settings and your network.",
     "analyzed-on": "Analyzed on",
     "ai-analyzed": "AI Analyzed",
     "platforms": "Platforms:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "AI analysis stopped! Success: {{successCount}}, Failed: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "AI analysis completed! Success: {{successCount}}, Failed: {{failedCount}}",
     "bulk-ai-analysis-failed": "Bulk AI analysis failed",
-    "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed. Please check AI configuration and network connection."
+    "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed. Check the Claude connection in Settings and your network."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "GitHub token not found. Please login again.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "Re-analyze Confirmation",
     "ai-re-analysis-completed": "AI re-analysis completed!",
     "ai-analysis-completed": "AI analysis completed!",
-    "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed, please check AI configuration and network connection",
-    "ai-analysis-failed-please-check-ai-configuration-2": "AI analysis failed. Please check AI configuration and network connection.",
+    "ai-analysis-failed-please-check-ai-configuration": "AI analysis failed. Check the Claude connection in Settings and your network.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "AI analysis failed. Check the Claude connection in Settings and your network.",
     "vector-search-is-not-ready-please-enable-vector": "Vector search is not ready. Please enable vector search and build the index in settings first.",
     "no-similar-repositories-found": "No similar repositories found.",
     "failed-to-find-similar-repositories-please-check": "Failed to find similar repositories. Please check vector search configuration.",

@@ -493,7 +493,7 @@
     "external-web-search-and-fetch": "Recherche et exploration Web externes",
     "disabled-by-default-the-current-version-does-not": "Désactivé par défaut ; la version actuelle ne l'expose pas en tant qu'outil.",
     "tool-loop-mode-experimental": "Mode boucle d'outils (expérimental)",
-    "evidence-gathering-is-driven-by-native-function": "L'investigation est désormais pilotée par l'appel de fonction natif du modèle ; cela ne prend effet que pour les modèles de questions et réponses pour lesquels « Support Tool Calling » est coché et sera automatiquement rétabli s'il n'est pas pris en charge.",
+    "evidence-gathering-is-driven-by-native-function": "La collecte de preuves est pilotée par le function calling natif du modèle via la connexion Claude côté serveur.",
     "readme-fast-path": "Chemin rapide du README",
     "for-simple-usage-overview-or-deployment-questions-ans": "Pour les questions simples d'utilisation, de présentation ou de déploiement, répond directement depuis le README racine et saute la recherche multi-passes ; désactivé automatiquement en mode approfondi/illimité.",
     "streaming-answers": "Réponses en streaming",
@@ -531,7 +531,9 @@
     "prompt-saved": "Prompt d’analyse enregistré",
     "prompt-save-failed": "Impossible d’enregistrer le prompt d’analyse",
     "translation-claude": "Traduction par Claude",
-    "translation-claude-help": "La traduction par Claude est généralement de meilleure qualité, mais plus lente et consomme du crédit d’API. Elle utilise la connexion Claude du serveur."
+    "translation-claude-help": "La traduction par Claude est généralement de meilleure qualité, mais plus lente et consomme du crédit d’API. Elle utilise la connexion Claude du serveur.",
+    "prompt-load-failed": "Impossible de charger le prompt d'analyse enregistré. La modification est verrouillée pour qu'Enregistrer ne l'écrase pas.",
+    "prompt-retry": "Réessayer"
   },
   "creditBanner": {
     "title": "Crédit Claude faible",
@@ -638,7 +640,6 @@
   "dataManagementPanel": {
     "repositories": "données d'entrepôt",
     "releases": "Données de publication",
-    "ai-configs": "Configuration de l'IA",
     "categories": "Paramètres de classification",
     "asset-filters": "Filtre de ressources",
     "discovery-data": "Données de la page de découverte",
@@ -668,7 +669,6 @@
     "export-failed-please-try-again": "Échec de l'exportation, veuillez réessayer",
     "invalid-backup-file-format": "Format de fichier de sauvegarde invalide",
     "failed-to-parse-file-ensure-it-is-a-valid-json-f": "Échec de l'analyse du fichier. Veuillez vous assurer qu'il s'agit d'un fichier JSON valide.",
-    "data-imported-successfully-some-secrets-were-mas": "L'importation des données a réussi. Certaines clés ont été bloquées, merci de les ressaisir dans la configuration correspondante.",
     "data-imported-successfully": "Importation des données réussie",
     "import-data": "Importer des données",
     "import-failed-please-try-again": "Échec de l'importation, veuillez réessayer",
@@ -753,7 +753,6 @@
     "file": "nom de fichier:",
     "export-date": "Date d'exportation :",
     "included-data": "Données incluses :",
-    "warning-some-secrets-in-this-backup-are-masked-p": "Attention : certaines clés de cette sauvegarde ont été bloquées. Après l'importation, veuillez ressaisir la clé dans la configuration correspondante.",
     "importing": "Importation…",
     "merge-import": "Fusionner l'importation",
     "replace-import": "Remplacer l'importation",
@@ -846,7 +845,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Inclure les clés lors de la sauvegarde/exportation",
-    "includes-keys-for-ai-configs": "Inclut les clés des configurations IA et du serveur backend"
+    "includes-keys-for-ai-configs": "Inclut les clés du serveur backend"
   },
   "mcpSettingsPanel": {
     "copied": "Copié",

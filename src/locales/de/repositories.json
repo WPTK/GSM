@@ -80,7 +80,7 @@
     "customized": "Maßgeschneidert",
     "ai-analysis-failed-click-ai-button-to-retry": "Die KI-Analyse ist fehlgeschlagen. Klicken Sie zur erneuten Analyse auf die Schaltfläche „KI“.",
     "failed": "Die Analyse ist fehlgeschlagen",
-    "ai-analysis-failed-please-check-ai-configuration": "Die KI-Analyse ist fehlgeschlagen. Bitte überprüfen Sie die KI-Konfiguration und die Netzwerkverbindung",
+    "ai-analysis-failed-please-check-ai-configuration": "KI-Analyse fehlgeschlagen. Prüfe die Claude-Verbindung in den Einstellungen und dein Netzwerk.",
     "analyzed-on": "analysiert in",
     "ai-analyzed": "KI analysiert",
     "platforms": "Unterstützte Plattformen:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "Die KI-Analyse wurde gestoppt! Erfolg: {{successCount}}, Fehler: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "KI-Analyse abgeschlossen! Erfolg: {{successCount}}, Fehler: {{failedCount}}",
     "bulk-ai-analysis-failed": "Die Batch-KI-Analyse ist fehlgeschlagen",
-    "ai-analysis-failed-please-check-ai-configuration": "Die KI-Analyse ist fehlgeschlagen. Bitte überprüfen Sie die KI-Konfiguration und die Netzwerkverbindung."
+    "ai-analysis-failed-please-check-ai-configuration": "KI-Analyse fehlgeschlagen. Prüfe die Claude-Verbindung in den Einstellungen und dein Netzwerk."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "GitHub-Token nicht gefunden, bitte melden Sie sich erneut an.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "Analysieren Sie erneut und bestätigen Sie",
     "ai-re-analysis-completed": "KI-Neuanalyse abgeschlossen!",
     "ai-analysis-completed": "KI-Analyse abgeschlossen!",
-    "ai-analysis-failed-please-check-ai-configuration": "Die KI-Analyse ist fehlgeschlagen. Bitte überprüfen Sie die KI-Konfiguration und die Netzwerkverbindung",
-    "ai-analysis-failed-please-check-ai-configuration-2": "Die KI-Analyse ist fehlgeschlagen. Bitte überprüfen Sie die KI-Konfiguration und die Netzwerkverbindung.",
+    "ai-analysis-failed-please-check-ai-configuration": "KI-Analyse fehlgeschlagen. Prüfe die Claude-Verbindung in den Einstellungen und dein Netzwerk.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "KI-Analyse fehlgeschlagen. Prüfe die Claude-Verbindung in den Einstellungen und dein Netzwerk.",
     "vector-search-is-not-ready-please-enable-vector": "Die Vektorsuche ist noch nicht bereit: Bitte aktivieren Sie zuerst die Vektorsuche in den Einstellungen und schließen Sie die Indizierung ab.",
     "no-similar-repositories-found": "Es wurden keine ähnlichen Repositories gefunden.",
     "failed-to-find-similar-repositories-please-check": "Es konnten keine ähnlichen Lager gefunden werden. Bitte überprüfen Sie die Konfiguration der Vektorsuche.",

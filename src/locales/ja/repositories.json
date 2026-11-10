@@ -80,7 +80,7 @@
     "customized": "カスタマイズされた",
     "ai-analysis-failed-click-ai-button-to-retry": "AI 分析に失敗しました。AI ボタン​​をクリックして再分析してください",
     "failed": "分析に失敗しました",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。AI の構成とネットワーク接続を確認してください。",
+    "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。設定の Claude 接続とネットワークを確認してください。",
     "analyzed-on": "で分析された",
     "ai-analyzed": "AIが分析した",
     "platforms": "サポートされているプラ​​ットフォーム:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "AI解析が停止しました！成功: {{successCount}}、失敗: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "AI解析完了！成功: {{successCount}}、失敗: {{failedCount}}",
     "bulk-ai-analysis-failed": "バッチ AI 分析が失敗しました",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。AI の構成とネットワーク接続を確認してください。"
+    "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。設定の Claude 接続とネットワークを確認してください。"
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "GitHub トークンが見つかりません。再度ログインしてください。",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "再分析して確認する",
     "ai-re-analysis-completed": "AI再解析完了！",
     "ai-analysis-completed": "AI解析完了！",
-    "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。AI の構成とネットワーク接続を確認してください。",
-    "ai-analysis-failed-please-check-ai-configuration-2": "AI 分析に失敗しました。AI の構成とネットワーク接続を確認してください。",
+    "ai-analysis-failed-please-check-ai-configuration": "AI 分析に失敗しました。設定の Claude 接続とネットワークを確認してください。",
+    "ai-analysis-failed-please-check-ai-configuration-2": "AI 分析に失敗しました。設定の Claude 接続とネットワークを確認してください。",
     "vector-search-is-not-ready-please-enable-vector": "ベクトル検索の準備ができていません: まず設定でベクトル検索を有効にして、インデックス作成を完了してください。",
     "no-similar-repositories-found": "同様のリポジトリは見つかりませんでした。",
     "failed-to-find-similar-repositories-please-check": "類似のウェアハウスが見つかりませんでした。ベクトル検索構成を確認してください。",

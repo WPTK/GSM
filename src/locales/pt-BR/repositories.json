@@ -80,7 +80,7 @@
     "customized": "Personalizado",
     "ai-analysis-failed-click-ai-button-to-retry": "A análise de IA falhou, clique no botão AI para reanalisar",
     "failed": "Falha na análise",
-    "ai-analysis-failed-please-check-ai-configuration": "Falha na análise da IA. Verifique a configuração da IA ​​e a conexão de rede",
+    "ai-analysis-failed-please-check-ai-configuration": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações e sua rede.",
     "analyzed-on": "analisado em",
     "ai-analyzed": "IA analisada",
     "platforms": "Plataformas suportadas:",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "A análise de IA parou! Sucesso: {{successCount}}, Falha: {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "Análise de IA concluída! Sucesso: {{successCount}}, Falha: {{failedCount}}",
     "bulk-ai-analysis-failed": "Falha na análise de IA em lote",
-    "ai-analysis-failed-please-check-ai-configuration": "A análise de IA falhou, verifique a configuração de IA e a conexão de rede."
+    "ai-analysis-failed-please-check-ai-configuration": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações e sua rede."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "Token GitHub não encontrado, faça login novamente.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "Analise novamente e confirme",
     "ai-re-analysis-completed": "Reanálise de IA concluída!",
     "ai-analysis-completed": "Análise de IA concluída!",
-    "ai-analysis-failed-please-check-ai-configuration": "Falha na análise da IA. Verifique a configuração da IA ​​e a conexão de rede",
-    "ai-analysis-failed-please-check-ai-configuration-2": "A análise de IA falhou, verifique a configuração de IA e a conexão de rede.",
+    "ai-analysis-failed-please-check-ai-configuration": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações e sua rede.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações e sua rede.",
     "vector-search-is-not-ready-please-enable-vector": "A pesquisa de vetor não está pronta: primeiro ative a pesquisa de vetor nas configurações e conclua a indexação.",
     "no-similar-repositories-found": "Nenhum repositório semelhante foi encontrado.",
     "failed-to-find-similar-repositories-please-check": "Não foi possível encontrar armazéns semelhantes. Verifique a configuração da pesquisa vetorial.",

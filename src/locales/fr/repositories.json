@@ -80,7 +80,7 @@
     "customized": "Personnalisé",
     "ai-analysis-failed-click-ai-button-to-retry": "L'analyse AI a échoué, cliquez sur le bouton AI pour réanalyser",
     "failed": "L'analyse a échoué",
-    "ai-analysis-failed-please-check-ai-configuration": "L'analyse de l'IA a échoué. Veuillez vérifier la configuration de l'IA et la connexion réseau.",
+    "ai-analysis-failed-please-check-ai-configuration": "L'analyse IA a échoué. Vérifiez la connexion à Claude dans les paramètres et votre réseau.",
     "analyzed-on": "analysé dans",
     "ai-analyzed": "IA analysée",
     "platforms": "Plateformes prises en charge :",
@@ -219,7 +219,7 @@
     "ai-analysis-stopped-success-successcount-failed": "L'analyse de l'IA s'est arrêtée ! Succès : {{successCount}}, Échec : {{failedCount}}",
     "ai-analysis-completed-success-successcount-faile": "Analyse de l'IA terminée ! Succès : {{successCount}}, Échec : {{failedCount}}",
     "bulk-ai-analysis-failed": "L'analyse de l'IA par lots a échoué",
-    "ai-analysis-failed-please-check-ai-configuration": "L'analyse de l'IA a échoué, veuillez vérifier la configuration de l'IA et la connexion réseau."
+    "ai-analysis-failed-please-check-ai-configuration": "L'analyse IA a échoué. Vérifiez la connexion à Claude dans les paramètres et votre réseau."
   },
   "useRepositoryCardActions": {
     "github-token-not-found-please-login-again": "Jeton GitHub introuvable, veuillez vous reconnecter.",
@@ -227,8 +227,8 @@
     "re-analyze-confirmation": "Réanalyser et confirmer",
     "ai-re-analysis-completed": "Réanalyse de l'IA terminée !",
     "ai-analysis-completed": "Analyse de l'IA terminée !",
-    "ai-analysis-failed-please-check-ai-configuration": "L'analyse de l'IA a échoué. Veuillez vérifier la configuration de l'IA et la connexion réseau.",
-    "ai-analysis-failed-please-check-ai-configuration-2": "L'analyse de l'IA a échoué, veuillez vérifier la configuration de l'IA et la connexion réseau.",
+    "ai-analysis-failed-please-check-ai-configuration": "L'analyse IA a échoué. Vérifiez la connexion à Claude dans les paramètres et votre réseau.",
+    "ai-analysis-failed-please-check-ai-configuration-2": "L'analyse IA a échoué. Vérifiez la connexion à Claude dans les paramètres et votre réseau.",
     "vector-search-is-not-ready-please-enable-vector": "La recherche de vecteurs n'est pas prête : veuillez d'abord activer la recherche de vecteurs dans les paramètres et terminer l'indexation.",
     "no-similar-repositories-found": "Aucun référentiel similaire n'a été trouvé.",
     "failed-to-find-similar-repositories-please-check": "Impossible de trouver des entrepôts similaires, veuillez vérifier la configuration de la recherche vectorielle.",

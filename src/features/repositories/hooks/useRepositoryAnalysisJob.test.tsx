@@ -253,7 +253,7 @@ describe('useRepositoryAnalysisJob', () => {
       await result.current.run(runOptions([repository(1)]));
     });
 
-    expect(mocks.toast).toHaveBeenCalledWith('AI分析失败，请检查AI配置和网络连接。', 'error');
+    expect(mocks.toast).toHaveBeenCalledWith('AI分析失败，请检查 Claude 连接和网络。', 'error');
     expect(result.current).toMatchObject({ isRunning: false, progress: { current: 0, total: 0 } });
   });
 

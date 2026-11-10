@@ -493,7 +493,7 @@
     "external-web-search-and-fetch": "外部 Web 検索とクロール",
     "disabled-by-default-the-current-version-does-not": "デフォルトではオフです。現在のバージョンではツールとして公開されていません。",
     "tool-loop-mode-experimental": "ツール ループ モード (実験的)",
-    "evidence-gathering-is-driven-by-native-function": "フォレンジックはモデルのネイティブ関数呼び出しによって駆動されるようになりました。これは、「サポート ツール呼び出し」がチェックされている Q&A モデルに対してのみ有効であり、サポートされていない場合は自動的にフォールバックされます。",
+    "evidence-gathering-is-driven-by-native-function": "証拠の収集は、サーバー側の Claude 接続を通じてモデルのネイティブ function calling が制御します。",
     "readme-fast-path": "README 高速パス",
     "for-simple-usage-overview-or-deployment-questions-ans": "簡単な使い方・概要・デプロイに関する質問は、ルート README から直接回答し、複数ラウンドの検索をスキップします。深掘り/無制限モードでは自動的にオフになります。",
     "streaming-answers": "ストリーミングの回答",
@@ -531,7 +531,9 @@
     "prompt-saved": "分析プロンプトを保存しました",
     "prompt-save-failed": "分析プロンプトを保存できませんでした",
     "translation-claude": "Claude による翻訳",
-    "translation-claude-help": "Claude による翻訳は一般に品質が高い一方、速度は遅く API クレジットを消費します。サーバー側の Claude 接続を使用します。"
+    "translation-claude-help": "Claude による翻訳は一般に品質が高い一方、速度は遅く API クレジットを消費します。サーバー側の Claude 接続を使用します。",
+    "prompt-load-failed": "保存済みの分析プロンプトを読み込めませんでした。保存で上書きされないよう、編集をロックしています。",
+    "prompt-retry": "再試行"
   },
   "creditBanner": {
     "title": "Claude のクレジット残高が少なくなっています",
@@ -638,7 +640,6 @@
   "dataManagementPanel": {
     "repositories": "倉庫データ",
     "releases": "リリースデータ",
-    "ai-configs": "AIの設定",
     "categories": "分類設定",
     "asset-filters": "リソースフィルター",
     "discovery-data": "ディスカバリーページデータ",
@@ -668,7 +669,6 @@
     "export-failed-please-try-again": "エクスポートに失敗しました。もう一度お試しください",
     "invalid-backup-file-format": "無効なバックアップ ファイル形式です",
     "failed-to-parse-file-ensure-it-is-a-valid-json-f": "ファイルの解析に失敗しました。有効な JSON ファイルであることを確認してください",
-    "data-imported-successfully-some-secrets-were-mas": "データのインポートは成功しました。一部のキーがブロックされています。対応する構成に再入力してください。",
     "data-imported-successfully": "データのインポートが成功しました",
     "import-data": "データのインポート",
     "import-failed-please-try-again": "インポートに失敗しました。もう一度お試しください",
@@ -754,7 +754,6 @@
     "export-date": "エクスポート日:",
     "version": "バージョン:",
     "included-data": "含まれるデータ:",
-    "warning-some-secrets-in-this-backup-are-masked-p": "警告: このバックアップ内の一部のキーはブロックされています。インポート後、対応する設定にキーを再入力してください。",
     "importing": "インポート中…",
     "merge-import": "マージインポート",
     "replace-import": "インポートを上書きする"
@@ -846,7 +845,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "バックアップ/エクスポート時にキーを含める",
-    "includes-keys-for-ai-configs": "AI設定とバックエンドサーバーのキーを含みます"
+    "includes-keys-for-ai-configs": "バックエンドサーバーのキーを含む"
   },
   "mcpSettingsPanel": {
     "copied": "コピーされました",

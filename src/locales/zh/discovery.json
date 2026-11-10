@@ -104,7 +104,7 @@
     "ai-service-configuration-is-incomplete-please-ch": "AI服务配置不完整，请检查API端点、密钥和模型名称。",
     "all-loaded-projects-have-been-analyzed": "已加载的所有项目均已完成AI分析。",
     "ai-analysis-complete-successcount-succeeded-v2": "AI分析完成！成功 {{successCount}} 个{{v2}}",
-    "ai-analysis-failed-please-check-your-ai-configur": "AI分析失败，请检查AI配置。",
+    "ai-analysis-failed-please-check-your-ai-configur": "AI分析失败，请检查 Claude 连接。",
     "ai-analysis-complete": "AI分析完成！成功 {{successCount}} 个",
     "ai-analysis-complete-with-failures": "AI分析完成！成功 {{successCount}} 个，失败 {{failCount}} 个"
   },
@@ -112,8 +112,8 @@
     "failed-to-unstar-repository-please-check-your-ne": "取消 Star 失败，请检查网络连接或 GitHub Token 权限。",
     "successfully-starred": "已成功添加 Star",
     "failed-to-star-repository-please-check-your-netw": "Star 操作失败，请检查网络连接或 GitHub Token 权限。",
-    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查AI配置和网络连接",
-    "ai-analysis-failed-please-check-your-ai-configur": "AI分析失败，请检查AI配置。"
+    "ai-analysis-failed-please-check-ai-configuration": "AI分析失败，请检查 Claude 连接和网络。",
+    "ai-analysis-failed-please-check-your-ai-configur": "AI分析失败，请检查 Claude 连接。"
   },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "正文加载失败，请检查网络后重试"

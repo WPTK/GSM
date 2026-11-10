@@ -104,7 +104,7 @@
     "ai-service-configuration-is-incomplete-please-ch": "A configuração do serviço de IA está incompleta, verifique o endpoint da API, a chave e o nome do modelo.",
     "all-loaded-projects-have-been-analyzed": "Todos os projetos carregados concluíram a análise de IA.",
     "ai-analysis-complete-successcount-succeeded-v2": "Análise de IA concluída! Com sucesso {{successCount}}{{v2}}",
-    "ai-analysis-failed-please-check-your-ai-configur": "A análise de IA falhou, verifique a configuração de IA.",
+    "ai-analysis-failed-please-check-your-ai-configur": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações.",
     "ai-analysis-complete": "Análise de IA concluída! {{successCount}} bem-sucedido",
     "ai-analysis-complete-with-failures": "Análise de IA concluída! {{successCount}} bem-sucedido, {{failCount}} falhou"
   },
@@ -112,8 +112,8 @@
     "failed-to-unstar-repository-please-check-your-ne": "Falha no cancelamento do Star. Verifique a conexão de rede ou as permissões do token GitHub.",
     "successfully-starred": "Estrela adicionada com sucesso",
     "failed-to-star-repository-please-check-your-netw": "A operação Star falhou, verifique a conexão de rede ou as permissões do GitHub Token.",
-    "ai-analysis-failed-please-check-ai-configuration": "Falha na análise da IA. Verifique a configuração da IA ​​e a conexão de rede",
-    "ai-analysis-failed-please-check-your-ai-configur": "A análise de IA falhou, verifique a configuração de IA."
+    "ai-analysis-failed-please-check-ai-configuration": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações e sua rede.",
+    "ai-analysis-failed-please-check-your-ai-configur": "A análise de IA falhou. Verifique a conexão com o Claude nas configurações."
   },
   "useWeeklyIssueBody": {
     "failed-to-load-content-please-check-your-network": "O carregamento do texto falhou, verifique a rede e tente novamente"

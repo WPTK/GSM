@@ -493,7 +493,7 @@
     "external-web-search-and-fetch": "Externe Websuche und Crawling",
     "disabled-by-default-the-current-version-does-not": "Standardmäßig deaktiviert; Die aktuelle Version stellt es nicht als Tool zur Verfügung.",
     "tool-loop-mode-experimental": "Werkzeugschleifenmodus (experimentell)",
-    "evidence-gathering-is-driven-by-native-function": "Die Forensik wird jetzt durch den nativen Funktionsaufruf des Modells gesteuert. Es ist nur für Q&A-Modelle wirksam, bei denen „Support Tool Calling“ aktiviert ist, und wird automatisch zurückgesetzt, wenn es nicht unterstützt wird.",
+    "evidence-gathering-is-driven-by-native-function": "Die Beweissuche wird über das native Function Calling des Modells durch die serverseitige Claude-Verbindung gesteuert.",
     "readme-fast-path": "README-Schnellpfad",
     "for-simple-usage-overview-or-deployment-questions-ans": "Beantwortet einfache Fragen zu Nutzung, Überblick oder Bereitstellung direkt aus dem Root-README und überspringt die mehrstufige Suche; bei „tief“/„unbegrenzt“ automatisch deaktiviert.",
     "streaming-answers": "Streaming-Antworten",
@@ -531,7 +531,9 @@
     "prompt-saved": "Analyse-Prompt gespeichert",
     "prompt-save-failed": "Analyse-Prompt konnte nicht gespeichert werden",
     "translation-claude": "Claude-Übersetzung",
-    "translation-claude-help": "Die Claude-Übersetzung hat meist höhere Qualität, ist aber langsamer und verbraucht API-Guthaben. Sie nutzt die Claude-Verbindung des Servers."
+    "translation-claude-help": "Die Claude-Übersetzung hat meist höhere Qualität, ist aber langsamer und verbraucht API-Guthaben. Sie nutzt die Claude-Verbindung des Servers.",
+    "prompt-load-failed": "Der gespeicherte Analyse-Prompt konnte nicht geladen werden. Die Bearbeitung ist gesperrt, damit Speichern ihn nicht überschreibt.",
+    "prompt-retry": "Erneut versuchen"
   },
   "creditBanner": {
     "title": "Claude-Guthaben ist niedrig",
@@ -638,7 +640,6 @@
   "dataManagementPanel": {
     "repositories": "Lagerdaten",
     "releases": "Daten freigeben",
-    "ai-configs": "KI-Konfiguration",
     "categories": "Klassifizierungseinstellungen",
     "asset-filters": "Ressourcenfilter",
     "discovery-data": "Daten der Discovery-Seite",
@@ -668,7 +669,6 @@
     "export-failed-please-try-again": "Der Export ist fehlgeschlagen. Bitte versuchen Sie es erneut",
     "invalid-backup-file-format": "Ungültiges Backup-Dateiformat",
     "failed-to-parse-file-ensure-it-is-a-valid-json-f": "Die Datei konnte nicht geparst werden. Bitte stellen Sie sicher, dass es sich um eine gültige JSON-Datei handelt",
-    "data-imported-successfully-some-secrets-were-mas": "Der Datenimport war erfolgreich. Einige Schlüssel wurden gesperrt, bitte geben Sie sie in der entsprechenden Konfiguration erneut ein.",
     "data-imported-successfully": "Datenimport erfolgreich",
     "import-data": "Daten importieren",
     "import-failed-please-try-again": "Der Import ist fehlgeschlagen. Bitte versuchen Sie es erneut",
@@ -753,7 +753,6 @@
     "file": "Dateiname:",
     "export-date": "Exportdatum:",
     "included-data": "Enthaltene Daten:",
-    "warning-some-secrets-in-this-backup-are-masked-p": "Warnung: Einige Schlüssel in dieser Sicherung wurden blockiert. Nach dem Import geben Sie bitte den Schlüssel erneut in der entsprechenden Konfiguration ein.",
     "importing": "Importieren…",
     "merge-import": "Import zusammenführen",
     "replace-import": "Import überschreiben",
@@ -846,7 +845,7 @@
   },
   "includeKeysToggle": {
     "include-keys-in-backup-export": "Beziehen Sie beim Sichern/Exportieren Schlüssel mit ein",
-    "includes-keys-for-ai-configs": "Enthält Schlüssel für KI-Konfigurationen und den Backend-Server"
+    "includes-keys-for-ai-configs": "Enthält die Schlüssel des Backend-Servers"
   },
   "mcpSettingsPanel": {
     "copied": "Kopiert",
