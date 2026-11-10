@@ -140,6 +140,47 @@ describe('runClaudeAnalysis', () => {
     expect(outcome.job?.status).toBe('completed');
   });
 
+  it('asks again when the re-estimate costs more than the confirmed figure', async () => {
+    let estimates = 0;
+    let creates = 0;
+    installFetch((url) => {
+      if (url.endsWith('/analysis/estimate')) {
+        estimates += 1;
+        return json(estimate({ estimateId: `est-${estimates}`, needsConfirm: true, usd: estimates === 1 ? 3 : 9 }));
+      }
+      creates += 1;
+      return creates === 1
+        ? json({ error: 'gone', code: 'AI_ESTIMATE_NOT_FOUND' }, 404)
+        : json({ job: job('completed', [done1]) });
+    });
+    const confirmSpend = vi.fn().mockResolvedValue(true);
+
+    await runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend });
+
+    expect(confirmSpend).toHaveBeenCalledTimes(2);
+    expect(confirmSpend.mock.calls[1][0]).toMatchObject({ usd: 9 });
+  });
+
+  it('does not ask again when the re-estimate is not higher than the confirmed figure', async () => {
+    let estimates = 0;
+    let creates = 0;
+    installFetch((url) => {
+      if (url.endsWith('/analysis/estimate')) {
+        estimates += 1;
+        return json(estimate({ estimateId: `est-${estimates}`, needsConfirm: true, usd: 3 }));
+      }
+      creates += 1;
+      return creates === 1
+        ? json({ error: 'gone', code: 'AI_ESTIMATE_NOT_FOUND' }, 404)
+        : json({ job: job('completed', [done1]) });
+    });
+    const confirmSpend = vi.fn().mockResolvedValue(true);
+
+    await runClaudeAnalysis({ repoIds: [1], language: 'en' }, { confirmSpend });
+
+    expect(confirmSpend).toHaveBeenCalledTimes(1);
+  });
+
   it('asks and retries when the server demands confirmation the estimate did not flag', async () => {
     let creates = 0;
     installFetch((url) => {

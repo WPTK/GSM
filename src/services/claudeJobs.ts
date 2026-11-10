@@ -120,8 +120,11 @@ export async function runClaudeAnalysis(
   } catch (error) {
     if (isCode(error, 'AI_ESTIMATE_NOT_FOUND')) {
       // Estimates live 30 minutes in server memory: ask again and use the fresh id.
+      const confirmedUsd = estimate.usd;
       estimate = await estimateAnalysis(body, signal);
-      if (estimate.needsConfirm && !confirmed) {
+      // A fresh estimate that costs more than the figure the owner approved needs a new yes.
+      const costsMore = confirmed && estimate.usd > confirmedUsd;
+      if (estimate.needsConfirm && (!confirmed || costsMore)) {
         if (!(await options.confirmSpend(estimate))) {
           return { estimate, job: null, declined: true, cancelled: false };
         }
