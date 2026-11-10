@@ -507,27 +507,15 @@ Electron 客户端可以从本地目录加载**受信任的本地插件**。安�
 - Cloudflare Pages
 - 自建服务器
 
-### Docker 部署
+### Docker 部署（加固分支）
 
-GHCR 上提供预构建的**后端和前端**镜像，无需本地构建。现有 Docker 用户可继续使用完全不变的前后端分离 Compose 部署：
+本分支以单个容器运行，镜像由本仓库源码构建，不从公共镜像仓库拉取。应用只监听 `127.0.0.1`，通过 Tailscale 从你自己的设备访问。详细步骤见 [deploy/README.md](deploy/README.md)（英文）。
 
-```bash
-docker pull ghcr.io/amintacccp/github-stars-manager-server:latest
-docker pull ghcr.io/amintacccp/github-stars-manager-frontend:latest
-docker-compose up -d
-```
-
-此外，项目新增了一个**可选的全栈单镜像**（`ghcr.io/amintacccp/github-stars-manager-fullstack`），适合希望只运行一个容器、一个镜像标签和一个数据卷的用户。它在同一来源下提供网页、`/api` 和 MCP 端点。先在仓库根目录的 `.env` 设置 `API_SECRET`，全栈 Compose 会拒绝在无认证配置下启动：
-
-```bash
-API_SECRET=替换为足够长的随机密钥
-docker compose -f docker-compose.fullstack.yml up -d
-```
-
-新增方式不会替换或修改现有的前端镜像、后端镜像、`docker-compose.yml`、桌面客户端或 API 路径。规范名称以角色结尾：`-frontend`、`-backend` 与 `-fullstack`；已有用户使用的 `-server` 后端镜像会继续作为兼容别名发布。正式的 `vX.Y.Z` Docker 标签必须与根目录 `package.json` 的客户端版本一致，`latest` 与 `sha-*` 则分别用于开发和提交追溯。完整的中文部署、数据备份、从分离部署迁移和回滚说明请参阅 [DOCKER_zh.md](DOCKER_zh.md)。英文说明请参阅 [DOCKER.md](DOCKER.md)。
-
-> [!NOTE]
-> 如果镜像为私有，需先执行 `docker login ghcr.io`（使用具有 `read:packages` 权限的 [PAT](https://github.com/settings/tokens)）。
+1. **运行**：把 `deploy/.env.example` 复制为 `deploy/.env`，填写四个必填项，然后执行 `./deploy/up.sh`。
+2. **更新**：执行 `./deploy/update.sh`，它会列出上游改动，输入 `yes` 后才会合并，并重新检查、重启。
+3. **备份**：数据位于 Docker 卷 `gsm-data`；每晚备份到 `backups` 目录将在后续阶段加入。
+4. **恢复**：第 5 阶段会添加 `deploy/RESTORE.md`。
+5. **更换密钥**：编辑 `deploy/.env` 后按 deploy/README.md 重启。更换 `ENCRYPTION_KEY` 会使已加密保存的内容无法读取。
 
 ### 🖥️ 后端服务器（可选）
 
@@ -537,36 +525,10 @@ docker compose -f docker-compose.fullstack.yml up -d
 - **无 CORS 代理**: AI 和 WebDAV 请求通过服务器转发，避免浏览器 CORS 限制
 - **令牌安全**: API 密钥加密存储在服务器，不会暴露在浏览器网络请求中
 
-#### 快速启动（推荐使用 Docker）
-```bash
-docker-compose up -d
-```
-前端运行在 8080 端口，后端运行在 3000 端口。数据持久化存储在 Docker 卷中。该现有分离部署方式不会因全栈镜像而变化；需要独立升级、运维或扩缩容前后端时，仍建议继续使用它。若希望简化为单容器部署，请参阅 [DOCKER_zh.md](DOCKER_zh.md)。
+#### 快速启动（Docker）
 
-自定义配置，创建 `.env` 文件：
-```bash
-API_SECRET=your-secret
-ENCRYPTION_KEY=your-key
-BACKEND_IMAGE_TAG=0.8.4   # 固定后端版本（默认：latest）
-FRONTEND_IMAGE_TAG=0.8.4  # 固定前端版本（默认：latest）
-```
+见上文“Docker 部署（加固分支）”和 [deploy/README.md](deploy/README.md)。上游的前后端分离镜像与 compose 文件不属于本分支。
 
-#### 仅后端（docker run）
-```bash
-# 基础运行 — 无认证，端口 3000
-docker run -d --name github-stars-backend \
-  -v github-stars-data:/app/data \
-  -p 3000:3000 \
-  ghcr.io/amintacccp/github-stars-manager-server:latest
-
-# 自定义密钥和端口
-docker run -d --name github-stars-backend \
-  -v github-stars-data:/app/data \
-  -p 3000:3000 \
-  -e API_SECRET="your-secret" \
-  -e ENCRYPTION_KEY="your-key" \
-  ghcr.io/amintacccp/github-stars-manager-server:latest
-```
 
 #### 手动启动
 ```bash

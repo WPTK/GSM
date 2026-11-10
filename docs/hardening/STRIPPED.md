@@ -112,3 +112,17 @@ Server:
 - estimates are kept in memory for 30 minutes (client: `AI_ESTIMATE_NOT_FOUND` => re-estimate).
 
 Backup export masking (for the owner): `POST /api/sync/export` always masks `ai_configs` keys (`***` plus the last 4 characters, ciphertext deleted) whatever the toggle says, so the toggle text was reworded to "Includes the backend server's keys" (all 10 locales). The last four characters of each AI config key still leave the server in an export.
+
+## Phase 4 (deployment)
+
+Format: item -> files -> reason. Reason for every row unless stated: owner decision, Phase 4 (one hardened container on CERES).
+
+- Upstream compose files -> `docker-compose.yml`, `docker-compose.fullstack.yml` -> pulled `ghcr.io/amintacccp` images and published ports on all interfaces; replaced by `deploy/compose.yaml`, which builds from local source and binds `127.0.0.1` only.
+- Split frontend image and its nginx config -> `Dockerfile`, `nginx.conf.template`, root `.dockerignore` -> only the two-container upstream deployment used them; the kept build uses `Dockerfile.fullstack` and `Dockerfile.fullstack.dockerignore`. `server/Dockerfile` (standalone backend image) is in the server tree and is left for the server worker.
+- No registry images pulled or published -> `DOCKER.md` rewritten, `DOCKER_zh.md` reduced to a pointer, Docker sections of `README.md` and `README_zh.md` replaced with a "Hardened fork" section -> every reference to `ghcr.io/amintacccp` removed; `scripts/fullstack-compose-env.test.cjs` now fails if one comes back. Historical text in `versions/version-info.xml` (release notes) is left as is.
+- Base images -> `Dockerfile.fullstack` -> `node:22-alpine` pinned by index digest (fetched 2026-11-09) on all three stages; `HEALTHCHECK` added (node probe of `GET /api/health`).
+- `ENCRYPTION_KEY` fallback file -> server `data/.encryption-key` is no longer generated (server worker owns the code) -> secrets come only from the environment or `*_FILE`; `deploy/.env.example` tells a migrating install to copy the old file value into `ENCRYPTION_KEY`.
+- Fail-closed startup -> server worker owns the code -> `API_SECRET`, `ENCRYPTION_KEY`, `ANTHROPIC_API_KEY` and `GITHUB_TOKEN` are required; compose also refuses to start without them (`${VAR:?}`, no defaults).
+- Startup needs internet -> the server calls the Anthropic Models API at startup -> owner accepted; the healthcheck start period is 30 s for this.
+- Memory limit -> `deploy/compose.yaml` -> `mem_limit: 1g` is a starting guess; measure with `docker stats` after the first start and adjust.
+- `TRUST_PROXY` decided -> `uniquelocal` default in `deploy/compose.yaml` (closes the "Phase 4 must decide" note in Stream A) -> needed for the `Secure` cookie behind `tailscale serve` through Docker's bridge; safe only because the port is published on loopback.

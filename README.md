@@ -316,29 +316,17 @@ https://github.com/AmintaCCCP/GithubStarsManager/releases
 > [!TIP]
 > When running the project locally using `npm run dev`, calls to AI services and WebDAV may fail due to CORS restrictions. To avoid this issue, use the prebuilt client application or build the client yourself. Alternatively, run the backend server (`cd server && npm run dev`) to proxy API calls and avoid CORS entirely.
 
-### 🐳 Run With Docker
+### 🐳 Hardened fork: run it with Docker
 
-Pre-built backend **and frontend** images are available on GHCR — no local build required. Existing Docker users should continue to use the unchanged two-service Compose deployment:
+This fork (hardened branch) runs as one container built from this checkout. Nothing is pulled from a public image registry. The app listens on `127.0.0.1` only; you reach it from your own devices through Tailscale. Everything below is spelled out in [deploy/README.md](deploy/README.md).
 
-```bash
-docker pull ghcr.io/amintacccp/github-stars-manager-server:latest
-docker pull ghcr.io/amintacccp/github-stars-manager-frontend:latest
-docker-compose up -d
-```
+1. **Run it.** Copy `deploy/.env.example` to `deploy/.env`, fill in the four required values (login secret, encryption key, Anthropic key, GitHub token; the file explains how to make each), then run `./deploy/up.sh`.
+2. **Update it.** Run `./deploy/update.sh`. It shows what changed upstream and asks you to type `yes` before it merges anything, then re-runs the checks and restarts.
+3. **Back it up.** Your data lives in the `gsm-data` Docker volume. Nightly backups to the `backups` folder arrive in a later phase.
+4. **Restore it.** Phase 5 adds `deploy/RESTORE.md`.
+5. **Change a secret.** Edit `deploy/.env`, then run the restart command in deploy/README.md. Changing `ENCRYPTION_KEY` makes already-stored encrypted values unreadable.
 
-An additional **optional full-stack image** (`ghcr.io/amintacccp/github-stars-manager-fullstack`) is available for users who prefer one container, one image tag, and one persistent data volume. It serves the same web UI, `/api`, and MCP endpoints from one origin. Set `API_SECRET` in a root `.env` file first; the full-stack Compose file refuses to start a new unauthenticated deployment:
-
-```bash
-API_SECRET=replace-with-a-long-random-secret
-docker compose -f docker-compose.fullstack.yml up -d
-```
-
-This new option does not replace or modify the existing frontend image, backend image, `docker-compose.yml`, or desktop clients. The canonical role names are `-frontend`, `-backend`, and `-fullstack`; the existing `-server` backend image remains a compatibility alias for current deployments. Formal `vX.Y.Z` Docker tags must match the root `package.json` client version, while `latest` and `sha-*` remain development and traceability tags. See [DOCKER.md](DOCKER.md#optional-single-container-full-stack-deployment) for full-stack deployment, migration, backup, and rollback instructions.
-
-> [!NOTE]
-> If the package is private, run `docker login ghcr.io` first (use a [PAT](https://github.com/settings/tokens) with `read:packages` scope).
-
-See [DOCKER.md](DOCKER.md) for detailed instructions. The Docker setup handles CORS properly and allows you to configure any AI or WebDAV service URLs directly in the application.
+See [DOCKER.md](DOCKER.md) for the short version and the GitHub token permissions.
 
 ### 🖥️ Backend Server (Optional)
 
@@ -347,36 +335,10 @@ The app works fully without a backend (pure frontend, localStorage). An optional
 - **CORS-free proxying**: AI and WebDAV calls go through the server, avoiding browser CORS issues
 - **Token security**: API keys stored encrypted on server, never exposed to browser network tab
 
-#### Quick Start (Docker — recommended)
-```bash
-docker-compose up -d
-```
-Frontend on port 8080, backend on port 3000. Data is persisted in a Docker volume. This existing split deployment remains the recommended option when you need to version, operate, or scale the frontend and backend independently; the optional single-container alternative is documented in [DOCKER.md](DOCKER.md#optional-single-container-full-stack-deployment).
+#### Quick Start (Docker)
 
-To customize, create a `.env` file:
-```bash
-API_SECRET=your-secret
-ENCRYPTION_KEY=your-key
-BACKEND_IMAGE_TAG=0.8.4   # pin backend image version (default: latest)
-FRONTEND_IMAGE_TAG=0.8.4  # pin frontend image version (default: latest)
-```
+See [Hardened fork: run it with Docker](#-hardened-fork-run-it-with-docker) above and [deploy/README.md](deploy/README.md). The upstream split frontend/backend images and compose files are not part of this fork.
 
-#### Backend only (docker run)
-```bash
-# Basic — no auth, port 3000
-docker run -d --name github-stars-backend \
-  -v github-stars-data:/app/data \
-  -p 3000:3000 \
-  ghcr.io/amintacccp/github-stars-manager-server:latest
-
-# With custom secret and encryption key
-docker run -d --name github-stars-backend \
-  -v github-stars-data:/app/data \
-  -p 3000:3000 \
-  -e API_SECRET="your-secret" \
-  -e ENCRYPTION_KEY="your-key" \
-  ghcr.io/amintacccp/github-stars-manager-server:latest
-```
 
 #### Manual Setup
 ```bash
