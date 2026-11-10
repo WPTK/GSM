@@ -1,8 +1,10 @@
-// Must be the FIRST import of index.ts: ES imports evaluate in order, so this runs
-// before config.ts and anything else that needs the secrets.
 import { missingSecrets, missingSecretsMessage } from './secrets.js';
 
-/** Exit 1 with one line naming every missing secret (names only), or return. */
+/**
+ * Exit 1 with one line naming every missing secret (names only), or return.
+ * Called first thing in startServer(), before any database is opened or any port is bound.
+ * (API_SECRET and ENCRYPTION_KEY also fail fast at import time, in config.ts.)
+ */
 export function runPreflight(
   env: Record<string, string | undefined> = process.env,
   exit: (code: number) => void = process.exit,
@@ -11,10 +13,4 @@ export function runPreflight(
   if (missing.length === 0) return;
   console.error(missingSecretsMessage(missing));
   exit(1);
-}
-
-// The vitest suite imports index.ts for createApp() with partial environments;
-// the check itself is covered by calling runPreflight() with an env object.
-if (!process.env.VITEST) {
-  runPreflight();
 }

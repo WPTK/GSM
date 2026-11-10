@@ -1,4 +1,4 @@
-import './preflight.js';
+import { runPreflight } from './preflight.js';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -86,7 +86,7 @@ export function createApp(): express.Express {
   // req.ip and the https/Secure-cookie detection come from its X-Forwarded-* headers. Accepts
   // 'true', 'false', a hop count ('1'), or an Express trust-proxy value such as 'loopback' or a
   // CIDR list. The front proxy must also preserve the Host header: the CSRF check compares
-  // Origin with Host. Revisit in Phase 4 (deployment).
+  // Origin with Host. See deploy/README.md for the trust trade-off of the default in the compose file.
   if (process.env.TRUST_PROXY) {
     const rawTrustProxy = process.env.TRUST_PROXY.trim();
     if (rawTrustProxy === 'true') {
@@ -166,6 +166,9 @@ export function createApp(): express.Express {
 }
 
 async function startServer(): Promise<void> {
+  // Exit 1 with one line if a required secret is missing; before any database open or listen.
+  runPreflight();
+
   // Initialize database
   const db = getDb();
   runMigrations(db);
