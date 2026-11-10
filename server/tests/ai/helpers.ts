@@ -46,7 +46,7 @@ export interface FakeClient extends AnthropicLike {
     modelsRetrieve: string[];
   };
   impl: {
-    create: (params: any) => Promise<any> | any;
+    create: (params: any, options?: any) => Promise<any> | any;
     countTokens: (params: any) => Promise<{ input_tokens: number }> | { input_tokens: number };
     batchCreate: (params: any) => Promise<any> | any;
     batchRetrieve: (id: string) => Promise<any> | any;
@@ -77,9 +77,9 @@ export function makeFakeClient(): FakeClient {
     calls,
     impl,
     messages: {
-      create: async (params: any) => {
+      create: async (params: any, options?: any) => {
         calls.create.push(params);
-        return impl.create(params);
+        return impl.create(params, options);
       },
       stream: (params: any) => {
         calls.stream.push(params);

@@ -15,7 +15,7 @@ const { stopCreditProbeForTests, getAiState } = await import('../../src/ai/credi
 
 function app() {
   const a = express();
-  a.use(express.json());
+  a.use(express.json({ limit: '2mb' }));
   a.use(aiRouter);
   return a;
 }
@@ -203,5 +203,62 @@ describe('GET/PUT /api/ai/settings', () => {
     expect(res.body).toEqual({ customAnalysisPrompt: 'Prefer short tags' });
     await request(app()).put('/api/ai/settings').send({ customAnalysisPrompt: 'x'.repeat(4001) }).expect(400);
     await request(app()).put('/api/ai/settings').send({ customAnalysisPrompt: 'a', extra: 1 }).expect(400);
+  });
+});
+
+describe('relay limits', () => {
+  it('rejects a conversation over the total character cap', async () => {
+    const big = 'x'.repeat(500_000);
+    const res = await request(app()).post('/api/ai/messages').send({
+      purpose: 'chat', maxTokens: 10, system: big, messages: [{ role: 'user', content: big }],
+    }).expect(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(fake.calls.create).toHaveLength(0);
+  });
+
+  it('answers 429 beyond 4 concurrent upstream calls and frees slots afterwards', async () => {
+    const release: Array<() => void> = [];
+    fake.impl.create = () => new Promise((resolve) => { release.push(() => resolve(textMessage('ok'))); });
+    const server = app().listen(0);
+    const port = (server.address() as { port: number }).port;
+    const post = () => fetch(`http://127.0.0.1:${port}/api/ai/messages`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...base, purpose: 'chat' }),
+    });
+    const inflight = [post(), post(), post(), post()];
+    await vi.waitFor(() => expect(fake.calls.create).toHaveLength(4));
+    const fifth = await post();
+    expect(fifth.status).toBe(429);
+    expect((await fifth.json()).code).toBe('AI_RATE_LIMITED');
+    expect(fifth.headers.get('retry-after')).toBe('1');
+    release.forEach((r) => r());
+    expect((await Promise.all(inflight)).every((r) => r.status === 200)).toBe(true);
+    fake.impl.create = () => textMessage('again');
+    expect((await post()).status).toBe(200);
+    server.close();
+  });
+
+  it('aborts the upstream call of a non-stream request when the client disconnects', async () => {
+    let seen: AbortSignal | undefined;
+    fake.impl.create = (_p: any, options: any) => new Promise((_res, rej) => {
+      seen = options?.signal;
+      options?.signal?.addEventListener('abort', () => rej(new Error('aborted')));
+    });
+    const server = app().listen(0);
+    const port = (server.address() as { port: number }).port;
+    const controller = new AbortController();
+    const req = fetch(`http://127.0.0.1:${port}/api/ai/messages`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...base, purpose: 'chat' }), signal: controller.signal,
+    }).catch(() => undefined);
+    await vi.waitFor(() => expect(seen).toBeDefined());
+    controller.abort();
+    await req;
+    await vi.waitFor(() => expect(seen?.aborted).toBe(true));
+    server.close();
+  });
+
+  it('the app gives /api/ai a 2 MB body limit', async () => {
+    const { createApp } = await import('../../src/index.js');
+    const res = await request(createApp()).post('/api/ai/messages').send({ ...base, purpose: 'chat', system: 'x'.repeat(3 * 1024 * 1024) });
+    expect(res.status).toBe(413);
   });
 });

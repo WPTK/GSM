@@ -3,6 +3,11 @@ import type Database from 'better-sqlite3';
 import { initializeSchema, addColumnIfMissing } from './schema.js';
 import { logger } from '../services/logger.js';
 
+interface ActiveRow {
+  custom_prompt: string | null;
+  use_custom_prompt: number;
+}
+
 const migrations: Record<number, (db: Database.Database) => void> = {
   1: (db) => {
     initializeSchema(db);
@@ -55,11 +60,12 @@ const migrations: Record<number, (db: Database.Database) => void> = {
     const hasConfigs = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_configs'").get();
     if (hasConfigs) {
       const activeId = (db.prepare('SELECT value FROM settings WHERE key = ?').get('activeAIConfig') as { value: string | null } | undefined)?.value;
-      const row = (activeId
-        ? db.prepare('SELECT custom_prompt, use_custom_prompt FROM ai_configs WHERE id = ?').get(activeId)
-        : db.prepare('SELECT custom_prompt, use_custom_prompt FROM ai_configs WHERE is_active = 1 LIMIT 1').get()) as
-        | { custom_prompt: string | null; use_custom_prompt: number }
-        | undefined;
+      const byId = activeId
+        ? (db.prepare('SELECT custom_prompt, use_custom_prompt FROM ai_configs WHERE id = ?').get(activeId) as ActiveRow | undefined)
+        : undefined;
+      // The setting can point at a config that no longer exists; fall back to the is_active row.
+      const row =
+        byId ?? (db.prepare('SELECT custom_prompt, use_custom_prompt FROM ai_configs WHERE is_active = 1 LIMIT 1').get() as ActiveRow | undefined);
       const prompt = row?.use_custom_prompt && row.custom_prompt ? row.custom_prompt.trim() : '';
       if (prompt) {
         db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(CUSTOM_ANALYSIS_PROMPT_KEY, prompt.slice(0, 4000));

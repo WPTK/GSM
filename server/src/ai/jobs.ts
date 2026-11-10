@@ -51,6 +51,8 @@ interface ItemRow {
   error: string | null;
 }
 
+/** batch_id prefix that records an in-flight batches.create() call. */
+const SUBMIT_MARKER = 'pending:';
 const FINAL_STATUSES: AnalysisJobStatus[] = ['completed', 'failed', 'cancelled'];
 const controllers = new Map<string, AbortController>();
 const running = new Set<string>();
@@ -178,7 +180,7 @@ export function cancelJob(id: string): AnalysisJob {
   if (FINAL_STATUSES.includes(row.status)) throw new JobNotCancellableError(id);
   controllers.get(id)?.abort();
   setStatus(id, 'cancelled');
-  if (row.batch_id) {
+  if (row.batch_id && !row.batch_id.startsWith(SUBMIT_MARKER)) {
     void Promise.resolve()
       .then(() => getAnthropicClient().messages.batches.cancel(row.batch_id as string))
       .catch((err) => logger.warn('ai.jobs', `batch cancel failed: ${shortError(err)}`));
@@ -302,16 +304,49 @@ async function submitBatch(row: JobRow): Promise<void> {
     finalizeIfDone(row.id);
     return;
   }
+  // Intent marker: if the process dies between create() and storing the id, boot sees the marker
+  // and refuses to resubmit blindly (see failInterruptedSubmission).
+  getDb().prepare('UPDATE ai_jobs SET batch_id = ? WHERE id = ?').run(`${SUBMIT_MARKER}${now()}`, row.id);
+  let batchId: string;
   try {
     const batch = await getAnthropicClient().messages.batches.create({ requests });
-    setStatus(row.id, 'submitted', { batchId: batch.id as string });
+    batchId = batch.id as string;
   } catch (err) {
+    getDb().prepare('UPDATE ai_jobs SET batch_id = NULL WHERE id = ?').run(row.id);
     if (isCreditLowError(err)) {
       pauseForCredit(row.id);
       return;
     }
     throw err;
   }
+  // Only move running -> submitted. A cancel that landed during create() wins, and the
+  // batch we just made is cancelled so it does not run (and bill) unwatched.
+  const res = getDb()
+    .prepare("UPDATE ai_jobs SET status = 'submitted', batch_id = ?, updated_at = ? WHERE id = ? AND status = 'running'")
+    .run(batchId, now(), row.id);
+  if (res.changes === 0) {
+    getDb().prepare('UPDATE ai_jobs SET batch_id = ? WHERE id = ?').run(batchId, row.id);
+    try {
+      await getAnthropicClient().messages.batches.cancel(batchId);
+    } catch (err) {
+      logger.warn('ai.jobs', `could not cancel an orphaned batch: ${shortError(err)}`);
+    }
+  }
+}
+
+/**
+ * A batch job whose submission was interrupted (marker set, no batch id stored) may or may not
+ * have created a batch at Anthropic, and batches carry no metadata to match against. Resubmitting
+ * could bill twice, so the job fails visibly and the owner starts a new run.
+ */
+function failInterruptedSubmission(id: string): void {
+  const row = jobRow(id);
+  if (!row) return;
+  getDb().prepare('UPDATE ai_jobs SET batch_id = NULL WHERE id = ?').run(id);
+  for (const item of itemRows(id).filter((i) => i.status === 'pending')) {
+    markItemFailed(row, item.repo_id, 'Batch submission was interrupted by a restart; start the run again');
+  }
+  setStatus(id, 'failed', { error: 'needs resubmit' });
 }
 
 /** Reads a finished batch and records every item. Called by the poller. */
@@ -378,7 +413,10 @@ export function markBatchFailed(id: string, message: string): void {
  */
 export function resumeJobsOnBoot(): void {
   for (const status of ['queued', 'running'] as const) {
-    for (const { id } of listJobsByStatus(status)) startJob(id);
+    for (const { id, batchId } of listJobsByStatus(status)) {
+      if (batchId?.startsWith(SUBMIT_MARKER)) failInterruptedSubmission(id);
+      else startJob(id);
+    }
   }
   if (getAiState().state !== 'credit_low') resumePausedJobs();
 }

@@ -117,12 +117,14 @@ export function createApp(): express.Express {
 
   // The translate relay reads its own small raw body (see routes/egress.ts).
   const jsonParser = express.json({ limit: '50mb' });
+  // The Claude routes take small JSON only; they get their own limit before the global parser.
+  const aiJsonParser = express.json({ limit: '2mb' });
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/translate/')) {
       next();
       return;
     }
-    jsonParser(req, res, next);
+    (req.path.startsWith('/api/ai/') ? aiJsonParser : jsonParser)(req, res, next);
   });
 
   // Routes
